@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.8.0
+// @version      7.9.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -37,6 +37,7 @@
     RIGHT_TAB: "nsc_v7_right_tab",
     USER_CACHE: "nsc_v7_user_cache",
     LAST_SPEAK_CACHE: "nsc_v7_last_speak_cache",
+    POST_TITLE_CACHE: "nsc_v7_post_title_cache",
   };
 
   function isBrowsePath(pathname) {
@@ -131,6 +132,7 @@
     rightTab: localStorage.getItem(LS.RIGHT_TAB) || "hot",
     userCache: loadJson(LS.USER_CACHE, {}),
     lastSpeakCache: loadJson(LS.LAST_SPEAK_CACHE, {}),
+    postTitleCache: loadJson(LS.POST_TITLE_CACHE, {}),
     signatureCache: {},
     channelData: {},
     hotCache: {},
@@ -655,44 +657,51 @@
       body.dark-layout .nsc-nav-item.group-admin:hover { color: #fbbf24; }
 
       .nsc-sn-card {
-        display: flex; align-items: flex-start; gap: 8px; padding: 9px; margin-bottom: 4px;
-        border-radius: 10px; border: 1px solid transparent; cursor: pointer;
+        display: flex; flex-direction: column; gap: 3px; padding: 6px 8px; margin-bottom: 2px;
+        border-radius: 8px; border: 1px solid transparent; cursor: pointer;
         transition: background 0.12s ease, border-color 0.12s ease;
       }
       .nsc-sn-card:hover { background: var(--nsc-hover); border-color: var(--nsc-border); }
       .nsc-sn-card.is-selected { background: var(--nsc-active-item); }
       .nsc-sn-card.is-read { opacity: 0.78; }
-      .nsc-sn-icon {
-        width: 30px; height: 30px; border-radius: 9px; flex: 0 0 30px;
-        background: rgba(255, 45, 85, 0.12); color: #e11d64;
-        display: flex; align-items: center; justify-content: center;
+      .nsc-sn-row1 {
+        display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        font-size: 12px; line-height: 1.4; color: var(--nsc-text);
       }
-      .nsc-sn-icon svg { width: 15px; height: 15px; }
-      .nsc-sn-body { flex: 1; min-width: 0; font-size: 12.2px; line-height: 1.5; color: var(--nsc-text); word-break: break-word; }
-      .nsc-sn-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; font-size: 10.5px; color: var(--nsc-muted); }
+      .nsc-sn-line {
+        flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .nsc-sn-time {
+        flex: 0 0 auto; font-size: 10.5px; color: var(--nsc-muted);
+        display: inline-flex; align-items: center; gap: 4px;
+      }
+      .nsc-sn-title-row {
+        font-size: 11.5px; color: var(--nsc-muted); white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; padding-left: 2px;
+      }
       .nsc-sn-user {
-        color: #007aff; font-weight: 700; background: rgba(0, 122, 255, 0.10);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #007aff; font-weight: 600; background: rgba(0, 122, 255, 0.10);
+        padding: 0 4px; border-radius: 4px; display: inline;
       }
       body.dark-layout .nsc-sn-user { color: #64b5ff; background: rgba(10, 132, 255, 0.20); }
       .nsc-sn-kw-post {
-        color: #15803d; font-weight: 700; background: rgba(52, 199, 89, 0.15);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #15803d; font-weight: 600; background: rgba(52, 199, 89, 0.15);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       body.dark-layout .nsc-sn-kw-post { color: #4ade80; background: rgba(48, 209, 88, 0.20); }
       .nsc-sn-kw-comment {
-        color: #c2410c; font-weight: 700; background: rgba(255, 149, 0, 0.16);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #c2410c; font-weight: 600; background: rgba(255, 149, 0, 0.16);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       body.dark-layout .nsc-sn-kw-comment { color: #fbbf24; background: rgba(255, 159, 10, 0.22); }
       .nsc-sn-kw-reward {
-        color: #be185d; font-weight: 700; background: rgba(255, 45, 85, 0.13);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #be185d; font-weight: 600; background: rgba(255, 45, 85, 0.13);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       body.dark-layout .nsc-sn-kw-reward { color: #ff7aa8; background: rgba(255, 55, 95, 0.22); }
       .nsc-sn-kw-warn {
-        color: #dc2626; font-weight: 700; background: rgba(255, 59, 48, 0.14);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #dc2626; font-weight: 600; background: rgba(255, 59, 48, 0.14);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       .nsc-sn-post { color: #5856d6; font-weight: 600; text-decoration: none; }
       body.dark-layout .nsc-sn-post { color: #9c9aff; }
@@ -1549,28 +1558,25 @@
       return Boolean(res && res.success);
     },
     insertToTarget(targetMode, markdown) {
-      const insertText = `\n${markdown}\n`;
+      const smartWrapTa = (ta) => {
+        const s = ta.selectionStart || 0;
+        const e = ta.selectionEnd || 0;
+        const before = ta.value.slice(0, s);
+        const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+        const text = `${prefix}${markdown}\n`;
+        ta.setRangeText(text, s, e, "end");
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+        ta.focus({ preventScroll: true });
+      };
       if (targetMode === "newpost") {
         const ta = document.getElementById("nsc-np-content");
-        if (ta) {
-          const s = ta.selectionStart || 0;
-          const e = ta.selectionEnd || 0;
-          ta.setRangeText(insertText, s, e, "end");
-          ta.dispatchEvent(new Event("input", { bubbles: true }));
-          ta.focus();
-        }
+        if (ta) smartWrapTa(ta);
         return;
       }
       const pmBox = document.getElementById("nsc-pm-composer");
       if (targetMode === "pm" || (pmBox && pmBox.style.display !== "none")) {
         const ta = document.getElementById("nsc-pm-ta");
-        if (ta) {
-          const s = ta.selectionStart || 0;
-          const e = ta.selectionEnd || 0;
-          ta.setRangeText(insertText, s, e, "end");
-          ta.dispatchEvent(new Event("input", { bubbles: true }));
-          ta.focus();
-        }
+        if (ta) smartWrapTa(ta);
         return;
       }
       const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
@@ -1580,31 +1586,25 @@
       if (cmEl && cmEl.offsetParent !== null) {
         const cm = cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror);
         if (cm && typeof cm.replaceSelection === "function") {
-          cm.replaceSelection(insertText);
+          const cur = cm.getCursor();
+          const lineTxt = cm.getLine(cur.line) || "";
+          const prefix = cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
+          cm.replaceSelection(`${prefix}${markdown}\n`);
           cm.focus();
           return;
         }
         const cmTa = cmEl.querySelector("textarea");
         if (cmTa) {
-          cmTa.focus();
+          cmTa.focus({ preventScroll: true });
           try {
-            if (document.execCommand("insertText", false, insertText)) return;
+            if (document.execCommand("insertText", false, `${markdown}\n`)) return;
           } catch (_) {}
-          const s = cmTa.selectionStart || 0;
-          const e = cmTa.selectionEnd || 0;
-          cmTa.setRangeText(insertText, s, e, "end");
-          cmTa.dispatchEvent(new Event("input", { bubbles: true }));
+          smartWrapTa(cmTa);
           return;
         }
       }
       const ta = document.getElementById("nsc-fallback-ta");
-      if (ta) {
-        const s = ta.selectionStart || 0;
-        const e = ta.selectionEnd || 0;
-        ta.setRangeText(insertText, s, e, "end");
-        ta.dispatchEvent(new Event("input", { bubbles: true }));
-        ta.focus();
-      }
+      if (ta) smartWrapTa(ta);
     },
     bindPasteAndDrop(containerEl, targetMode, statusSelector) {
       if (!containerEl || containerEl.dataset.nscNiBound === "1") return;
@@ -2954,8 +2954,12 @@
     }
 
     if (channelId === "sys-notice") {
-      if (forceRefresh || !state.sysNoticeList.loaded) fetchSysNotices(false);
-      else renderTopicList();
+      if (forceRefresh || !state.sysNoticeList.loaded) {
+        fetchSysNotices(false);
+      } else {
+        renderTopicList();
+        setTimeout(() => enrichSysNoticeTitles(), 120);
+      }
       return;
     }
 
@@ -3239,16 +3243,40 @@
     }
   }
 
+  function resolveKnownPostTitle(postId) {
+    if (!postId) return "";
+    const pid = String(postId);
+    if (state.postTitleCache[pid]) return state.postTitleCache[pid];
+    if (state.readMap[pid] && state.readMap[pid].title) return state.readMap[pid].title;
+    for (const ch of Object.values(state.channelData)) {
+      const hit = ch && ch.items && ch.items.find((x) => x.postId === pid && x.title);
+      if (hit) return hit.title;
+    }
+    for (const h of Object.values(state.hotCache)) {
+      const hit = h && h.items && h.items.find((x) => x.postId === pid && x.title);
+      if (hit) return hit.title;
+    }
+    return "";
+  }
+
   function highlightSysNoticeSegment(text) {
     let s = String(text || "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
-    s = s.replace(/(新的帖子|新帖子|发布了|新主题)/g, '<span class="nsc-sn-kw-post">$1</span>');
-    s = s.replace(/(新的评论|评论了|评论|回复了|回复|引用了|引用)/g, '<span class="nsc-sn-kw-comment">$1</span>');
+    s = s.replace(/[您你]关注的用户\s*/g, "");
+    s = s.replace(/发布了?一篇新的帖子/g, "发布新帖");
+    s = s.replace(/您的\s*评论\s*被用户\s*/g, "评论 · ");
+    s = s.replace(/您的帖子『#?\s*/g, "《");
+    s = s.replace(/』被用户\s*/g, "》· ");
+    s = s.replace(/投喂鸡腿/g, '<span class="nsc-sn-kw-reward">🍗 鸡腿</span>');
+    s = s.replace(/星辰点赞/g, '<span class="nsc-sn-kw-reward">⭐ 点赞</span>');
+    s = s.replace(/(发布新帖|新的帖子|新帖子|新主题)/g, '<span class="nsc-sn-kw-post">$1</span>');
+    s = s.replace(/(评论|回复|引用)/g, '<span class="nsc-sn-kw-comment">$1</span>');
     s = s.replace(/(鸡腿|星辰|奖励|中奖|抽奖|签到)/g, '<span class="nsc-sn-kw-reward">$1</span>');
     s = s.replace(/(警告|封禁|禁言|违规|删除)/g, '<span class="nsc-sn-kw-warn">$1</span>');
-    s = s.replace(/(您关注的\s+)([^\s，。,:：]+)/g, '$1<span class="nsc-sn-user">$2</span>');
+    s = s.replace(/^([^\s<，。,:：]{1,24})(?=\s*<span class="nsc-sn-kw-post">发布新帖)/, '<span class="nsc-sn-user">$1</span> ');
+    s = s.replace(/(评论 · |》· )([^\s<，。,:：]+)/g, '$1<span class="nsc-sn-user">$2</span>');
     return s;
   }
 
@@ -3261,42 +3289,95 @@
     let m;
     while ((m = tokenRe.exec(src)) !== null) {
       if (m.index > last) out += highlightSysNoticeSegment(src.slice(last, m.index));
-      const label = m[1] || m[3];
+      const rawLabel = m[1] || m[3];
       const url = m[2] || m[3];
-      const cleanLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const cleanUrl = url.replace(/"/g, "&quot;");
       const spaceMatch = url.match(/\/space\/(\d+)/);
       const postMatch = url.match(/\/post-(\d+)(?:-(\d+))?(?:#(\d+))?/);
       if (spaceMatch) {
+        const cleanLabel = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         out += `<span class="nsc-sn-user" data-uid="${spaceMatch[1]}">${cleanLabel}</span>`;
       } else if (postMatch) {
-        const postHref = `/post-${postMatch[1]}-${postMatch[2] || 1}`;
+        const pid = postMatch[1];
+        const postHref = `/post-${pid}-${postMatch[2] || 1}`;
+        const isGeneric = /^(?:新的帖子|新帖子|帖子|点击查看|https?:\/\/|\/post-)/.test(rawLabel.trim());
+        const resolvedTitle = isGeneric ? resolveKnownPostTitle(pid) : rawLabel.replace(/^#\s*/, "").trim();
+        const displayTitle = resolvedTitle || (isGeneric ? "新帖" : rawLabel);
         if (!firstPost) {
           firstPost = {
-            postId: postMatch[1],
+            postId: pid,
             url: postHref,
-            title: m[1] ? m[1] : `帖子 #${postMatch[1]}`,
+            title: resolvedTitle || `帖子 #${pid}`,
+            needsTitle: !resolvedTitle,
             targetFloor: postMatch[3] || "",
           };
         }
-        out += `<a class="nsc-sn-post" href="${cleanUrl}" data-pid="${postMatch[1]}">${cleanLabel}</a>`;
+        const safeDisp = displayTitle.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        if (resolvedTitle) {
+          out += ` <a class="nsc-sn-post" href="${cleanUrl}" data-pid="${pid}">《${safeDisp}》</a>`;
+        } else {
+          out += `<a class="nsc-sn-post" href="${cleanUrl}" data-pid="${pid}">${safeDisp}</a>`;
+        }
       } else {
+        const cleanLabel = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         out += `<a class="nsc-sn-post" href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanLabel}</a>`;
       }
       last = tokenRe.lastIndex;
     }
     if (last < src.length) out += highlightSysNoticeSegment(src.slice(last));
-    out = out.replace(/\n/g, "<br>");
+    out = out.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
     return { html: out, firstPost };
   }
 
   function classifySysNoticeTag(rawContent) {
     const s = String(rawContent || "");
-    if (/新的帖子|新帖子|发布了|新主题/.test(s)) return { label: "新帖动态", cls: "nsc-sn-kw-post" };
-    if (/评论|回复|引用/.test(s)) return { label: "评论通知", cls: "nsc-sn-kw-comment" };
-    if (/鸡腿|星辰|奖励|中奖|抽奖|签到/.test(s)) return { label: "福利奖励", cls: "nsc-sn-kw-reward" };
-    if (/警告|封禁|禁言|违规|删除/.test(s)) return { label: "管理提醒", cls: "nsc-sn-kw-warn" };
-    return { label: "系统通知", cls: "nsc-sn-user" };
+    if (/新的帖子|新帖子|发布了|新主题/.test(s)) return { label: "新帖", cls: "nsc-sn-kw-post" };
+    if (/评论|回复|引用/.test(s)) return { label: "评论", cls: "nsc-sn-kw-comment" };
+    if (/鸡腿|星辰|奖励|中奖|抽奖|签到/.test(s)) return { label: "奖励", cls: "nsc-sn-kw-reward" };
+    if (/警告|封禁|禁言|违规|删除/.test(s)) return { label: "提醒", cls: "nsc-sn-kw-warn" };
+    return { label: "通知", cls: "nsc-sn-user" };
+  }
+
+  let _snTitleQueueRunning = false;
+  async function enrichSysNoticeTitles() {
+    if (_snTitleQueueRunning) return;
+    const targets = state.sysNoticeList.items
+      .filter((it) => it.firstPost && it.firstPost.needsTitle && it.firstPost.postId && !resolveKnownPostTitle(it.firstPost.postId))
+      .slice(0, 12);
+    if (targets.length === 0) return;
+    _snTitleQueueRunning = true;
+    try {
+      const seenPids = new Set();
+      for (const it of targets) {
+        if (state.activeChannel !== "sys-notice") break;
+        const pid = it.firstPost.postId;
+        if (seenPids.has(pid)) continue;
+        seenPids.add(pid);
+        try {
+          const resp = await fetch(`/post-${pid}-1`, { credentials: "include" });
+          if (resp.ok) {
+            const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+            const h1 = doc.querySelector(".nsk-post .post-title h1 a, .nsk-post .post-title h1");
+            const title = (h1 ? h1.textContent.trim() : (doc.title || "").replace(/\s*-\s*NodeSeek.*$/i, "").trim());
+            if (title) {
+              state.postTitleCache[pid] = title;
+              saveJson(LS.POST_TITLE_CACHE, state.postTitleCache);
+              for (const item of state.sysNoticeList.items) {
+                if (item.firstPost && item.firstPost.postId === pid) {
+                  const reParsed = formatSysNoticeHtml(item.content);
+                  item.html = reParsed.html;
+                  item.firstPost = reParsed.firstPost;
+                }
+              }
+              if (state.activeChannel === "sys-notice") renderTopicList();
+            }
+          }
+        } catch (_) {}
+        await new Promise((r) => setTimeout(r, 320));
+      }
+    } finally {
+      _snTitleQueueRunning = false;
+    }
   }
 
   async function fetchSysNotices(silent = false) {
@@ -3335,6 +3416,9 @@
       state.sysNoticeList.loaded = true;
       state.unreadCounts.sysNotice = items.filter((x) => x.unread).length;
       renderLeftNav();
+      if (!silent && state.activeChannel === "sys-notice") {
+        setTimeout(() => enrichSysNoticeTitles(), 120);
+      }
     } catch (err) {
       state.sysNoticeList.error = err.message;
     } finally {
@@ -3710,6 +3794,10 @@
     const subEl = document.getElementById("nsc-channel-sub");
     if (!scrollEl) return;
 
+    const prevScrollTop = scrollEl.scrollTop;
+    const restoreScroll = () => {
+      if (prevScrollTop > 0) scrollEl.scrollTop = prevScrollTop;
+    };
     const kw = state.searchKeyword;
 
     if (state.activeChannel === "at-me" || state.activeChannel === "reply-me") {
@@ -3767,6 +3855,7 @@
         });
         scrollEl.appendChild(row);
       });
+      restoreScroll();
       return;
     }
 
@@ -3810,6 +3899,7 @@
         row.addEventListener("click", () => openPmConversation(it));
         scrollEl.appendChild(row);
       });
+      restoreScroll();
       return;
     }
 
@@ -3838,16 +3928,14 @@
           (!it.unread ? " is-read" : "") +
           (state.selectedNotifKey === rowKey ? " is-selected" : "");
         card.innerHTML = `
-          <div class="nsc-sn-icon">${ICONS.bell}</div>
-          <div class="nsc-sn-body">
-            <div class="nsc-sn-head">
-              <span class="${it.tag.cls}">${it.tag.label}</span>
-              <span style="display:inline-flex;align-items:center;gap:5px;">
-                ${it.timeText || ""}
-                ${it.unread ? `<span class="nsc-badge-dot" title="未读"></span>` : ""}
-              </span>
+          <div class="nsc-sn-row1">
+            <div class="nsc-sn-line">
+              <span class="${it.tag.cls}" style="margin-right:4px;">${it.tag.label}</span><span class="nsc-sn-text">${it.html}</span>
             </div>
-            <div class="nsc-sn-text">${it.html}</div>
+            <span class="nsc-sn-time">
+              ${it.timeText || ""}
+              ${it.unread ? `<span class="nsc-badge-dot" style="margin-top:0;" title="未读"></span>` : ""}
+            </span>
           </div>
         `;
         card.querySelectorAll(".nsc-sn-user[data-uid]").forEach((uEl) => {
@@ -3897,6 +3985,7 @@
         });
         scrollEl.appendChild(card);
       });
+      restoreScroll();
       return;
     }
 
@@ -4012,6 +4101,7 @@
         setTimeout(() => tryAutoLoadNextTopicPage(), 80);
       }
     }
+    restoreScroll();
   }
 
   // ==========================================================================
@@ -4304,7 +4394,12 @@
       state.onlyMember = "";
       applyMessageFilters();
     }
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (msgsEl) {
+      const cRect = msgsEl.getBoundingClientRect();
+      const tRect = target.getBoundingClientRect();
+      const targetTop = msgsEl.scrollTop + (tRect.top - cRect.top) - Math.max(24, (msgsEl.clientHeight - tRect.height) / 2);
+      msgsEl.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    }
     target.classList.remove("nsc-flash");
     void target.offsetWidth;
     target.classList.add("nsc-flash");
@@ -4885,7 +4980,7 @@
                 return;
               }
               const ta = document.querySelector("#nsc-composer-body .CodeMirror textarea");
-              if (ta) ta.focus();
+              if (ta) ta.focus({ preventScroll: true });
             }, 70);
           }
           return;
@@ -4921,7 +5016,7 @@
           : `@${obj.author} #${obj.floorId}\n`;
       const existing = ta.value.replace(/^\n+/, "");
       ta.value = snippet + existing;
-      ta.focus();
+      ta.focus({ preventScroll: true });
       ta.setSelectionRange(snippet.length, snippet.length);
       return;
     }

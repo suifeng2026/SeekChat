@@ -97,28 +97,25 @@
       return Boolean(res && res.success);
     },
     insertToTarget(targetMode, markdown) {
-      const insertText = `\n${markdown}\n`;
+      const smartWrapTa = (ta) => {
+        const s = ta.selectionStart || 0;
+        const e = ta.selectionEnd || 0;
+        const before = ta.value.slice(0, s);
+        const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+        const text = `${prefix}${markdown}\n`;
+        ta.setRangeText(text, s, e, "end");
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+        ta.focus({ preventScroll: true });
+      };
       if (targetMode === "newpost") {
         const ta = document.getElementById("nsc-np-content");
-        if (ta) {
-          const s = ta.selectionStart || 0;
-          const e = ta.selectionEnd || 0;
-          ta.setRangeText(insertText, s, e, "end");
-          ta.dispatchEvent(new Event("input", { bubbles: true }));
-          ta.focus();
-        }
+        if (ta) smartWrapTa(ta);
         return;
       }
       const pmBox = document.getElementById("nsc-pm-composer");
       if (targetMode === "pm" || (pmBox && pmBox.style.display !== "none")) {
         const ta = document.getElementById("nsc-pm-ta");
-        if (ta) {
-          const s = ta.selectionStart || 0;
-          const e = ta.selectionEnd || 0;
-          ta.setRangeText(insertText, s, e, "end");
-          ta.dispatchEvent(new Event("input", { bubbles: true }));
-          ta.focus();
-        }
+        if (ta) smartWrapTa(ta);
         return;
       }
       const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
@@ -128,31 +125,25 @@
       if (cmEl && cmEl.offsetParent !== null) {
         const cm = cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror);
         if (cm && typeof cm.replaceSelection === "function") {
-          cm.replaceSelection(insertText);
+          const cur = cm.getCursor();
+          const lineTxt = cm.getLine(cur.line) || "";
+          const prefix = cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
+          cm.replaceSelection(`${prefix}${markdown}\n`);
           cm.focus();
           return;
         }
         const cmTa = cmEl.querySelector("textarea");
         if (cmTa) {
-          cmTa.focus();
+          cmTa.focus({ preventScroll: true });
           try {
-            if (document.execCommand("insertText", false, insertText)) return;
+            if (document.execCommand("insertText", false, `${markdown}\n`)) return;
           } catch (_) {}
-          const s = cmTa.selectionStart || 0;
-          const e = cmTa.selectionEnd || 0;
-          cmTa.setRangeText(insertText, s, e, "end");
-          cmTa.dispatchEvent(new Event("input", { bubbles: true }));
+          smartWrapTa(cmTa);
           return;
         }
       }
       const ta = document.getElementById("nsc-fallback-ta");
-      if (ta) {
-        const s = ta.selectionStart || 0;
-        const e = ta.selectionEnd || 0;
-        ta.setRangeText(insertText, s, e, "end");
-        ta.dispatchEvent(new Event("input", { bubbles: true }));
-        ta.focus();
-      }
+      if (ta) smartWrapTa(ta);
     },
     bindPasteAndDrop(containerEl, targetMode, statusSelector) {
       if (!containerEl || containerEl.dataset.nscNiBound === "1") return;

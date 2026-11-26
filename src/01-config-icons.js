@@ -10,6 +10,7 @@
     RIGHT_TAB: "nsc_v7_right_tab",
     USER_CACHE: "nsc_v7_user_cache",
     LAST_SPEAK_CACHE: "nsc_v7_last_speak_cache",
+    POST_TITLE_CACHE: "nsc_v7_post_title_cache",
   };
 
   function isBrowsePath(pathname) {
@@ -104,6 +105,7 @@
     rightTab: localStorage.getItem(LS.RIGHT_TAB) || "hot",
     userCache: loadJson(LS.USER_CACHE, {}),
     lastSpeakCache: loadJson(LS.LAST_SPEAK_CACHE, {}),
+    postTitleCache: loadJson(LS.POST_TITLE_CACHE, {}),
     signatureCache: {},
     channelData: {},
     hotCache: {},

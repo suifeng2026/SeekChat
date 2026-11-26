@@ -189,8 +189,12 @@
     }
 
     if (channelId === "sys-notice") {
-      if (forceRefresh || !state.sysNoticeList.loaded) fetchSysNotices(false);
-      else renderTopicList();
+      if (forceRefresh || !state.sysNoticeList.loaded) {
+        fetchSysNotices(false);
+      } else {
+        renderTopicList();
+        setTimeout(() => enrichSysNoticeTitles(), 120);
+      }
       return;
     }
 
@@ -474,16 +478,40 @@
     }
   }
 
+  function resolveKnownPostTitle(postId) {
+    if (!postId) return "";
+    const pid = String(postId);
+    if (state.postTitleCache[pid]) return state.postTitleCache[pid];
+    if (state.readMap[pid] && state.readMap[pid].title) return state.readMap[pid].title;
+    for (const ch of Object.values(state.channelData)) {
+      const hit = ch && ch.items && ch.items.find((x) => x.postId === pid && x.title);
+      if (hit) return hit.title;
+    }
+    for (const h of Object.values(state.hotCache)) {
+      const hit = h && h.items && h.items.find((x) => x.postId === pid && x.title);
+      if (hit) return hit.title;
+    }
+    return "";
+  }
+
   function highlightSysNoticeSegment(text) {
     let s = String(text || "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
-    s = s.replace(/(新的帖子|新帖子|发布了|新主题)/g, '<span class="nsc-sn-kw-post">$1</span>');
-    s = s.replace(/(新的评论|评论了|评论|回复了|回复|引用了|引用)/g, '<span class="nsc-sn-kw-comment">$1</span>');
+    s = s.replace(/[您你]关注的用户\s*/g, "");
+    s = s.replace(/发布了?一篇新的帖子/g, "发布新帖");
+    s = s.replace(/您的\s*评论\s*被用户\s*/g, "评论 · ");
+    s = s.replace(/您的帖子『#?\s*/g, "《");
+    s = s.replace(/』被用户\s*/g, "》· ");
+    s = s.replace(/投喂鸡腿/g, '<span class="nsc-sn-kw-reward">🍗 鸡腿</span>');
+    s = s.replace(/星辰点赞/g, '<span class="nsc-sn-kw-reward">⭐ 点赞</span>');
+    s = s.replace(/(发布新帖|新的帖子|新帖子|新主题)/g, '<span class="nsc-sn-kw-post">$1</span>');
+    s = s.replace(/(评论|回复|引用)/g, '<span class="nsc-sn-kw-comment">$1</span>');
     s = s.replace(/(鸡腿|星辰|奖励|中奖|抽奖|签到)/g, '<span class="nsc-sn-kw-reward">$1</span>');
     s = s.replace(/(警告|封禁|禁言|违规|删除)/g, '<span class="nsc-sn-kw-warn">$1</span>');
-    s = s.replace(/(您关注的\s+)([^\s，。,:：]+)/g, '$1<span class="nsc-sn-user">$2</span>');
+    s = s.replace(/^([^\s<，。,:：]{1,24})(?=\s*<span class="nsc-sn-kw-post">发布新帖)/, '<span class="nsc-sn-user">$1</span> ');
+    s = s.replace(/(评论 · |》· )([^\s<，。,:：]+)/g, '$1<span class="nsc-sn-user">$2</span>');
     return s;
   }
 
@@ -496,42 +524,95 @@
     let m;
     while ((m = tokenRe.exec(src)) !== null) {
       if (m.index > last) out += highlightSysNoticeSegment(src.slice(last, m.index));
-      const label = m[1] || m[3];
+      const rawLabel = m[1] || m[3];
       const url = m[2] || m[3];
-      const cleanLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const cleanUrl = url.replace(/"/g, "&quot;");
       const spaceMatch = url.match(/\/space\/(\d+)/);
       const postMatch = url.match(/\/post-(\d+)(?:-(\d+))?(?:#(\d+))?/);
       if (spaceMatch) {
+        const cleanLabel = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         out += `<span class="nsc-sn-user" data-uid="${spaceMatch[1]}">${cleanLabel}</span>`;
       } else if (postMatch) {
-        const postHref = `/post-${postMatch[1]}-${postMatch[2] || 1}`;
+        const pid = postMatch[1];
+        const postHref = `/post-${pid}-${postMatch[2] || 1}`;
+        const isGeneric = /^(?:新的帖子|新帖子|帖子|点击查看|https?:\/\/|\/post-)/.test(rawLabel.trim());
+        const resolvedTitle = isGeneric ? resolveKnownPostTitle(pid) : rawLabel.replace(/^#\s*/, "").trim();
+        const displayTitle = resolvedTitle || (isGeneric ? "新帖" : rawLabel);
         if (!firstPost) {
           firstPost = {
-            postId: postMatch[1],
+            postId: pid,
             url: postHref,
-            title: m[1] ? m[1] : `帖子 #${postMatch[1]}`,
+            title: resolvedTitle || `帖子 #${pid}`,
+            needsTitle: !resolvedTitle,
             targetFloor: postMatch[3] || "",
           };
         }
-        out += `<a class="nsc-sn-post" href="${cleanUrl}" data-pid="${postMatch[1]}">${cleanLabel}</a>`;
+        const safeDisp = displayTitle.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        if (resolvedTitle) {
+          out += ` <a class="nsc-sn-post" href="${cleanUrl}" data-pid="${pid}">《${safeDisp}》</a>`;
+        } else {
+          out += `<a class="nsc-sn-post" href="${cleanUrl}" data-pid="${pid}">${safeDisp}</a>`;
+        }
       } else {
+        const cleanLabel = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         out += `<a class="nsc-sn-post" href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanLabel}</a>`;
       }
       last = tokenRe.lastIndex;
     }
     if (last < src.length) out += highlightSysNoticeSegment(src.slice(last));
-    out = out.replace(/\n/g, "<br>");
+    out = out.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
     return { html: out, firstPost };
   }
 
   function classifySysNoticeTag(rawContent) {
     const s = String(rawContent || "");
-    if (/新的帖子|新帖子|发布了|新主题/.test(s)) return { label: "新帖动态", cls: "nsc-sn-kw-post" };
-    if (/评论|回复|引用/.test(s)) return { label: "评论通知", cls: "nsc-sn-kw-comment" };
-    if (/鸡腿|星辰|奖励|中奖|抽奖|签到/.test(s)) return { label: "福利奖励", cls: "nsc-sn-kw-reward" };
-    if (/警告|封禁|禁言|违规|删除/.test(s)) return { label: "管理提醒", cls: "nsc-sn-kw-warn" };
-    return { label: "系统通知", cls: "nsc-sn-user" };
+    if (/新的帖子|新帖子|发布了|新主题/.test(s)) return { label: "新帖", cls: "nsc-sn-kw-post" };
+    if (/评论|回复|引用/.test(s)) return { label: "评论", cls: "nsc-sn-kw-comment" };
+    if (/鸡腿|星辰|奖励|中奖|抽奖|签到/.test(s)) return { label: "奖励", cls: "nsc-sn-kw-reward" };
+    if (/警告|封禁|禁言|违规|删除/.test(s)) return { label: "提醒", cls: "nsc-sn-kw-warn" };
+    return { label: "通知", cls: "nsc-sn-user" };
+  }
+
+  let _snTitleQueueRunning = false;
+  async function enrichSysNoticeTitles() {
+    if (_snTitleQueueRunning) return;
+    const targets = state.sysNoticeList.items
+      .filter((it) => it.firstPost && it.firstPost.needsTitle && it.firstPost.postId && !resolveKnownPostTitle(it.firstPost.postId))
+      .slice(0, 12);
+    if (targets.length === 0) return;
+    _snTitleQueueRunning = true;
+    try {
+      const seenPids = new Set();
+      for (const it of targets) {
+        if (state.activeChannel !== "sys-notice") break;
+        const pid = it.firstPost.postId;
+        if (seenPids.has(pid)) continue;
+        seenPids.add(pid);
+        try {
+          const resp = await fetch(`/post-${pid}-1`, { credentials: "include" });
+          if (resp.ok) {
+            const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+            const h1 = doc.querySelector(".nsk-post .post-title h1 a, .nsk-post .post-title h1");
+            const title = (h1 ? h1.textContent.trim() : (doc.title || "").replace(/\s*-\s*NodeSeek.*$/i, "").trim());
+            if (title) {
+              state.postTitleCache[pid] = title;
+              saveJson(LS.POST_TITLE_CACHE, state.postTitleCache);
+              for (const item of state.sysNoticeList.items) {
+                if (item.firstPost && item.firstPost.postId === pid) {
+                  const reParsed = formatSysNoticeHtml(item.content);
+                  item.html = reParsed.html;
+                  item.firstPost = reParsed.firstPost;
+                }
+              }
+              if (state.activeChannel === "sys-notice") renderTopicList();
+            }
+          }
+        } catch (_) {}
+        await new Promise((r) => setTimeout(r, 320));
+      }
+    } finally {
+      _snTitleQueueRunning = false;
+    }
   }
 
   async function fetchSysNotices(silent = false) {
@@ -570,6 +651,9 @@
       state.sysNoticeList.loaded = true;
       state.unreadCounts.sysNotice = items.filter((x) => x.unread).length;
       renderLeftNav();
+      if (!silent && state.activeChannel === "sys-notice") {
+        setTimeout(() => enrichSysNoticeTitles(), 120);
+      }
     } catch (err) {
       state.sysNoticeList.error = err.message;
     } finally {
@@ -945,6 +1029,10 @@
     const subEl = document.getElementById("nsc-channel-sub");
     if (!scrollEl) return;
 
+    const prevScrollTop = scrollEl.scrollTop;
+    const restoreScroll = () => {
+      if (prevScrollTop > 0) scrollEl.scrollTop = prevScrollTop;
+    };
     const kw = state.searchKeyword;
 
     if (state.activeChannel === "at-me" || state.activeChannel === "reply-me") {
@@ -1002,6 +1090,7 @@
         });
         scrollEl.appendChild(row);
       });
+      restoreScroll();
       return;
     }
 
@@ -1045,6 +1134,7 @@
         row.addEventListener("click", () => openPmConversation(it));
         scrollEl.appendChild(row);
       });
+      restoreScroll();
       return;
     }
 
@@ -1073,16 +1163,14 @@
           (!it.unread ? " is-read" : "") +
           (state.selectedNotifKey === rowKey ? " is-selected" : "");
         card.innerHTML = `
-          <div class="nsc-sn-icon">${ICONS.bell}</div>
-          <div class="nsc-sn-body">
-            <div class="nsc-sn-head">
-              <span class="${it.tag.cls}">${it.tag.label}</span>
-              <span style="display:inline-flex;align-items:center;gap:5px;">
-                ${it.timeText || ""}
-                ${it.unread ? `<span class="nsc-badge-dot" title="未读"></span>` : ""}
-              </span>
+          <div class="nsc-sn-row1">
+            <div class="nsc-sn-line">
+              <span class="${it.tag.cls}" style="margin-right:4px;">${it.tag.label}</span><span class="nsc-sn-text">${it.html}</span>
             </div>
-            <div class="nsc-sn-text">${it.html}</div>
+            <span class="nsc-sn-time">
+              ${it.timeText || ""}
+              ${it.unread ? `<span class="nsc-badge-dot" style="margin-top:0;" title="未读"></span>` : ""}
+            </span>
           </div>
         `;
         card.querySelectorAll(".nsc-sn-user[data-uid]").forEach((uEl) => {
@@ -1132,6 +1220,7 @@
         });
         scrollEl.appendChild(card);
       });
+      restoreScroll();
       return;
     }
 
@@ -1247,5 +1336,6 @@
         setTimeout(() => tryAutoLoadNextTopicPage(), 80);
       }
     }
+    restoreScroll();
   }
 

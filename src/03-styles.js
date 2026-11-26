@@ -158,44 +158,51 @@
       body.dark-layout .nsc-nav-item.group-admin:hover { color: #fbbf24; }
 
       .nsc-sn-card {
-        display: flex; align-items: flex-start; gap: 8px; padding: 9px; margin-bottom: 4px;
-        border-radius: 10px; border: 1px solid transparent; cursor: pointer;
+        display: flex; flex-direction: column; gap: 3px; padding: 6px 8px; margin-bottom: 2px;
+        border-radius: 8px; border: 1px solid transparent; cursor: pointer;
         transition: background 0.12s ease, border-color 0.12s ease;
       }
       .nsc-sn-card:hover { background: var(--nsc-hover); border-color: var(--nsc-border); }
       .nsc-sn-card.is-selected { background: var(--nsc-active-item); }
       .nsc-sn-card.is-read { opacity: 0.78; }
-      .nsc-sn-icon {
-        width: 30px; height: 30px; border-radius: 9px; flex: 0 0 30px;
-        background: rgba(255, 45, 85, 0.12); color: #e11d64;
-        display: flex; align-items: center; justify-content: center;
+      .nsc-sn-row1 {
+        display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        font-size: 12px; line-height: 1.4; color: var(--nsc-text);
       }
-      .nsc-sn-icon svg { width: 15px; height: 15px; }
-      .nsc-sn-body { flex: 1; min-width: 0; font-size: 12.2px; line-height: 1.5; color: var(--nsc-text); word-break: break-word; }
-      .nsc-sn-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; font-size: 10.5px; color: var(--nsc-muted); }
+      .nsc-sn-line {
+        flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .nsc-sn-time {
+        flex: 0 0 auto; font-size: 10.5px; color: var(--nsc-muted);
+        display: inline-flex; align-items: center; gap: 4px;
+      }
+      .nsc-sn-title-row {
+        font-size: 11.5px; color: var(--nsc-muted); white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; padding-left: 2px;
+      }
       .nsc-sn-user {
-        color: #007aff; font-weight: 700; background: rgba(0, 122, 255, 0.10);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #007aff; font-weight: 600; background: rgba(0, 122, 255, 0.10);
+        padding: 0 4px; border-radius: 4px; display: inline;
       }
       body.dark-layout .nsc-sn-user { color: #64b5ff; background: rgba(10, 132, 255, 0.20); }
       .nsc-sn-kw-post {
-        color: #15803d; font-weight: 700; background: rgba(52, 199, 89, 0.15);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #15803d; font-weight: 600; background: rgba(52, 199, 89, 0.15);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       body.dark-layout .nsc-sn-kw-post { color: #4ade80; background: rgba(48, 209, 88, 0.20); }
       .nsc-sn-kw-comment {
-        color: #c2410c; font-weight: 700; background: rgba(255, 149, 0, 0.16);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #c2410c; font-weight: 600; background: rgba(255, 149, 0, 0.16);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       body.dark-layout .nsc-sn-kw-comment { color: #fbbf24; background: rgba(255, 159, 10, 0.22); }
       .nsc-sn-kw-reward {
-        color: #be185d; font-weight: 700; background: rgba(255, 45, 85, 0.13);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #be185d; font-weight: 600; background: rgba(255, 45, 85, 0.13);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       body.dark-layout .nsc-sn-kw-reward { color: #ff7aa8; background: rgba(255, 55, 95, 0.22); }
       .nsc-sn-kw-warn {
-        color: #dc2626; font-weight: 700; background: rgba(255, 59, 48, 0.14);
-        padding: 0 5px; border-radius: 4px; display: inline-block;
+        color: #dc2626; font-weight: 600; background: rgba(255, 59, 48, 0.14);
+        padding: 0 4px; border-radius: 4px; display: inline; font-size: 11px;
       }
       .nsc-sn-post { color: #5856d6; font-weight: 600; text-decoration: none; }
       body.dark-layout .nsc-sn-post { color: #9c9aff; }

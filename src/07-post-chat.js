@@ -285,7 +285,12 @@
       state.onlyMember = "";
       applyMessageFilters();
     }
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (msgsEl) {
+      const cRect = msgsEl.getBoundingClientRect();
+      const tRect = target.getBoundingClientRect();
+      const targetTop = msgsEl.scrollTop + (tRect.top - cRect.top) - Math.max(24, (msgsEl.clientHeight - tRect.height) / 2);
+      msgsEl.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    }
     target.classList.remove("nsc-flash");
     void target.offsetWidth;
     target.classList.add("nsc-flash");
@@ -866,7 +871,7 @@
                 return;
               }
               const ta = document.querySelector("#nsc-composer-body .CodeMirror textarea");
-              if (ta) ta.focus();
+              if (ta) ta.focus({ preventScroll: true });
             }, 70);
           }
           return;
@@ -902,7 +907,7 @@
           : `@${obj.author} #${obj.floorId}\n`;
       const existing = ta.value.replace(/^\n+/, "");
       ta.value = snippet + existing;
-      ta.focus();
+      ta.focus({ preventScroll: true });
       ta.setSelectionRange(snippet.length, snippet.length);
       return;
     }
