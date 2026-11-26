@@ -110,6 +110,7 @@
     hotError: null,
     followData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
     fansData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
+    blockListState: { items: [], loading: false, loaded: false, error: null },
     batchQuery: { running: false, done: 0, total: 0, stopRequested: false },
     removedFans: new Set(),
     searchKeyword: "",

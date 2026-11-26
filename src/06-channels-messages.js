@@ -83,6 +83,8 @@
       fetchFansOrFollow("follow");
     } else if (state.rightTab === "fans" && !state.fansData.loaded) {
       fetchFansOrFollow("fans");
+    } else if (state.rightTab === "blacklist" && !state.blockListState.loaded) {
+      fetchServerBlockList(false);
     } else {
       renderRightBody();
     }
@@ -117,6 +119,7 @@
         switchChannel(state.activeChannel, false);
         fetchUnreadCounts();
         setTimeout(() => fetchSysNotices(true), 600);
+        setTimeout(() => fetchServerBlockList(true), 800);
         setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
       }
 

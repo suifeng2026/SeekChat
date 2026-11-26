@@ -316,6 +316,8 @@
           fetchFansOrFollow("follow");
         } else if (state.rightTab === "fans" && !state.fansData.loaded && !state.fansData.loading) {
           fetchFansOrFollow("fans");
+        } else if (state.rightTab === "blacklist" && !state.blockListState.loaded && !state.blockListState.loading) {
+          fetchServerBlockList(false);
         } else {
           renderRightBody();
         }

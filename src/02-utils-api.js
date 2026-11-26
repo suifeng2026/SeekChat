@@ -151,21 +151,121 @@
     renderRightBody();
   }
 
-  function toggleBlacklist(member) {
-    if (!member || !member.name) return;
-    const idx = state.blacklist.findIndex((b) => b.name === member.name);
-    if (idx >= 0) {
-      state.blacklist.splice(idx, 1);
-      state.removedFans.delete(member.name);
-    } else {
-      state.blacklist.unshift({ uid: member.uid || "", name: member.name, avatar: member.avatar || "" });
-      state.friends = state.friends.filter((f) => f.name !== member.name);
-      saveJson(LS.FRIENDS, state.friends);
+  async function fetchServerBlockList(silent = false) {
+    if (state.blockListState.loading) return state.blacklist;
+    state.blockListState.loading = true;
+    state.blockListState.error = null;
+    if (!silent && state.rightTab === "blacklist") renderRightBody();
+
+    try {
+      const resp = await fetch("/api/block-list/list", {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const raw =
+        (json && Array.isArray(json.data) && json.data) ||
+        (json && Array.isArray(json.list) && json.list) ||
+        [];
+      const mapped = [];
+      const seen = new Set();
+      for (const it of raw) {
+        const uid = String(it.block_member_id || it.member_id || it.uid || "").trim();
+        const name = String(it.block_member_name || it.member_name || it.username || it.name || "").trim();
+        if (!name && !uid) continue;
+        const key = name || uid;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        mapped.push({
+          uid,
+          name: name || `用户#${uid}`,
+          avatar: uid ? `/avatar/${uid}.png` : "",
+        });
+      }
+      state.blockListState.items = mapped;
+      state.blockListState.loaded = true;
+      state.blacklist = mapped;
+      saveJson(LS.BLACKLIST, state.blacklist);
+      renderTopicList();
+      applyMessageFilters();
+    } catch (err) {
+      state.blockListState.error = err.message;
+    } finally {
+      state.blockListState.loading = false;
+      if (state.rightTab === "blacklist") renderRightBody();
     }
-    saveJson(LS.BLACKLIST, state.blacklist);
+    return state.blacklist;
+  }
+
+  async function toggleBlacklist(member) {
+    if (!member || (!member.name && !member.uid)) return { ok: false, message: "无效用户" };
+    const name = String(member.name || "").trim();
+    const currentlyBlocked = isBlacklisted(name) || (member.uid && state.blacklist.some((b) => String(b.uid) === String(member.uid)));
+
+    if (currentlyBlocked) {
+      let targetUid = member.uid;
+      if (!targetUid) {
+        const hit = state.blacklist.find((b) => b.name === name);
+        if (hit && hit.uid) targetUid = hit.uid;
+      }
+      if (!targetUid) {
+        await fetchServerBlockList(true);
+        const hit = state.blacklist.find((b) => b.name === name);
+        if (hit && hit.uid) targetUid = hit.uid;
+      }
+      if (targetUid) {
+        try {
+          const resp = await fetch("/api/block-list/del", {
+            method: "POST",
+            credentials: "include",
+            headers: getNodeSeekPostHeaders(),
+            body: JSON.stringify({ block_member_id: Number(targetUid) }),
+          });
+          const resJson = await resp.json().catch(() => ({}));
+          if (!resp.ok || resJson.success === false) {
+            return { ok: false, message: resJson.message || `HTTP ${resp.status}` };
+          }
+        } catch (err) {
+          return { ok: false, message: err.message };
+        }
+      }
+      state.blacklist = state.blacklist.filter((b) => b.name !== name && (!targetUid || String(b.uid) !== String(targetUid)));
+      state.removedFans.delete(name);
+      saveJson(LS.BLACKLIST, state.blacklist);
+      renderRightBody();
+      renderTopicList();
+      applyMessageFilters();
+      return { ok: true, action: "removed" };
+    }
+
+    if (!name) return { ok: false, message: "请输入用户名" };
+    try {
+      const resp = await fetch("/api/block-list/add", {
+        method: "POST",
+        credentials: "include",
+        headers: getNodeSeekPostHeaders(),
+        body: JSON.stringify({ block_member_name: name }),
+      });
+      const resJson = await resp.json().catch(() => ({}));
+      if (!resp.ok || resJson.success === false) {
+        return { ok: false, message: resJson.message || `HTTP ${resp.status}` };
+      }
+    } catch (err) {
+      return { ok: false, message: err.message };
+    }
+
+    state.friends = state.friends.filter((f) => f.name !== name);
+    saveJson(LS.FRIENDS, state.friends);
+    if (!state.blacklist.some((b) => b.name === name)) {
+      state.blacklist.unshift({ uid: member.uid || "", name, avatar: member.avatar || (member.uid ? `/avatar/${member.uid}.png` : "") });
+      saveJson(LS.BLACKLIST, state.blacklist);
+    }
+    await fetchServerBlockList(true);
     renderRightBody();
     renderTopicList();
     applyMessageFilters();
+    return { ok: true, action: "added" };
   }
 
   function markPostOpenedAsRead(meta) {

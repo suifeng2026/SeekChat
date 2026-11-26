@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.5.0
+// @version      7.6.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -137,6 +137,7 @@
     hotError: null,
     followData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
     fansData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
+    blockListState: { items: [], loading: false, loaded: false, error: null },
     batchQuery: { running: false, done: 0, total: 0, stopRequested: false },
     removedFans: new Set(),
     searchKeyword: "",
@@ -323,21 +324,121 @@
     renderRightBody();
   }
 
-  function toggleBlacklist(member) {
-    if (!member || !member.name) return;
-    const idx = state.blacklist.findIndex((b) => b.name === member.name);
-    if (idx >= 0) {
-      state.blacklist.splice(idx, 1);
-      state.removedFans.delete(member.name);
-    } else {
-      state.blacklist.unshift({ uid: member.uid || "", name: member.name, avatar: member.avatar || "" });
-      state.friends = state.friends.filter((f) => f.name !== member.name);
-      saveJson(LS.FRIENDS, state.friends);
+  async function fetchServerBlockList(silent = false) {
+    if (state.blockListState.loading) return state.blacklist;
+    state.blockListState.loading = true;
+    state.blockListState.error = null;
+    if (!silent && state.rightTab === "blacklist") renderRightBody();
+
+    try {
+      const resp = await fetch("/api/block-list/list", {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const raw =
+        (json && Array.isArray(json.data) && json.data) ||
+        (json && Array.isArray(json.list) && json.list) ||
+        [];
+      const mapped = [];
+      const seen = new Set();
+      for (const it of raw) {
+        const uid = String(it.block_member_id || it.member_id || it.uid || "").trim();
+        const name = String(it.block_member_name || it.member_name || it.username || it.name || "").trim();
+        if (!name && !uid) continue;
+        const key = name || uid;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        mapped.push({
+          uid,
+          name: name || `用户#${uid}`,
+          avatar: uid ? `/avatar/${uid}.png` : "",
+        });
+      }
+      state.blockListState.items = mapped;
+      state.blockListState.loaded = true;
+      state.blacklist = mapped;
+      saveJson(LS.BLACKLIST, state.blacklist);
+      renderTopicList();
+      applyMessageFilters();
+    } catch (err) {
+      state.blockListState.error = err.message;
+    } finally {
+      state.blockListState.loading = false;
+      if (state.rightTab === "blacklist") renderRightBody();
     }
-    saveJson(LS.BLACKLIST, state.blacklist);
+    return state.blacklist;
+  }
+
+  async function toggleBlacklist(member) {
+    if (!member || (!member.name && !member.uid)) return { ok: false, message: "无效用户" };
+    const name = String(member.name || "").trim();
+    const currentlyBlocked = isBlacklisted(name) || (member.uid && state.blacklist.some((b) => String(b.uid) === String(member.uid)));
+
+    if (currentlyBlocked) {
+      let targetUid = member.uid;
+      if (!targetUid) {
+        const hit = state.blacklist.find((b) => b.name === name);
+        if (hit && hit.uid) targetUid = hit.uid;
+      }
+      if (!targetUid) {
+        await fetchServerBlockList(true);
+        const hit = state.blacklist.find((b) => b.name === name);
+        if (hit && hit.uid) targetUid = hit.uid;
+      }
+      if (targetUid) {
+        try {
+          const resp = await fetch("/api/block-list/del", {
+            method: "POST",
+            credentials: "include",
+            headers: getNodeSeekPostHeaders(),
+            body: JSON.stringify({ block_member_id: Number(targetUid) }),
+          });
+          const resJson = await resp.json().catch(() => ({}));
+          if (!resp.ok || resJson.success === false) {
+            return { ok: false, message: resJson.message || `HTTP ${resp.status}` };
+          }
+        } catch (err) {
+          return { ok: false, message: err.message };
+        }
+      }
+      state.blacklist = state.blacklist.filter((b) => b.name !== name && (!targetUid || String(b.uid) !== String(targetUid)));
+      state.removedFans.delete(name);
+      saveJson(LS.BLACKLIST, state.blacklist);
+      renderRightBody();
+      renderTopicList();
+      applyMessageFilters();
+      return { ok: true, action: "removed" };
+    }
+
+    if (!name) return { ok: false, message: "请输入用户名" };
+    try {
+      const resp = await fetch("/api/block-list/add", {
+        method: "POST",
+        credentials: "include",
+        headers: getNodeSeekPostHeaders(),
+        body: JSON.stringify({ block_member_name: name }),
+      });
+      const resJson = await resp.json().catch(() => ({}));
+      if (!resp.ok || resJson.success === false) {
+        return { ok: false, message: resJson.message || `HTTP ${resp.status}` };
+      }
+    } catch (err) {
+      return { ok: false, message: err.message };
+    }
+
+    state.friends = state.friends.filter((f) => f.name !== name);
+    saveJson(LS.FRIENDS, state.friends);
+    if (!state.blacklist.some((b) => b.name === name)) {
+      state.blacklist.unshift({ uid: member.uid || "", name, avatar: member.avatar || (member.uid ? `/avatar/${member.uid}.png` : "") });
+      saveJson(LS.BLACKLIST, state.blacklist);
+    }
+    await fetchServerBlockList(true);
     renderRightBody();
     renderTopicList();
     applyMessageFilters();
+    return { ok: true, action: "added" };
   }
 
   function markPostOpenedAsRead(meta) {
@@ -1932,6 +2033,8 @@
           fetchFansOrFollow("follow");
         } else if (state.rightTab === "fans" && !state.fansData.loaded && !state.fansData.loading) {
           fetchFansOrFollow("fans");
+        } else if (state.rightTab === "blacklist" && !state.blockListState.loaded && !state.blockListState.loading) {
+          fetchServerBlockList(false);
         } else {
           renderRightBody();
         }
@@ -2414,6 +2517,8 @@
       fetchFansOrFollow("follow");
     } else if (state.rightTab === "fans" && !state.fansData.loaded) {
       fetchFansOrFollow("fans");
+    } else if (state.rightTab === "blacklist" && !state.blockListState.loaded) {
+      fetchServerBlockList(false);
     } else {
       renderRightBody();
     }
@@ -2448,6 +2553,7 @@
         switchChannel(state.activeChannel, false);
         fetchUnreadCounts();
         setTimeout(() => fetchSysNotices(true), 600);
+        setTimeout(() => fetchServerBlockList(true), 800);
         setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
       }
 
@@ -4837,8 +4943,9 @@
         toggleFriend(info);
         renderModal(info, false);
       });
-      modal.querySelector("#nsc-p-black").addEventListener("click", () => {
-        toggleBlacklist(info);
+      modal.querySelector("#nsc-p-black").addEventListener("click", async (e) => {
+        e.target.disabled = true;
+        await toggleBlacklist(info);
         renderModal(info, false);
       });
       modal.querySelector("#nsc-p-only").addEventListener("click", () => {
@@ -5139,8 +5246,73 @@
       return;
     }
 
+    const addBox = document.createElement("div");
+    addBox.style.cssText = "display:flex;align-items:center;gap:5px;margin-bottom:7px;";
+    addBox.innerHTML = `
+      <input type="text" class="nsc-search-input" id="nsc-blk-input" placeholder="输入用户名添加屏蔽..." style="flex:1;height:26px;" />
+      <button type="button" class="nsc-mini-btn" id="nsc-blk-add-btn" style="height:26px;padding:0 10px;">屏蔽</button>
+    `;
+    container.appendChild(addBox);
+
+    const toolbar = document.createElement("div");
+    toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:5px;";
+    toolbar.innerHTML = `
+      <span id="nsc-blk-status" style="font-size:11px;color:var(--nsc-muted);">共 ${state.blacklist.length} 人</span>
+      <div style="display:inline-flex;gap:5px;">
+        <button type="button" class="nsc-mini-btn" id="nsc-blk-ref">${state.blockListState.loading ? "同步" : "刷新"}</button>
+        <a class="nsc-mini-btn" href="/setting#block" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">设置 ↗</a>
+      </div>
+    `;
+    container.appendChild(toolbar);
+
+    const blkInput = addBox.querySelector("#nsc-blk-input");
+    const blkAddBtn = addBox.querySelector("#nsc-blk-add-btn");
+    const blkStatus = toolbar.querySelector("#nsc-blk-status");
+    const doAddBlock = async () => {
+      const targetName = blkInput.value.trim();
+      if (!targetName) return;
+      blkAddBtn.disabled = true;
+      blkAddBtn.textContent = "提交";
+      const res = await toggleBlacklist({ name: targetName });
+      blkAddBtn.disabled = false;
+      blkAddBtn.textContent = "屏蔽";
+      if (res && !res.ok) {
+        blkStatus.textContent = res.message || "屏蔽失败";
+        blkStatus.style.color = "#ff3b30";
+      } else {
+        blkInput.value = "";
+      }
+    };
+    blkAddBtn.addEventListener("click", doAddBlock);
+    blkInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doAddBlock();
+      }
+    });
+    toolbar.querySelector("#nsc-blk-ref").addEventListener("click", () => fetchServerBlockList(false));
+
+    if (state.blockListState.loading && state.blacklist.length === 0) {
+      const tip = document.createElement("div");
+      tip.style.cssText = "padding:18px 8px;text-align:center;font-size:12px;color:var(--nsc-muted);";
+      tip.textContent = "正在同步服务器黑名单...";
+      container.appendChild(tip);
+      return;
+    }
+
+    if (state.blockListState.error && state.blacklist.length === 0) {
+      const errTip = document.createElement("div");
+      errTip.style.cssText = "padding:14px 8px;text-align:center;font-size:12px;color:#ff3b30;";
+      errTip.textContent = `加载黑名单失败: ${state.blockListState.error}`;
+      container.appendChild(errTip);
+      return;
+    }
+
     if (state.blacklist.length === 0) {
-      container.innerHTML = `<div style="padding:18px 8px;text-align:center;font-size:12px;color:var(--nsc-muted);">黑名单为空</div>`;
+      const empty = document.createElement("div");
+      empty.style.cssText = "padding:18px 8px;text-align:center;font-size:12px;color:var(--nsc-muted);";
+      empty.textContent = "黑名单为空，可上方输入用户名或在名片中添加屏蔽";
+      container.appendChild(empty);
       return;
     }
     for (const b of state.blacklist) {
@@ -5151,15 +5323,24 @@
           <img class="nsc-qq-avatar" src="${b.avatar || (b.uid ? `/avatar/${b.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" />
           <div class="nsc-qq-info">
             <div class="nsc-qq-name"></div>
-            <div class="nsc-qq-sub">已屏蔽</div>
+            <div class="nsc-qq-sub">${b.uid ? `UID: ${b.uid} · 已屏蔽` : "已屏蔽"}</div>
           </div>
           <button type="button" class="nsc-mini-btn">解除</button>
         </div>
       `;
       row.querySelector(".nsc-qq-name").textContent = b.name;
-      row.querySelector("button").addEventListener("click", (e) => {
+      const unblkBtn = row.querySelector("button");
+      unblkBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        toggleBlacklist(b);
+        unblkBtn.disabled = true;
+        unblkBtn.textContent = "...";
+        const res = await toggleBlacklist(b);
+        if (res && !res.ok) {
+          unblkBtn.disabled = false;
+          unblkBtn.textContent = "解除";
+          blkStatus.textContent = res.message || "移出失败";
+          blkStatus.style.color = "#ff3b30";
+        }
       });
       row.querySelector(".nsc-qq-main").addEventListener("click", (e) => {
         if (!e.target.closest("button")) openUserProfileModal(b);

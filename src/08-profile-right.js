@@ -360,8 +360,9 @@
         toggleFriend(info);
         renderModal(info, false);
       });
-      modal.querySelector("#nsc-p-black").addEventListener("click", () => {
-        toggleBlacklist(info);
+      modal.querySelector("#nsc-p-black").addEventListener("click", async (e) => {
+        e.target.disabled = true;
+        await toggleBlacklist(info);
         renderModal(info, false);
       });
       modal.querySelector("#nsc-p-only").addEventListener("click", () => {
@@ -662,8 +663,73 @@
       return;
     }
 
+    const addBox = document.createElement("div");
+    addBox.style.cssText = "display:flex;align-items:center;gap:5px;margin-bottom:7px;";
+    addBox.innerHTML = `
+      <input type="text" class="nsc-search-input" id="nsc-blk-input" placeholder="输入用户名添加屏蔽..." style="flex:1;height:26px;" />
+      <button type="button" class="nsc-mini-btn" id="nsc-blk-add-btn" style="height:26px;padding:0 10px;">屏蔽</button>
+    `;
+    container.appendChild(addBox);
+
+    const toolbar = document.createElement("div");
+    toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:5px;";
+    toolbar.innerHTML = `
+      <span id="nsc-blk-status" style="font-size:11px;color:var(--nsc-muted);">共 ${state.blacklist.length} 人</span>
+      <div style="display:inline-flex;gap:5px;">
+        <button type="button" class="nsc-mini-btn" id="nsc-blk-ref">${state.blockListState.loading ? "同步" : "刷新"}</button>
+        <a class="nsc-mini-btn" href="/setting#block" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">设置 ↗</a>
+      </div>
+    `;
+    container.appendChild(toolbar);
+
+    const blkInput = addBox.querySelector("#nsc-blk-input");
+    const blkAddBtn = addBox.querySelector("#nsc-blk-add-btn");
+    const blkStatus = toolbar.querySelector("#nsc-blk-status");
+    const doAddBlock = async () => {
+      const targetName = blkInput.value.trim();
+      if (!targetName) return;
+      blkAddBtn.disabled = true;
+      blkAddBtn.textContent = "提交";
+      const res = await toggleBlacklist({ name: targetName });
+      blkAddBtn.disabled = false;
+      blkAddBtn.textContent = "屏蔽";
+      if (res && !res.ok) {
+        blkStatus.textContent = res.message || "屏蔽失败";
+        blkStatus.style.color = "#ff3b30";
+      } else {
+        blkInput.value = "";
+      }
+    };
+    blkAddBtn.addEventListener("click", doAddBlock);
+    blkInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doAddBlock();
+      }
+    });
+    toolbar.querySelector("#nsc-blk-ref").addEventListener("click", () => fetchServerBlockList(false));
+
+    if (state.blockListState.loading && state.blacklist.length === 0) {
+      const tip = document.createElement("div");
+      tip.style.cssText = "padding:18px 8px;text-align:center;font-size:12px;color:var(--nsc-muted);";
+      tip.textContent = "正在同步服务器黑名单...";
+      container.appendChild(tip);
+      return;
+    }
+
+    if (state.blockListState.error && state.blacklist.length === 0) {
+      const errTip = document.createElement("div");
+      errTip.style.cssText = "padding:14px 8px;text-align:center;font-size:12px;color:#ff3b30;";
+      errTip.textContent = `加载黑名单失败: ${state.blockListState.error}`;
+      container.appendChild(errTip);
+      return;
+    }
+
     if (state.blacklist.length === 0) {
-      container.innerHTML = `<div style="padding:18px 8px;text-align:center;font-size:12px;color:var(--nsc-muted);">黑名单为空</div>`;
+      const empty = document.createElement("div");
+      empty.style.cssText = "padding:18px 8px;text-align:center;font-size:12px;color:var(--nsc-muted);";
+      empty.textContent = "黑名单为空，可上方输入用户名或在名片中添加屏蔽";
+      container.appendChild(empty);
       return;
     }
     for (const b of state.blacklist) {
@@ -674,15 +740,24 @@
           <img class="nsc-qq-avatar" src="${b.avatar || (b.uid ? `/avatar/${b.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" />
           <div class="nsc-qq-info">
             <div class="nsc-qq-name"></div>
-            <div class="nsc-qq-sub">已屏蔽</div>
+            <div class="nsc-qq-sub">${b.uid ? `UID: ${b.uid} · 已屏蔽` : "已屏蔽"}</div>
           </div>
           <button type="button" class="nsc-mini-btn">解除</button>
         </div>
       `;
       row.querySelector(".nsc-qq-name").textContent = b.name;
-      row.querySelector("button").addEventListener("click", (e) => {
+      const unblkBtn = row.querySelector("button");
+      unblkBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        toggleBlacklist(b);
+        unblkBtn.disabled = true;
+        unblkBtn.textContent = "...";
+        const res = await toggleBlacklist(b);
+        if (res && !res.ok) {
+          unblkBtn.disabled = false;
+          unblkBtn.textContent = "解除";
+          blkStatus.textContent = res.message || "移出失败";
+          blkStatus.style.color = "#ff3b30";
+        }
       });
       row.querySelector(".nsc-qq-main").addEventListener("click", (e) => {
         if (!e.target.closest("button")) openUserProfileModal(b);
