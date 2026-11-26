@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.7.0
+// @version      7.8.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -92,6 +92,7 @@
     links: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
     bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
     trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+    theme: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>`,
   };
 
   const CHANNELS = [
@@ -1260,20 +1261,22 @@
 
       #nsc-lightbox {
         position: fixed; inset: 0; z-index: 10000;
-        background: rgba(12, 14, 18, 0.86); backdrop-filter: blur(14px);
-        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
+        background: rgba(12, 14, 18, 0.88); backdrop-filter: blur(14px);
+        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
+        user-select: none;
       }
       #nsc-lightbox.is-open { display: flex; }
       .nsc-lightbox-stage {
         position: relative; display: flex; align-items: center; justify-content: center;
-        max-width: 92vw; max-height: 82vh;
+        width: 92vw; height: 82vh; overflow: hidden;
       }
       #nsc-lightbox img {
-        max-width: 90vw; max-height: 82vh; object-fit: contain;
-        border-radius: 12px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
-        transition: transform 0.18s ease;
+        max-width: 100%; max-height: 100%; object-fit: contain;
+        border-radius: 10px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
+        transform-origin: center center; will-change: transform;
       }
-      #nsc-lightbox img.is-zoomed { transform: scale(1.65); cursor: zoom-out; }
+      #nsc-lightbox img.is-pannable { cursor: grab; }
+      #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
       .nsc-lb-nav {
         position: fixed; top: 50%; transform: translateY(-50%);
         width: 42px; height: 42px; border-radius: 50%;
@@ -1546,70 +1549,116 @@
       return Boolean(res && res.success);
     },
     insertToTarget(targetMode, markdown) {
+      const insertText = `\n${markdown}\n`;
       if (targetMode === "newpost") {
         const ta = document.getElementById("nsc-np-content");
         if (ta) {
           const s = ta.selectionStart || 0;
           const e = ta.selectionEnd || 0;
-          ta.setRangeText(`\n${markdown}\n`, s, e, "end");
+          ta.setRangeText(insertText, s, e, "end");
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
           ta.focus();
         }
         return;
       }
-      if (targetMode === "pm") {
+      const pmBox = document.getElementById("nsc-pm-composer");
+      if (targetMode === "pm" || (pmBox && pmBox.style.display !== "none")) {
         const ta = document.getElementById("nsc-pm-ta");
         if (ta) {
           const s = ta.selectionStart || 0;
           const e = ta.selectionEnd || 0;
-          ta.setRangeText(`\n${markdown}\n`, s, e, "end");
+          ta.setRangeText(insertText, s, e, "end");
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
           ta.focus();
         }
         return;
       }
-      const cmEl = document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
-      if (cmEl && cmEl.CodeMirror) {
-        const cm = cmEl.CodeMirror;
-        cm.replaceSelection(`\n${markdown}\n`);
-        cm.focus();
-        return;
+      const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+      const cmEl =
+        (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
+        document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
+      if (cmEl && cmEl.offsetParent !== null) {
+        const cm = cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror);
+        if (cm && typeof cm.replaceSelection === "function") {
+          cm.replaceSelection(insertText);
+          cm.focus();
+          return;
+        }
+        const cmTa = cmEl.querySelector("textarea");
+        if (cmTa) {
+          cmTa.focus();
+          try {
+            if (document.execCommand("insertText", false, insertText)) return;
+          } catch (_) {}
+          const s = cmTa.selectionStart || 0;
+          const e = cmTa.selectionEnd || 0;
+          cmTa.setRangeText(insertText, s, e, "end");
+          cmTa.dispatchEvent(new Event("input", { bubbles: true }));
+          return;
+        }
       }
       const ta = document.getElementById("nsc-fallback-ta");
       if (ta) {
         const s = ta.selectionStart || 0;
         const e = ta.selectionEnd || 0;
-        ta.setRangeText(`\n${markdown}\n`, s, e, "end");
+        ta.setRangeText(insertText, s, e, "end");
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
         ta.focus();
       }
     },
     bindPasteAndDrop(containerEl, targetMode, statusSelector) {
       if (!containerEl || containerEl.dataset.nscNiBound === "1") return;
       containerEl.dataset.nscNiBound = "1";
+      const resolveMode = () => {
+        if (targetMode === "chat") {
+          const pmBox = document.getElementById("nsc-pm-composer");
+          if (pmBox && pmBox.style.display !== "none") return "pm";
+        }
+        return targetMode;
+      };
+      const getStatusEl = (effMode) => {
+        if (effMode === "pm") return document.getElementById("nsc-pm-status");
+        if (effMode === "newpost") return document.getElementById("nsc-np-status");
+        return (
+          (statusSelector && document.querySelector(statusSelector)) ||
+          document.getElementById("nsc-composer-status") ||
+          document.querySelector("#nsc-composer-body .nsc-ni-status")
+        );
+      };
       const handleFiles = async (files) => {
         const imgs = Array.from(files || []).filter((f) => f && f.type && f.type.startsWith("image/"));
         if (imgs.length === 0) return false;
-        const statusEl = statusSelector ? document.querySelector(statusSelector) : null;
+        const effMode = resolveMode();
+        const statusEl = getStatusEl(effMode);
         for (const f of imgs) {
           if (statusEl) statusEl.textContent = "正在上传图片到 NodeImage...";
           try {
             const md = await NodeImage.uploadFile(f);
-            NodeImage.insertToTarget(targetMode, md);
+            NodeImage.insertToTarget(effMode, md);
             if (statusEl) statusEl.textContent = "图片已上传并插入";
           } catch (err) {
             if (statusEl) statusEl.textContent = err.message;
-            openNodeImageModal(targetMode);
+            openNodeImageModal(effMode);
             break;
           }
         }
         return true;
       };
       containerEl.addEventListener("paste", (e) => {
-        const items = e.clipboardData && e.clipboardData.items;
-        if (!items) return;
+        const cd = e.clipboardData;
+        if (!cd) return;
         const files = [];
-        for (const it of items) {
-          if (it.kind === "file" && it.type.startsWith("image/")) {
-            const f = it.getAsFile();
-            if (f) files.push(f);
+        if (cd.files && cd.files.length > 0) {
+          for (const f of cd.files) {
+            if (f && f.type && f.type.startsWith("image/")) files.push(f);
+          }
+        }
+        if (files.length === 0 && cd.items) {
+          for (const it of cd.items) {
+            if (it.kind === "file" && it.type && it.type.startsWith("image/")) {
+              const f = it.getAsFile();
+              if (f) files.push(f);
+            }
           }
         }
         if (files.length > 0) {
@@ -1924,26 +1973,104 @@
     lightbox.id = "nsc-lightbox";
     lightbox.innerHTML = `
       <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
-      <div class="nsc-lightbox-stage">
+      <div class="nsc-lightbox-stage" id="nsc-lb-stage">
         <img id="nsc-lightbox-img" src="" alt="原图" />
       </div>
       <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       <div class="nsc-lightbox-bar">
         <span id="nsc-lb-count" class="nsc-lightbox-count"></span>
+        <button type="button" id="nsc-lb-zoom" class="nsc-lightbox-btn" title="点击重置适应窗口">100%</button>
+        <button type="button" id="nsc-lb-orig" class="nsc-lightbox-btn" title="按原图 1:1 尺寸查看并可拖拽">原图 1:1</button>
         <button type="button" id="nsc-lb-copy" class="nsc-lightbox-btn">复制链接</button>
         <a id="nsc-lightbox-raw" class="nsc-lightbox-btn" href="" target="_blank" rel="noopener noreferrer">新窗口打开原图</a>
         <button type="button" id="nsc-lightbox-close" class="nsc-lightbox-btn">关闭 (Esc)</button>
       </div>
     `;
+    const lbImg = lightbox.querySelector("#nsc-lightbox-img");
+    const lbStage = lightbox.querySelector("#nsc-lb-stage");
+    const applyLbTransform = () => {
+      lbImg.style.transform = `translate(${_lbTx}px, ${_lbTy}px) scale(${_lbScale})`;
+      lbImg.classList.toggle("is-pannable", _lbScale > 1.02);
+      lbImg.style.cursor = _lbScale > 1.02 ? (_lbDragging ? "grabbing" : "grab") : "zoom-in";
+      const zBtn = document.getElementById("nsc-lb-zoom");
+      if (zBtn) zBtn.textContent = `${Math.round(_lbScale * 100)}%`;
+    };
+    window.__nscApplyLbTransform = applyLbTransform;
+
     lightbox.addEventListener("click", (e) => {
-      if (e.target === lightbox || e.target.id === "nsc-lightbox-close") {
+      if (e.target === lightbox || e.target === lbStage || e.target.id === "nsc-lightbox-close") {
         lightbox.classList.remove("is-open");
       }
     });
-    const lbImg = lightbox.querySelector("#nsc-lightbox-img");
+    lbStage.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.18 : -0.18;
+      _lbScale = Math.min(5, Math.max(0.4, Number((_lbScale + delta).toFixed(2))));
+      if (_lbScale <= 1) { _lbTx = 0; _lbTy = 0; }
+      applyLbTransform();
+    }, { passive: false });
+
+    lbImg.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      _lbDragging = true;
+      _lbMoved = false;
+      _lbStartX = e.clientX - _lbTx;
+      _lbStartY = e.clientY - _lbTy;
+      applyLbTransform();
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!_lbDragging) return;
+      const nx = e.clientX - _lbStartX;
+      const ny = e.clientY - _lbStartY;
+      if (Math.abs(nx - _lbTx) > 3 || Math.abs(ny - _lbTy) > 3) _lbMoved = true;
+      if (_lbScale > 1.02) {
+        _lbTx = nx;
+        _lbTy = ny;
+        applyLbTransform();
+      }
+    });
+    window.addEventListener("mouseup", () => {
+      if (_lbDragging) {
+        _lbDragging = false;
+        applyLbTransform();
+      }
+    });
     lbImg.addEventListener("click", (e) => {
       e.stopPropagation();
-      lbImg.classList.toggle("is-zoomed");
+      if (_lbMoved) return;
+      if (_lbScale > 1.02) {
+        _lbScale = 1;
+        _lbTx = 0;
+        _lbTy = 0;
+      } else {
+        const natScale = lbImg.naturalWidth && lbImg.clientWidth ? Math.min(3.5, Math.max(1.5, lbImg.naturalWidth / lbImg.clientWidth)) : 1.8;
+        _lbScale = Number(natScale.toFixed(2));
+        _lbTx = 0;
+        _lbTy = 0;
+      }
+      applyLbTransform();
+    });
+    lightbox.querySelector("#nsc-lb-zoom").addEventListener("click", (e) => {
+      e.stopPropagation();
+      _lbScale = 1;
+      _lbTx = 0;
+      _lbTy = 0;
+      applyLbTransform();
+    });
+    lightbox.querySelector("#nsc-lb-orig").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (_lbScale > 1.02) {
+        _lbScale = 1;
+        _lbTx = 0;
+        _lbTy = 0;
+      } else {
+        const natScale = lbImg.naturalWidth && lbImg.clientWidth ? Math.min(4, Math.max(1.6, lbImg.naturalWidth / lbImg.clientWidth)) : 2;
+        _lbScale = Number(natScale.toFixed(2));
+        _lbTx = 0;
+        _lbTy = 0;
+      }
+      applyLbTransform();
     });
     lightbox.querySelector("#nsc-lb-prev").addEventListener("click", (e) => {
       e.stopPropagation();
@@ -2463,6 +2590,7 @@
         leftSlot.innerHTML = "";
         leftSlot.appendChild(imgHostBtn);
         const hint = document.createElement("span");
+        hint.className = "nsc-ni-status";
         hint.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
         leftSlot.appendChild(hint);
       } else {
@@ -2526,6 +2654,13 @@
 
   let _lbGallery = [];
   let _lbIndex = 0;
+  let _lbScale = 1;
+  let _lbTx = 0;
+  let _lbTy = 0;
+  let _lbDragging = false;
+  let _lbMoved = false;
+  let _lbStartX = 0;
+  let _lbStartY = 0;
 
   function showLightboxAt(idx) {
     const lb = document.getElementById("nsc-lightbox");
@@ -2537,7 +2672,10 @@
     if (!lb || !img || !raw || _lbGallery.length === 0) return;
     _lbIndex = Math.max(0, Math.min(idx, _lbGallery.length - 1));
     const src = _lbGallery[_lbIndex];
-    img.classList.remove("is-zoomed");
+    _lbScale = 1;
+    _lbTx = 0;
+    _lbTy = 0;
+    if (typeof window.__nscApplyLbTransform === "function") window.__nscApplyLbTransform();
     img.src = src;
     raw.href = src;
     if (cnt) cnt.textContent = _lbGallery.length > 1 ? `${_lbIndex + 1} / ${_lbGallery.length}` : "";
@@ -2677,6 +2815,21 @@
     const nativeUserCard = document.querySelector("#nsk-right-panel-container .user-card");
     if (rightUserHost && nativeUserCard && !rightUserHost.contains(nativeUserCard)) {
       rightUserHost.appendChild(nativeUserCard);
+    }
+
+    const themeBtn = document.querySelector('#nsc-right-user .user-card a[title="切换主题模式"]');
+    if (themeBtn && themeBtn.dataset.nscThemeFixed !== "1") {
+      themeBtn.dataset.nscThemeFixed = "1";
+      if (!themeBtn.querySelector("svg")) {
+        themeBtn.innerHTML = ICONS.theme;
+      }
+      themeBtn.addEventListener("click", (e) => {
+        const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
+        if (headThemeBtn && e.isTrusted) {
+          e.preventDefault();
+          headThemeBtn.click();
+        }
+      });
     }
 
     const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
@@ -4712,9 +4865,12 @@
             }, 350);
           } else if (actionTitle === "引用" || actionTitle === "回复") {
             setTimeout(() => {
-              const cmEl = document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
-              if (cmEl && cmEl.CodeMirror) {
-                const cm = cmEl.CodeMirror;
+              const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+              const cmEl =
+                (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
+                document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
+              const cm = cmEl && (cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror));
+              if (cm && typeof cm.getValue === "function") {
                 let val = cm.getValue();
                 if (actionTitle === "引用") {
                   val = val.replace(/\n{2,}$/, "\n");

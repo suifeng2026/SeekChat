@@ -846,9 +846,12 @@
             }, 350);
           } else if (actionTitle === "引用" || actionTitle === "回复") {
             setTimeout(() => {
-              const cmEl = document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
-              if (cmEl && cmEl.CodeMirror) {
-                const cm = cmEl.CodeMirror;
+              const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+              const cmEl =
+                (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
+                document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
+              const cm = cmEl && (cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror));
+              if (cm && typeof cm.getValue === "function") {
                 let val = cm.getValue();
                 if (actionTitle === "引用") {
                   val = val.replace(/\n{2,}$/, "\n");

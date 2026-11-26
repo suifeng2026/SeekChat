@@ -52,6 +52,21 @@
       rightUserHost.appendChild(nativeUserCard);
     }
 
+    const themeBtn = document.querySelector('#nsc-right-user .user-card a[title="切换主题模式"]');
+    if (themeBtn && themeBtn.dataset.nscThemeFixed !== "1") {
+      themeBtn.dataset.nscThemeFixed = "1";
+      if (!themeBtn.querySelector("svg")) {
+        themeBtn.innerHTML = ICONS.theme;
+      }
+      themeBtn.addEventListener("click", (e) => {
+        const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
+        if (headThemeBtn && e.isTrusted) {
+          e.preventDefault();
+          headThemeBtn.click();
+        }
+      });
+    }
+
     const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
       const src = document.querySelector(panelSelector);
       const dst = document.getElementById(targetId);

@@ -97,70 +97,116 @@
       return Boolean(res && res.success);
     },
     insertToTarget(targetMode, markdown) {
+      const insertText = `\n${markdown}\n`;
       if (targetMode === "newpost") {
         const ta = document.getElementById("nsc-np-content");
         if (ta) {
           const s = ta.selectionStart || 0;
           const e = ta.selectionEnd || 0;
-          ta.setRangeText(`\n${markdown}\n`, s, e, "end");
+          ta.setRangeText(insertText, s, e, "end");
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
           ta.focus();
         }
         return;
       }
-      if (targetMode === "pm") {
+      const pmBox = document.getElementById("nsc-pm-composer");
+      if (targetMode === "pm" || (pmBox && pmBox.style.display !== "none")) {
         const ta = document.getElementById("nsc-pm-ta");
         if (ta) {
           const s = ta.selectionStart || 0;
           const e = ta.selectionEnd || 0;
-          ta.setRangeText(`\n${markdown}\n`, s, e, "end");
+          ta.setRangeText(insertText, s, e, "end");
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
           ta.focus();
         }
         return;
       }
-      const cmEl = document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
-      if (cmEl && cmEl.CodeMirror) {
-        const cm = cmEl.CodeMirror;
-        cm.replaceSelection(`\n${markdown}\n`);
-        cm.focus();
-        return;
+      const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+      const cmEl =
+        (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
+        document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
+      if (cmEl && cmEl.offsetParent !== null) {
+        const cm = cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror);
+        if (cm && typeof cm.replaceSelection === "function") {
+          cm.replaceSelection(insertText);
+          cm.focus();
+          return;
+        }
+        const cmTa = cmEl.querySelector("textarea");
+        if (cmTa) {
+          cmTa.focus();
+          try {
+            if (document.execCommand("insertText", false, insertText)) return;
+          } catch (_) {}
+          const s = cmTa.selectionStart || 0;
+          const e = cmTa.selectionEnd || 0;
+          cmTa.setRangeText(insertText, s, e, "end");
+          cmTa.dispatchEvent(new Event("input", { bubbles: true }));
+          return;
+        }
       }
       const ta = document.getElementById("nsc-fallback-ta");
       if (ta) {
         const s = ta.selectionStart || 0;
         const e = ta.selectionEnd || 0;
-        ta.setRangeText(`\n${markdown}\n`, s, e, "end");
+        ta.setRangeText(insertText, s, e, "end");
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
         ta.focus();
       }
     },
     bindPasteAndDrop(containerEl, targetMode, statusSelector) {
       if (!containerEl || containerEl.dataset.nscNiBound === "1") return;
       containerEl.dataset.nscNiBound = "1";
+      const resolveMode = () => {
+        if (targetMode === "chat") {
+          const pmBox = document.getElementById("nsc-pm-composer");
+          if (pmBox && pmBox.style.display !== "none") return "pm";
+        }
+        return targetMode;
+      };
+      const getStatusEl = (effMode) => {
+        if (effMode === "pm") return document.getElementById("nsc-pm-status");
+        if (effMode === "newpost") return document.getElementById("nsc-np-status");
+        return (
+          (statusSelector && document.querySelector(statusSelector)) ||
+          document.getElementById("nsc-composer-status") ||
+          document.querySelector("#nsc-composer-body .nsc-ni-status")
+        );
+      };
       const handleFiles = async (files) => {
         const imgs = Array.from(files || []).filter((f) => f && f.type && f.type.startsWith("image/"));
         if (imgs.length === 0) return false;
-        const statusEl = statusSelector ? document.querySelector(statusSelector) : null;
+        const effMode = resolveMode();
+        const statusEl = getStatusEl(effMode);
         for (const f of imgs) {
           if (statusEl) statusEl.textContent = "正在上传图片到 NodeImage...";
           try {
             const md = await NodeImage.uploadFile(f);
-            NodeImage.insertToTarget(targetMode, md);
+            NodeImage.insertToTarget(effMode, md);
             if (statusEl) statusEl.textContent = "图片已上传并插入";
           } catch (err) {
             if (statusEl) statusEl.textContent = err.message;
-            openNodeImageModal(targetMode);
+            openNodeImageModal(effMode);
             break;
           }
         }
         return true;
       };
       containerEl.addEventListener("paste", (e) => {
-        const items = e.clipboardData && e.clipboardData.items;
-        if (!items) return;
+        const cd = e.clipboardData;
+        if (!cd) return;
         const files = [];
-        for (const it of items) {
-          if (it.kind === "file" && it.type.startsWith("image/")) {
-            const f = it.getAsFile();
-            if (f) files.push(f);
+        if (cd.files && cd.files.length > 0) {
+          for (const f of cd.files) {
+            if (f && f.type && f.type.startsWith("image/")) files.push(f);
+          }
+        }
+        if (files.length === 0 && cd.items) {
+          for (const it of cd.items) {
+            if (it.kind === "file" && it.type && it.type.startsWith("image/")) {
+              const f = it.getAsFile();
+              if (f) files.push(f);
+            }
           }
         }
         if (files.length > 0) {

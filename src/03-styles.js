@@ -764,20 +764,22 @@
 
       #nsc-lightbox {
         position: fixed; inset: 0; z-index: 10000;
-        background: rgba(12, 14, 18, 0.86); backdrop-filter: blur(14px);
-        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
+        background: rgba(12, 14, 18, 0.88); backdrop-filter: blur(14px);
+        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
+        user-select: none;
       }
       #nsc-lightbox.is-open { display: flex; }
       .nsc-lightbox-stage {
         position: relative; display: flex; align-items: center; justify-content: center;
-        max-width: 92vw; max-height: 82vh;
+        width: 92vw; height: 82vh; overflow: hidden;
       }
       #nsc-lightbox img {
-        max-width: 90vw; max-height: 82vh; object-fit: contain;
-        border-radius: 12px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
-        transition: transform 0.18s ease;
+        max-width: 100%; max-height: 100%; object-fit: contain;
+        border-radius: 10px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
+        transform-origin: center center; will-change: transform;
       }
-      #nsc-lightbox img.is-zoomed { transform: scale(1.65); cursor: zoom-out; }
+      #nsc-lightbox img.is-pannable { cursor: grab; }
+      #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
       .nsc-lb-nav {
         position: fixed; top: 50%; transform: translateY(-50%);
         width: 42px; height: 42px; border-radius: 50%;
