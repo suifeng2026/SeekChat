@@ -1,0 +1,140 @@
+  const LS = {
+    ENABLED: "nsc_v7_enabled",
+    ACTIVE_CHANNEL: "nsc_v7_channel",
+    SORT: "nsc_v7_sort",
+    HOT_TAB: "nsc_v7_hot_tab",
+    READ_MAP: "nsc_v7_read_map",
+    FRIENDS: "nsc_v7_friends",
+    REMOVED_FRIENDS: "nsc_v7_removed_friends",
+    BLACKLIST: "nsc_v7_blacklist",
+    RIGHT_TAB: "nsc_v7_right_tab",
+    USER_CACHE: "nsc_v7_user_cache",
+    LAST_SPEAK_CACHE: "nsc_v7_last_speak_cache",
+  };
+
+  function isBrowsePath(pathname) {
+    const p = String(pathname || location.pathname);
+    return p === "/" || /^\/page-\d+/.test(p) || /^\/categories\//.test(p) || /^\/post-\d+/.test(p);
+  }
+
+  // 防闪屏：document-start 阶段预先隐藏原生 #nsk-frame
+  if (localStorage.getItem(LS.ENABLED) !== "0" && isBrowsePath(location.pathname) && window.self === window.top) {
+    const preStyle = document.createElement("style");
+    preStyle.id = "nsc-preflash-guard";
+    preStyle.textContent = `
+      html.nsc-prehide body > section#nsk-frame,
+      html.nsc-prehide footer,
+      html.nsc-prehide #fast-nav-button-group {
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+    document.documentElement.classList.add("nsc-prehide");
+    (document.head || document.documentElement).appendChild(preStyle);
+  }
+
+  // 在隐藏 iframe 中用于提取动态渲染数据时不运行外层外壳
+  if (window.self !== window.top) {
+    return;
+  }
+
+  const ICONS = {
+    home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/></svg>`,
+    history: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>`,
+    daily: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/></svg>`,
+    tech: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
+    info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>`,
+    review: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>`,
+    trade: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+    carpool: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    promotion: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11 14v5a2 2 0 0 1-4 0v-4"/></svg>`,
+    life: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg>`,
+    dev: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 10l3 2-3 2"/><line x1="12" y1="14" x2="17" y2="14"/></svg>`,
+    photo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`,
+    expose: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    inside: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
+    sandbox: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/></svg>`,
+    eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+    award: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    atMe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>`,
+    replyMe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+    pm: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
+    quote: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>`,
+    ruling: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+    partner: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+    links: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+    bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+  };
+
+  const CHANNELS = [
+    { id: "home", name: "首页", icon: ICONS.home, path: "/", group: "browse" },
+    { id: "history", name: "已读足迹", icon: ICONS.history, path: "__HISTORY__", group: "browse" },
+    { id: "award", name: "推荐阅读", icon: ICONS.award, path: "/award", group: "browse" },
+    { id: "at-me", name: "@我", icon: ICONS.atMe, path: "__AT_ME__", group: "msg" },
+    { id: "reply-me", name: "回复我", icon: ICONS.replyMe, path: "__REPLY_ME__", group: "msg" },
+    { id: "pm", name: "私信", icon: ICONS.pm, path: "__PM__", group: "msg" },
+    { id: "sys-notice", name: "通知", icon: ICONS.bell, path: "__SYS_NOTICE__", group: "msg" },
+    { id: "daily", name: "日常", icon: ICONS.daily, path: "/categories/daily", group: "board" },
+    { id: "tech", name: "技术", icon: ICONS.tech, path: "/categories/tech" },
+    { id: "info", name: "情报", icon: ICONS.info, path: "/categories/info" },
+    { id: "review", name: "测评", icon: ICONS.review, path: "/categories/review" },
+    { id: "trade", name: "交易", icon: ICONS.trade, path: "/categories/trade" },
+    { id: "carpool", name: "拼车", icon: ICONS.carpool, path: "/categories/carpool" },
+    { id: "promotion", name: "推广", icon: ICONS.promotion, path: "/categories/promotion" },
+    { id: "life", name: "生活", icon: ICONS.life, path: "/categories/life" },
+    { id: "dev", name: "Dev", icon: ICONS.dev, path: "/categories/dev" },
+    { id: "photo-share", name: "贴图", icon: ICONS.photo, path: "/categories/photo-share" },
+    { id: "expose", name: "曝光", icon: ICONS.expose, path: "/categories/expose" },
+    { id: "inside", name: "内版", icon: ICONS.inside, path: "/categories/inside" },
+    { id: "sandbox", name: "沙盒", icon: ICONS.sandbox, path: "/categories/sandbox" },
+  ];
+
+
+  const state = {
+    enabled: localStorage.getItem(LS.ENABLED) !== "0",
+    activeChannel: localStorage.getItem(LS.ACTIVE_CHANNEL) || "home",
+    sortMode: localStorage.getItem(LS.SORT) || "reply",
+    hotTab: localStorage.getItem(LS.HOT_TAB) || "realtime",
+    readMap: loadJson(LS.READ_MAP, {}),
+    friends: loadJson(LS.FRIENDS, []),
+    removedFriends: new Set(loadJson(LS.REMOVED_FRIENDS, [])),
+    blacklist: loadJson(LS.BLACKLIST, []),
+    rightTab: localStorage.getItem(LS.RIGHT_TAB) || "hot",
+    userCache: loadJson(LS.USER_CACHE, {}),
+    lastSpeakCache: loadJson(LS.LAST_SPEAK_CACHE, {}),
+    signatureCache: {},
+    channelData: {},
+    hotCache: {},
+    hotLoading: false,
+    hotError: null,
+    followData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
+    fansData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
+    removedFans: new Set(),
+    searchKeyword: "",
+    prioritizeUnread: false,
+    currentPostId: null,
+    currentPostUrl: null,
+    nativePostId: null,
+    opAuthor: "",
+    currentUser: "",
+    currentUserId: 0,
+    unreadCounts: { atMe: 0, reply: 0, message: 0, sysNotice: 0 },
+    notifData: {
+      "at-me": { items: [], loading: false, loaded: false, error: null },
+      "reply-me": { items: [], loading: false, loaded: false, error: null },
+    },
+    pmList: { items: [], loading: false, loaded: false, error: null },
+    sysNoticeList: { items: [], loading: false, loaded: false, error: null },
+    activePmPeer: null,
+    pmMessages: [],
+    selectedNotifKey: "",
+    onlyOp: false,
+    onlyMember: "",
+    threadsCollapsed: false,
+    members: [],
+    shellBuilt: false,
+    currentRoom: null,
+    loadedPages: new Set(),
+    loadingNextPage: false,
+  };
+

@@ -1,0 +1,626 @@
+  function ensureHeaderSwitch() {
+    const head = document.getElementById("nsk-head");
+    if (!head || document.getElementById("nsc-mode-switch-btn")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "nsc-mode-switch-btn";
+    btn.type = "button";
+    const syncLabel = () => {
+      if (!isForumBrowseRoute()) {
+        btn.textContent = "返回群聊";
+      } else {
+        btn.textContent = state.enabled ? "群聊模式" : "原版论坛";
+      }
+    };
+    syncLabel();
+
+    btn.addEventListener("click", () => {
+      if (!isForumBrowseRoute()) {
+        state.enabled = true;
+        localStorage.setItem(LS.ENABLED, "1");
+        location.href = "/";
+        return;
+      }
+      state.enabled = !state.enabled;
+      localStorage.setItem(LS.ENABLED, state.enabled ? "1" : "0");
+      syncLabel();
+      toggleAppMode(state.enabled);
+    });
+
+    const colorBtn = head.querySelector(".color-theme-switcher");
+    if (colorBtn && colorBtn.parentNode) {
+      colorBtn.parentNode.insertBefore(btn, colorBtn);
+    } else {
+      head.appendChild(btn);
+    }
+  }
+
+  function buildShellIfNeeded() {
+    if (state.shellBuilt) return;
+    state.shellBuilt = true;
+
+    const shell = document.createElement("div");
+    shell.id = "nsc-app-shell";
+    shell.innerHTML = `
+      <nav class="nsc-pane-nav">
+        <div class="nsc-mac-traffic" aria-hidden="true">
+          <span class="nsc-mac-dot red"></span>
+          <span class="nsc-mac-dot yellow"></span>
+          <span class="nsc-mac-dot green"></span>
+        </div>
+        <div id="nsc-pane-nav" class="nsc-nav-main"></div>
+        <div class="nsc-nav-bottom" id="nsc-nav-footer">
+          <div class="nsc-nav-divider"></div>
+          <a class="nsc-nav-item group-admin" id="nsc-nf-ruling" href="/ruling" target="_blank" rel="noopener noreferrer" title="管理记录">
+            <span class="nsc-nav-left">${ICONS.ruling}<span>管理</span></span>
+          </a>
+          <a class="nsc-nav-item group-admin" id="nsc-nf-partner" href="/categories/promotion" target="_blank" rel="noopener noreferrer" title="合作商家">
+            <span class="nsc-nav-left">${ICONS.partner}<span>商家</span></span>
+          </a>
+          <a class="nsc-nav-item group-admin" id="nsc-nf-links" href="/award" target="_blank" rel="noopener noreferrer" title="友站链接">
+            <span class="nsc-nav-left">${ICONS.links}<span>友链</span></span>
+          </a>
+        </div>
+      </nav>
+
+      <aside class="nsc-pane-list">
+        <div class="nsc-list-head">
+          <div class="nsc-list-title-row">
+            <span id="nsc-channel-title">首页</span>
+            <div style="display:inline-flex;align-items:center;gap:6px;">
+              <span id="nsc-channel-sub" style="font-size:11px;color:var(--nsc-muted);font-weight:500;"></span>
+              <button type="button" class="nsc-newpost-btn" id="nsc-newpost-open-btn" title="发布新主题帖">+ 发帖</button>
+            </div>
+          </div>
+          <input type="text" class="nsc-search-input" id="nsc-feed-search" placeholder="搜索当前列表标题或作者..." />
+          <div class="nsc-list-toolbar" id="nsc-list-toolbar"></div>
+        </div>
+        <div class="nsc-topic-scroll" id="nsc-topic-scroll"></div>
+      </aside>
+
+      <main class="nsc-pane-chat">
+        <div class="nsc-chat-header">
+          <div class="nsc-chat-title-wrap">
+            <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
+            <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
+          </div>
+          <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
+        </div>
+        <div class="nsc-chat-messages" id="nsc-chat-messages">
+          <div class="nsc-empty-state">点击左侧任意版块与帖子主题，即可在中间窗口阅读与讨论</div>
+        </div>
+        <div class="nsc-composer-dock" id="nsc-composer-dock">
+          <div id="nsc-composer-body"></div>
+        </div>
+      </main>
+
+      <aside class="nsc-pane-right">
+        <div class="nsc-right-user" id="nsc-right-user"></div>
+        <div class="nsc-right-quickbar" id="nsc-right-quickbar">
+          <button type="button" class="nsc-quick-btn is-primary" id="nsc-qb-post" title="发布新主题帖">+ 发帖</button>
+          <a class="nsc-quick-btn" id="nsc-qb-lucky" href="/lucky" target="_blank" rel="noopener noreferrer" title="幸运抽奖">抽奖</a>
+          <a class="nsc-quick-btn" id="nsc-qb-invite" href="/invite" target="_blank" rel="noopener noreferrer" title="邀请好友">邀请</a>
+        </div>
+        <div class="nsc-right-tabs">
+          <button type="button" class="nsc-right-tab ${state.rightTab === "hot" ? "is-active" : ""}" data-rtab="hot">热榜</button>
+          <button type="button" class="nsc-right-tab ${state.rightTab === "friends" ? "is-active" : ""}" data-rtab="friends">好友</button>
+          <button type="button" class="nsc-right-tab ${state.rightTab === "fans" ? "is-active" : ""}" data-rtab="fans">粉丝</button>
+          <button type="button" class="nsc-right-tab ${state.rightTab === "blacklist" ? "is-active" : ""}" data-rtab="blacklist">黑名单</button>
+        </div>
+        <div class="nsc-right-scroll" id="nsc-right-scroll"></div>
+      </aside>
+    `;
+
+    const frame = document.getElementById("nsk-frame");
+    document.body.insertBefore(shell, frame);
+
+    const lightbox = document.createElement("div");
+    lightbox.id = "nsc-lightbox";
+    lightbox.innerHTML = `
+      <img id="nsc-lightbox-img" src="" alt="原图" />
+      <div class="nsc-lightbox-bar">
+        <a id="nsc-lightbox-raw" class="nsc-lightbox-btn" href="" target="_blank" rel="noopener noreferrer">新窗口打开原图</a>
+        <button type="button" id="nsc-lightbox-close" class="nsc-lightbox-btn">关闭 (Esc)</button>
+      </div>
+    `;
+    lightbox.addEventListener("click", (e) => {
+      if (e.target === lightbox || e.target.id === "nsc-lightbox-img" || e.target.id === "nsc-lightbox-close") {
+        lightbox.classList.remove("is-open");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        lightbox.classList.remove("is-open");
+        backdrop.classList.remove("is-open");
+        npBackdrop.classList.remove("is-open");
+        if (niBackdrop) niBackdrop.classList.remove("is-open");
+      }
+    });
+    document.body.appendChild(lightbox);
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "nsc-profile-backdrop";
+    backdrop.innerHTML = `<div class="nsc-profile-modal" id="nsc-profile-modal"></div>`;
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) backdrop.classList.remove("is-open");
+    });
+    document.body.appendChild(backdrop);
+
+    const npBackdrop = document.createElement("div");
+    npBackdrop.id = "nsc-newpost-backdrop";
+    const postableChannels = CHANNELS.filter((c) => c.path.startsWith("/categories/"));
+    npBackdrop.innerHTML = `
+      <div class="nsc-newpost-modal" role="dialog" aria-label="发表新主题">
+        <div class="nsc-newpost-head">
+          <span style="font-size:14.5px;font-weight:700;">发表新主题</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <a id="nsc-np-native-link" href="/new-discussion?category=daily" style="font-size:12px;color:var(--nsc-accent);text-decoration:none;font-weight:600;">原版编辑器 ↗</a>
+            <button type="button" id="nsc-np-close" style="border:none;background:transparent;color:var(--nsc-muted);font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
+          </div>
+        </div>
+        <div class="nsc-newpost-body">
+          <div class="nsc-newpost-row">
+            <select class="nsc-newpost-select" id="nsc-np-cat">
+              ${postableChannels.map((c) => `<option value="${c.id}">${c.name}</option>`).join("")}
+            </select>
+            <input type="text" class="nsc-newpost-title" id="nsc-np-title" placeholder="请输入帖子标题..." />
+          </div>
+          <div class="nsc-newpost-editor">
+            <div class="nsc-mde-toolbar" id="nsc-np-toolbar">
+              <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
+              <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
+              <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+              <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+              <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
+              <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+              <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
+              <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+              <button type="button" class="nsc-nodeimage-btn" data-ni-btn="newpost" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>
+            </div>
+            <textarea class="nsc-newpost-ta" id="nsc-np-content" placeholder="支持 Markdown 语法，Ctrl + Enter 快捷发布..."></textarea>
+          </div>
+        </div>
+        <div class="nsc-newpost-foot">
+          <span id="nsc-np-status" style="font-size:11.5px;color:var(--nsc-muted);">无刷新直发社区，或右上角切原版编辑器</span>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="nsc-pill-btn" id="nsc-np-cancel">取消</button>
+            <button type="button" class="nsc-send-btn" id="nsc-np-submit">发布帖子</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(npBackdrop);
+
+    const closeNp = () => npBackdrop.classList.remove("is-open");
+    npBackdrop.addEventListener("click", (e) => {
+      if (e.target === npBackdrop) closeNp();
+    });
+    npBackdrop.querySelector("#nsc-np-close").addEventListener("click", closeNp);
+    npBackdrop.querySelector("#nsc-np-cancel").addEventListener("click", closeNp);
+
+    const npCat = npBackdrop.querySelector("#nsc-np-cat");
+    const npTitle = npBackdrop.querySelector("#nsc-np-title");
+    const npContent = npBackdrop.querySelector("#nsc-np-content");
+    const npNativeLink = npBackdrop.querySelector("#nsc-np-native-link");
+    const npStatus = npBackdrop.querySelector("#nsc-np-status");
+    const npSubmit = npBackdrop.querySelector("#nsc-np-submit");
+
+    npCat.addEventListener("change", () => {
+      npNativeLink.href = `/new-discussion?category=${encodeURIComponent(npCat.value)}`;
+    });
+
+    npBackdrop.querySelectorAll("#nsc-np-toolbar .nsc-mde-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const s = npContent.selectionStart || 0;
+        const e = npContent.selectionEnd || 0;
+        const sel = npContent.value.slice(s, e);
+        let ins = "";
+        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
+        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
+        else if (b.dataset.tpl) ins = b.dataset.tpl;
+        npContent.setRangeText(ins, s, e, "end");
+        npContent.focus();
+      });
+    });
+
+    const submitNewPost = async () => {
+      const category = npCat.value || "daily";
+      const title = npTitle.value.trim();
+      const content = npContent.value.trim();
+      if (!title) {
+        npStatus.textContent = "请输入帖子标题";
+        npTitle.focus();
+        return;
+      }
+      if (!content) {
+        npStatus.textContent = "请输入帖子内容";
+        npContent.focus();
+        return;
+      }
+      npSubmit.disabled = true;
+      npSubmit.textContent = "发布中...";
+      npStatus.textContent = "正在提交到 NodeSeek...";
+      try {
+        const resp = await fetch("/api/content/new-discussion", {
+          method: "POST",
+          credentials: "include",
+          headers: getNodeSeekPostHeaders(),
+          body: JSON.stringify({ content, mode: "new-discussion", title, category, rank: 0 }),
+        });
+        const resJson = await resp.json().catch(() => ({}));
+        if (!resp.ok || resJson.success === false) {
+          throw new Error(resJson.message || `HTTP ${resp.status}`);
+        }
+        npTitle.value = "";
+        npContent.value = "";
+        npStatus.textContent = "发布成功！";
+        closeNp();
+        const targetCh = state.activeChannel === "home" ? "home" : category;
+        switchChannel(targetCh, true);
+        const redirect = resJson.redirect || "";
+        const m = redirect.match(/\/post-(\d+)/);
+        if (m) {
+          openPostInChat({
+            postId: m[1],
+            url: redirect,
+            title,
+            author: state.currentUser || "我",
+            category,
+            replies: 0,
+          });
+        }
+      } catch (err) {
+        npStatus.textContent = "发布失败: " + err.message;
+      } finally {
+        npSubmit.disabled = false;
+        npSubmit.textContent = "发布帖子";
+      }
+    };
+
+    npSubmit.addEventListener("click", submitNewPost);
+    npContent.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        submitNewPost();
+      }
+    });
+
+    shell.querySelector("#nsc-newpost-open-btn").addEventListener("click", () => {
+      const defCat = postableChannels.some((c) => c.id === state.activeChannel) ? state.activeChannel : "daily";
+      npCat.value = defCat;
+      npNativeLink.href = `/new-discussion?category=${encodeURIComponent(defCat)}`;
+      npStatus.textContent = "无刷新直发社区，或右上角切原版编辑器";
+      npBackdrop.classList.add("is-open");
+      setTimeout(() => npTitle.focus(), 40);
+    });
+
+    shell.querySelector("#nsc-qb-post").addEventListener("click", () => {
+      shell.querySelector("#nsc-newpost-open-btn").click();
+    });
+
+    initNodeImageUi(npBackdrop);
+
+    shell.querySelector("#nsc-feed-search").addEventListener("input", (e) => {
+      state.searchKeyword = e.target.value.trim().toLowerCase();
+      renderTopicList();
+    });
+
+    shell.querySelectorAll(".nsc-right-tab").forEach((b) => {
+      b.addEventListener("click", () => {
+        state.rightTab = b.dataset.rtab;
+        localStorage.setItem(LS.RIGHT_TAB, state.rightTab);
+        shell.querySelectorAll(".nsc-right-tab").forEach((x) => x.classList.toggle("is-active", x === b));
+        if (state.rightTab === "hot" && !state.hotCache[state.hotTab] && !state.hotLoading) {
+          fetchHotPosts(state.hotTab);
+        } else if (state.rightTab === "friends" && !state.followData.loaded && !state.followData.loading) {
+          fetchFansOrFollow("follow");
+        } else if (state.rightTab === "fans" && !state.fansData.loaded && !state.fansData.loading) {
+          fetchFansOrFollow("fans");
+        } else {
+          renderRightBody();
+        }
+      });
+    });
+
+    const msgsEl = shell.querySelector("#nsc-chat-messages");
+    msgsEl.addEventListener("scroll", () => {
+      if (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 220) {
+        tryAutoLoadNextPage();
+      }
+    });
+
+    renderLeftNav();
+  }
+
+
+  function buildFallbackComposer() {
+    const box = document.createElement("div");
+    box.className = "nsc-composer-box";
+    box.id = "nsc-fallback-composer";
+    box.innerHTML = `
+      <div class="nsc-mde-toolbar" style="border-radius:10px 10px 0 0;background:var(--nsc-hover);">
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="代码">&lt;/&gt;</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+      </div>
+      <textarea class="nsc-fallback-textarea" id="nsc-fallback-ta" placeholder="输入评论内容，支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布"></textarea>
+      <div class="nsc-composer-footer">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="nsc-nodeimage-btn" id="nsc-fb-ni-btn" title="NodeImage 图床上传/授权"><span class="nsc-ni-dot"></span>图床</button>
+          <span id="nsc-composer-status" style="font-size:11px;color:var(--nsc-muted);">Ctrl + Enter 发布</span>
+        </div>
+        <button type="button" class="nsc-send-btn" id="nsc-fallback-send">发布评论</button>
+      </div>
+    `;
+    box.querySelector("#nsc-fb-ni-btn").addEventListener("click", () => openNodeImageModal("chat"));
+    NodeImage.syncDots();
+    const ta = box.querySelector("#nsc-fallback-ta");
+    box.querySelectorAll(".nsc-mde-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const s = ta.selectionStart || 0;
+        const e = ta.selectionEnd || 0;
+        const sel = ta.value.slice(s, e);
+        let ins = "";
+        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
+        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
+        else if (b.dataset.tpl) ins = b.dataset.tpl;
+        ta.setRangeText(ins, s, e, "end");
+        ta.focus();
+      });
+    });
+
+    const submitComment = async () => {
+      const content = ta.value.trim();
+      const pid = state.currentPostId;
+      if (!content || !pid) return;
+      const btn = box.querySelector("#nsc-fallback-send");
+      const status = box.querySelector("#nsc-composer-status");
+      btn.disabled = true;
+      btn.textContent = "发送中...";
+      try {
+        const resp = await fetch("/api/content/new-comment", {
+          method: "POST",
+          credentials: "include",
+          headers: getNodeSeekPostHeaders(),
+          body: JSON.stringify({ content, mode: "new-comment", postId: Number(pid) }),
+        });
+        const resJson = await resp.json().catch(() => ({}));
+        if (!resp.ok || resJson.success === false) {
+          throw new Error(resJson.message || `HTTP ${resp.status}`);
+        }
+        ta.value = "";
+        status.textContent = "评论已发布，正在同步最新楼层...";
+        if (state.currentRoom) {
+          const lastPage = state.currentRoom.pages.length || 1;
+          const targetUrl = `/post-${pid}-${lastPage}`;
+          const pResp = await fetch(targetUrl, { credentials: "include" });
+          if (pResp.ok) {
+            const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
+            const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
+            for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
+              const obj = extractCommentObject(el, false, lastPage);
+              if (obj.floorId && !seen.has(obj.floorId)) {
+                seen.add(obj.floorId);
+                if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
+                state.currentRoom.flatComments.push(obj);
+              }
+            }
+            renderChatRoom(state.currentRoom, true);
+            const msgsEl = document.getElementById("nsc-chat-messages");
+            if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+          }
+        }
+        status.textContent = "发布成功";
+      } catch (err) {
+        status.textContent = "发送失败: " + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "发布评论";
+      }
+    };
+
+    box.querySelector("#nsc-fallback-send").addEventListener("click", submitComment);
+    ta.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        submitComment();
+      }
+    });
+    return box;
+  }
+
+  function buildPmComposer() {
+    const box = document.createElement("div");
+    box.className = "nsc-composer-box";
+    box.id = "nsc-pm-composer";
+    box.innerHTML = `
+      <div class="nsc-composer-header">
+        <span id="nsc-pm-target-lbl" style="font-size:12px;font-weight:600;color:var(--nsc-text);">发送私信</span>
+        <a id="nsc-pm-native-link" class="nsc-nodeimage-btn" href="/notification#/message" target="_blank" rel="noopener noreferrer">原版私信 ↗</a>
+      </div>
+      <textarea class="nsc-fallback-textarea" id="nsc-pm-ta" placeholder="输入私信内容，Enter 换行 · Ctrl + Enter 发送"></textarea>
+      <div class="nsc-composer-footer">
+        <span id="nsc-pm-status" style="font-size:11px;color:var(--nsc-muted);">Ctrl + Enter 快捷发送私信</span>
+        <button type="button" class="nsc-send-btn" id="nsc-pm-send">发送私信</button>
+      </div>
+    `;
+    const ta = box.querySelector("#nsc-pm-ta");
+    NodeImage.bindPasteAndDrop(ta, "pm", "#nsc-pm-status");
+    const doSend = () => sendPmMessage();
+    box.querySelector("#nsc-pm-send").addEventListener("click", doSend);
+    ta.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        doSend();
+      }
+    });
+    return box;
+  }
+
+  function syncComposerMode(modeOrNative) {
+    const composerBody = document.getElementById("nsc-composer-body");
+    if (!composerBody) return;
+    const mode = modeOrNative === "pm" ? "pm" : modeOrNative ? "native" : "fallback";
+    const nativeEditor = composerBody.querySelector(".md-editor") || document.querySelector("#nsk-frame .md-editor");
+    let fallback = document.getElementById("nsc-fallback-composer");
+    let pmBox = document.getElementById("nsc-pm-composer");
+
+    if (mode === "pm") {
+      if (nativeEditor) nativeEditor.style.display = "none";
+      if (fallback) fallback.style.display = "none";
+      if (!pmBox) {
+        pmBox = buildPmComposer();
+        composerBody.appendChild(pmBox);
+      }
+      if (state.activePmPeer) {
+        const lbl = pmBox.querySelector("#nsc-pm-target-lbl");
+        const lnk = pmBox.querySelector("#nsc-pm-native-link");
+        if (lbl) lbl.textContent = `私信 ${state.activePmPeer.name}`;
+        if (lnk) lnk.href = `/notification#/message?mode=talk&to=${state.activePmPeer.uid}`;
+      }
+      pmBox.style.display = "block";
+      return;
+    }
+
+    if (pmBox) pmBox.style.display = "none";
+    if (mode === "native" && nativeEditor) {
+      if (!composerBody.contains(nativeEditor)) {
+        composerBody.appendChild(nativeEditor);
+        enhanceNativeEditor(nativeEditor);
+      }
+      nativeEditor.style.display = "block";
+      if (fallback) fallback.style.display = "none";
+    } else {
+      if (nativeEditor) nativeEditor.style.display = "none";
+      if (!fallback) {
+        fallback = buildFallbackComposer();
+        composerBody.appendChild(fallback);
+      }
+      fallback.style.display = "block";
+    }
+  }
+
+  function enhanceNativeEditor(editor) {
+    if (!editor || editor.dataset.nscEnhanced === "1") return;
+    editor.dataset.nscEnhanced = "1";
+
+    const header = editor.querySelector(".tab-select.window_header");
+    const expr = editor.querySelector("#editor-body > .expression, .expression");
+    if (header && expr && !header.contains(expr)) {
+      const firstTopBtn = header.querySelector(".editor-top-button");
+      if (firstTopBtn) header.insertBefore(expr, firstTopBtn);
+      else header.appendChild(expr);
+    }
+
+    const topicFooter = editor.querySelector(".topic-select");
+    if (topicFooter && !topicFooter.querySelector(".nsc-nodeimage-btn")) {
+      const leftSlot = topicFooter.querySelector("div:first-child");
+      const imgHostBtn = document.createElement("button");
+      imgHostBtn.type = "button";
+      imgHostBtn.className = "nsc-nodeimage-btn";
+      imgHostBtn.title = "NodeImage 图床上传与授权";
+      imgHostBtn.innerHTML = `<span class="nsc-ni-dot"></span>图床`;
+      imgHostBtn.addEventListener("click", () => openNodeImageModal("chat"));
+      if (leftSlot) {
+        leftSlot.style.cssText = "display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--nsc-muted);";
+        leftSlot.innerHTML = "";
+        leftSlot.appendChild(imgHostBtn);
+        const hint = document.createElement("span");
+        hint.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
+        leftSlot.appendChild(hint);
+      } else {
+        topicFooter.insertBefore(imgHostBtn, topicFooter.firstChild);
+      }
+      NodeImage.syncDots();
+    }
+
+    editor.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        const btn = editor.querySelector("button.submit.btn");
+        if (btn) {
+          e.preventDefault();
+          btn.click();
+        }
+      }
+    });
+
+    const submitBtn = editor.querySelector("button.submit.btn");
+    if (submitBtn) {
+      submitBtn.addEventListener("click", () => {
+        if (!state.currentRoom || state.currentPostId !== state.nativePostId) return;
+        const pid = state.currentPostId;
+        const syncAfterSubmit = async () => {
+          const lastPage = Math.max(1, (state.currentRoom && state.currentRoom.pages.length) || 1);
+          try {
+            const resp = await fetch(`/post-${pid}-${lastPage}`, { credentials: "include" });
+            if (!resp.ok || !state.currentRoom || state.currentPostId !== pid) return;
+            const pDoc = new DOMParser().parseFromString(await resp.text(), "text/html");
+            const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
+            let added = 0;
+            for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
+              const obj = extractCommentObject(el, false, lastPage);
+              if (obj.floorId && !seen.has(obj.floorId)) {
+                seen.add(obj.floorId);
+                if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
+                state.currentRoom.flatComments.push(obj);
+                added++;
+              }
+            }
+            if (added > 0) {
+              renderChatRoom(state.currentRoom, true);
+              const msgsEl = document.getElementById("nsc-chat-messages");
+              if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+            }
+          } catch (_) {}
+        };
+        setTimeout(syncAfterSubmit, 900);
+        setTimeout(syncAfterSubmit, 2200);
+      });
+    }
+
+    const topicLeft = editor.querySelector(".topic-select > div:first-child");
+    if (topicLeft && !topicLeft.textContent.trim()) {
+      topicLeft.style.cssText = "font-size:11px;color:var(--nsc-muted);";
+      topicLeft.textContent = "Ctrl + Enter 快捷发布";
+    }
+    const dock = document.getElementById("nsc-composer-dock");
+    if (dock) NodeImage.bindPasteAndDrop(dock, "chat", "#nsc-composer-status");
+  }
+
+  function openLightbox(src) {
+    const lb = document.getElementById("nsc-lightbox");
+    const img = document.getElementById("nsc-lightbox-img");
+    const raw = document.getElementById("nsc-lightbox-raw");
+    if (!lb || !img || !raw) return;
+    img.src = src;
+    raw.href = src;
+    lb.classList.add("is-open");
+  }
+
+  function processBubbleImages(containerEl) {
+    if (!containerEl) return;
+    for (const img of containerEl.querySelectorAll("img")) {
+      const src = img.getAttribute("src") || "";
+      if (
+        src.includes("/emotion/") ||
+        src.includes("/sticker") ||
+        src.includes("emoji") ||
+        img.classList.contains("emoji") ||
+        (img.width > 0 && img.width <= 48 && img.height > 0 && img.height <= 48)
+      ) {
+        continue;
+      }
+      img.classList.add("nsc-zoomable-img");
+      img.title = "点击查看大图";
+      img.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openLightbox(img.currentSrc || src);
+      });
+    }
+  }
+

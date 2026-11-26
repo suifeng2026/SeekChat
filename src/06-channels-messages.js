@@ -1,0 +1,1200 @@
+  function renderLeftNav() {
+    const nav = document.getElementById("nsc-pane-nav");
+    if (!nav) return;
+    nav.innerHTML = "";
+
+    CHANNELS.forEach((ch, idx) => {
+      if (idx === 3 || idx === 7) {
+        const div = document.createElement("div");
+        div.className = "nsc-nav-divider";
+        nav.appendChild(div);
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const grpCls = `group-${ch.group || "board"}`;
+      btn.className = `nsc-nav-item ${grpCls}` + (state.activeChannel === ch.id ? " is-active" : "");
+      const unread = getChannelUnreadCount(ch.id);
+      btn.innerHTML = `
+        <span class="nsc-nav-left">${ch.icon}<span>${ch.name}</span></span>
+        ${unread > 0 ? `<span class="nsc-nav-badge">${unread > 99 ? "99+" : unread}</span>` : ""}
+      `;
+      btn.addEventListener("click", () => switchChannel(ch.id));
+      nav.appendChild(btn);
+    });
+  }
+
+  async function fetchUnreadCounts() {
+    try {
+      const resp = await fetch("/api/notification/unread-count", {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) return;
+      const data = await resp.json().catch(() => null);
+      if (data && data.unreadCount) {
+        const totalMsg = Number(data.unreadCount.message) || 0;
+        const sysUnread = state.sysNoticeList.loaded ? Number(state.unreadCounts.sysNotice) || 0 : 0;
+        state.unreadCounts = {
+          atMe: Number(data.unreadCount.atMe) || 0,
+          reply: Number(data.unreadCount.reply) || 0,
+          message: Math.max(0, totalMsg - sysUnread),
+          sysNotice: sysUnread,
+        };
+        renderLeftNav();
+      }
+    } catch (_) {}
+  }
+
+  function mountNativeWidgetsIntoApp() {
+    const rightUserHost = document.getElementById("nsc-right-user");
+    const nativeUserCard = document.querySelector("#nsk-right-panel-container .user-card");
+    if (rightUserHost && nativeUserCard && !rightUserHost.contains(nativeUserCard)) {
+      rightUserHost.appendChild(nativeUserCard);
+    }
+
+    const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
+      const src = document.querySelector(panelSelector);
+      const dst = document.getElementById(targetId);
+      if (dst) dst.href = (src && src.getAttribute("href")) || fallbackHref;
+    };
+    syncPanelLink('#nsk-right-panel-container a[href*="ruling"]', "nsc-nf-ruling", "/ruling");
+    syncPanelLink('#nsk-right-panel-container a[href*="partner"], #nsk-right-panel-container a[href*="merchant"]', "nsc-nf-partner", "/categories/promotion");
+    syncPanelLink('#nsk-right-panel-container a[href*="friend"], #nsk-right-panel-container a[href*="link"]', "nsc-nf-links", "/award");
+    for (const a of document.querySelectorAll("#nsk-right-panel-container a")) {
+      const txt = (a.textContent || "").trim();
+      const href = a.getAttribute("href") || "";
+      if (!href) continue;
+      if (txt.includes("管理记录") && document.getElementById("nsc-nf-ruling")) document.getElementById("nsc-nf-ruling").href = href;
+      if (txt.includes("合作商家") && document.getElementById("nsc-nf-partner")) document.getElementById("nsc-nf-partner").href = href;
+      if (txt.includes("友站链接") && document.getElementById("nsc-nf-links")) document.getElementById("nsc-nf-links").href = href;
+      if (txt.includes("幸运抽奖") && document.getElementById("nsc-qb-lucky")) document.getElementById("nsc-qb-lucky").href = href;
+      if (txt.includes("邀请好友") && document.getElementById("nsc-qb-invite")) document.getElementById("nsc-qb-invite").href = href;
+    }
+
+    if (state.activePmPeer) {
+      syncComposerMode("pm");
+    } else {
+      syncComposerMode(isPostPath(location.pathname) && (!state.currentPostId || state.currentPostId === state.nativePostId));
+    }
+
+    if (state.rightTab === "hot" && !state.hotCache[state.hotTab]) {
+      fetchHotPosts(state.hotTab);
+    } else if (state.rightTab === "friends" && !state.followData.loaded) {
+      fetchFansOrFollow("follow");
+    } else if (state.rightTab === "fans" && !state.fansData.loaded) {
+      fetchFansOrFollow("fans");
+    } else {
+      renderRightBody();
+    }
+  }
+
+  function restoreNativeWidgets() {
+    const rightPanel = document.getElementById("nsk-right-panel-container");
+    const userCard = document.querySelector("#nsc-right-user .user-card");
+    if (rightPanel && userCard) {
+      rightPanel.insertBefore(userCard, rightPanel.firstChild);
+    }
+    const commentContainer = document.querySelector("#nsk-frame .comment-container");
+    const nativeEditor = document.querySelector("#nsc-composer-body .md-editor");
+    if (commentContainer && nativeEditor) {
+      nativeEditor.style.display = "block";
+      commentContainer.appendChild(nativeEditor);
+    }
+  }
+
+  function toggleAppMode(enable) {
+    const canShowApp = enable && isForumBrowseRoute();
+    const wasActive = document.body.classList.contains("nsc-app-active");
+    document.body.classList.toggle("nsc-app-active", canShowApp);
+    document.documentElement.classList.remove("nsc-prehide");
+
+    if (canShowApp) {
+      const firstInit = !state.shellBuilt;
+      buildShellIfNeeded();
+      detectCurrentUser();
+      mountNativeWidgetsIntoApp();
+      if (firstInit || !wasActive) {
+        switchChannel(state.activeChannel, false);
+        fetchUnreadCounts();
+        setTimeout(() => fetchSysNotices(true), 600);
+        setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
+      }
+
+      if (isPostPath(location.pathname)) {
+        const pid = getPostIdFromPath(location.pathname);
+        state.nativePostId = pid;
+        if (!state.activePmPeer && (!state.currentPostId || (firstInit && state.currentPostId === pid))) {
+          renderPostDocument(document, location.pathname, true);
+        }
+      }
+    } else {
+      restoreNativeWidgets();
+    }
+  }
+
+  async function prefetchUnreadBadges(channelIds) {
+    for (const cid of channelIds) {
+      if (state.channelData[cid]) continue;
+      await fetchChannelData(cid, 1, true, true);
+    }
+  }
+
+  function switchChannel(channelId, forceRefresh = false) {
+    state.activeChannel = channelId;
+    localStorage.setItem(LS.ACTIVE_CHANNEL, channelId);
+    renderLeftNav();
+    renderListToolbar();
+
+    const topicScroll = document.getElementById("nsc-topic-scroll");
+    if (topicScroll) topicScroll.scrollTop = 0;
+
+    const ch = CHANNELS.find((c) => c.id === channelId) || CHANNELS[0];
+    const titleEl = document.getElementById("nsc-channel-title");
+    if (titleEl) titleEl.textContent = ch.name;
+
+    if (channelId === "history") {
+      renderTopicList();
+      return;
+    }
+
+    if (channelId === "at-me" || channelId === "reply-me") {
+      const st = state.notifData[channelId];
+      if (forceRefresh || !st.loaded) fetchNotifications(channelId);
+      else renderTopicList();
+      return;
+    }
+
+    if (channelId === "pm") {
+      if (forceRefresh || !state.pmList.loaded) fetchPmList();
+      else renderTopicList();
+      return;
+    }
+
+    if (channelId === "sys-notice") {
+      if (forceRefresh || !state.sysNoticeList.loaded) fetchSysNotices(false);
+      else renderTopicList();
+      return;
+    }
+
+    if (channelId === "home" && !forceRefresh && !state.channelData.home && !isPostPath(location.pathname) && document.querySelector(".post-list-item")) {
+      state.channelData.home = {
+        items: parsePostListFromDoc(document),
+        page: 1,
+        loading: false,
+        error: null,
+      };
+      renderLeftNav();
+      renderTopicList();
+      return;
+    }
+
+    if (forceRefresh || !state.channelData[channelId]) {
+      fetchChannelData(channelId, 1, true, false);
+    } else {
+      renderTopicList();
+    }
+  }
+
+  async function fetchNotifications(kind) {
+    const store = state.notifData[kind];
+    if (!store || store.loading) return;
+    store.loading = true;
+    store.error = null;
+    if (state.activeChannel === kind) renderTopicList();
+
+    const endpoint = kind === "at-me" ? "/api/notification/at-me/list" : "/api/notification/reply-to-me/list";
+    try {
+      const resp = await fetch(endpoint, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const raw = Array.isArray(json.data) ? json.data : Array.isArray(json.notifications) ? json.notifications : [];
+      store.items = raw.map((it) => {
+        const uid = String(it.commenter_id || it.member_id || it.uid || "");
+        const postId = String(it.post_id || "");
+        const floorId = Number(it.floor_id) || 0;
+        const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
+        return {
+          id: Number(it.id) || 0,
+          postId,
+          floorId,
+          url: `/post-${postId}-${pageIndex}`,
+          title: it.title || `帖子 #${postId}`,
+          author: it.commenter_name || it.member_name || "Seeker",
+          uid,
+          avatar: uid ? `/avatar/${uid}.png` : "",
+          timeText: formatChineseTime("", it.created_at, ""),
+          viewed: it.viewed === 1 || it.viewed === true,
+        };
+      });
+      store.loaded = true;
+    } catch (err) {
+      store.error = err.message;
+    } finally {
+      store.loading = false;
+      if (state.activeChannel === kind) renderTopicList();
+    }
+  }
+
+  async function markNotificationViewed(kind, id, all = false) {
+    const api = kind === "at-me" ? "/api/notification/at-me/markViewed" : "/api/notification/reply-to-me/markViewed";
+    try {
+      const url = all ? `${api}?all=true` : api;
+      const body = all ? {} : kind === "at-me" ? { atMe: [Number(id)] } : { replyToMe: [Number(id)] };
+      await fetch(url, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify(body) });
+      const store = state.notifData[kind];
+      if (store) {
+        if (all) store.items.forEach((x) => { x.viewed = true; });
+        else {
+          const hit = store.items.find((x) => x.id === Number(id));
+          if (hit) hit.viewed = true;
+        }
+      }
+      fetchUnreadCounts();
+      if (state.activeChannel === kind) renderTopicList();
+    } catch (_) {}
+  }
+
+  async function fetchPmList() {
+    if (state.pmList.loading) return;
+    state.pmList.loading = true;
+    state.pmList.error = null;
+    if (state.activeChannel === "pm") renderTopicList();
+
+    detectCurrentUser();
+    try {
+      const resp = await fetch("/api/notification/message/list?page=1", {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const rows = Array.isArray(json.msgArray) ? json.msgArray : [];
+      const myId = state.currentUserId;
+      const map = new Map();
+      for (const r of rows) {
+        const sid = Number(r.sender_id);
+        const rid = Number(r.receiver_id);
+        const peerId = myId && sid === myId ? rid : myId && rid === myId ? sid : sid || rid;
+        if (!peerId || peerId === 5230 || (myId && peerId === myId)) continue;
+        const peerName = (sid === peerId ? r.sender_name : r.receiver_name) || `用户 ${peerId}`;
+        if (String(peerName).trim() === "系统通知") continue;
+        const isUnread = (!myId || rid === myId) && (r.viewed === false || r.viewed === 0 || r.viewed === "0");
+        const prev = map.get(peerId);
+        const ts = new Date(r.created_at || 0).getTime() || 0;
+        if (!prev || ts >= prev.ts) {
+          map.set(peerId, {
+            uid: String(peerId),
+            name: String(peerName).trim(),
+            avatar: `/avatar/${peerId}.png`,
+            content: String(r.content || ""),
+            timeText: formatChineseTime("", r.created_at, ""),
+            ts,
+            unread: isUnread || (prev ? prev.unread : false),
+          });
+        }
+      }
+      state.pmList.items = Array.from(map.values()).sort((a, b) => b.ts - a.ts);
+      state.pmList.loaded = true;
+    } catch (err) {
+      state.pmList.error = err.message;
+    } finally {
+      state.pmList.loading = false;
+      if (state.activeChannel === "pm") renderTopicList();
+    }
+  }
+
+  async function openPmConversation(peer) {
+    if (!peer || !peer.uid) return;
+    detectCurrentUser();
+    state.activePmPeer = {
+      uid: String(peer.uid),
+      name: peer.name || peer.author || `用户 ${peer.uid}`,
+      avatar: peer.avatar || `/avatar/${peer.uid}.png`,
+    };
+    state.currentPostId = null;
+    renderTopicList();
+    syncComposerMode("pm");
+
+    const titleEl = document.getElementById("nsc-chat-title");
+    const subEl = document.getElementById("nsc-chat-subtitle");
+    const actionsEl = document.getElementById("nsc-chat-actions");
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    if (titleEl) titleEl.textContent = `私信：${state.activePmPeer.name}`;
+    if (subEl) subEl.innerHTML = `<span>UID: ${state.activePmPeer.uid}</span><span>与 ${state.activePmPeer.name} 的站内对话</span>`;
+    if (actionsEl) {
+      actionsEl.innerHTML = "";
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-pill-btn";
+      refBtn.textContent = "刷新记录";
+      refBtn.addEventListener("click", () => openPmConversation(state.activePmPeer));
+      const profBtn = document.createElement("button");
+      profBtn.type = "button";
+      profBtn.className = "nsc-pill-btn";
+      profBtn.textContent = "TA的名片";
+      profBtn.addEventListener("click", () => openUserProfileModal(state.activePmPeer));
+      actionsEl.appendChild(refBtn);
+      actionsEl.appendChild(profBtn);
+    }
+    if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">正在读取私信聊天记录...</div>`;
+
+    try {
+      const resp = await fetch(`/api/notification/message/with/${peer.uid}`, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (json.talkTo && json.talkTo.member_name) {
+        state.activePmPeer.name = json.talkTo.member_name;
+        if (titleEl) titleEl.textContent = `私信：${state.activePmPeer.name}`;
+      }
+      const rows = Array.isArray(json.msgArray) ? json.msgArray : [];
+      rows.sort((a, b) => (new Date(a.created_at).getTime() || 0) - (new Date(b.created_at).getTime() || 0) || (Number(a.id) || 0) - (Number(b.id) || 0));
+      state.pmMessages = rows;
+      renderPmMessages();
+
+      const myId = state.currentUserId;
+      const unreadIds = rows
+        .filter((r) => (!myId || Number(r.receiver_id) === myId) && (r.viewed === false || r.viewed === 0 || r.viewed === "0") && r.id)
+        .map((r) => Number(r.id));
+      if (unreadIds.length > 0) {
+        fetch("/api/notification/message/markViewed", {
+          method: "POST",
+          credentials: "include",
+          headers: getNodeSeekPostHeaders(),
+          body: JSON.stringify({ messages: unreadIds }),
+        }).then(() => {
+          const hit = state.pmList.items.find((x) => x.uid === String(peer.uid));
+          if (hit) hit.unread = false;
+          fetchUnreadCounts();
+          if (state.activeChannel === "pm") renderTopicList();
+        }).catch(() => {});
+      }
+    } catch (err) {
+      if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">读取私信失败：${err.message}</div>`;
+    }
+  }
+
+  function renderPmMessages() {
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    if (!msgsEl || !state.activePmPeer) return;
+    msgsEl.innerHTML = "";
+    if (state.pmMessages.length === 0) {
+      msgsEl.innerHTML = `<div class="nsc-empty-state">暂无私信记录，发一条消息开始对话吧</div>`;
+      return;
+    }
+    const myId = state.currentUserId;
+    const peer = state.activePmPeer;
+    for (const m of state.pmMessages) {
+      const isMine = myId ? Number(m.sender_id) === myId : Number(m.sender_id) !== Number(peer.uid);
+      const wrap = document.createElement("div");
+      wrap.className = "nsc-msg" + (isMine ? " is-self" : "");
+      const av = isMine ? (myId ? `/avatar/${myId}.png` : "/static/image/favicon/android-chrome-192x192.png") : peer.avatar;
+      const nm = isMine ? (state.currentUser || "我") : peer.name;
+      const tm = formatChineseTime("", m.created_at, "");
+      wrap.innerHTML = `
+        <div class="nsc-avatar-col">
+          <button type="button" class="nsc-avatar-btn"><img src="${av}" loading="lazy" alt="" /></button>
+        </div>
+        <div class="nsc-msg-main">
+          <div class="nsc-msg-meta">
+            <button type="button" class="nsc-msg-author"></button>
+            ${tm ? `<span>${tm}</span>` : ""}
+          </div>
+          <div class="nsc-bubble-row">
+            <div class="nsc-bubble">${renderSimpleMarkdown(m.content || "")}</div>
+          </div>
+        </div>
+      `;
+      wrap.querySelector(".nsc-msg-author").textContent = nm;
+      wrap.querySelector(".nsc-avatar-btn").addEventListener("click", () => {
+        if (!isMine) openUserProfileModal(peer);
+      });
+      const pmBubble = wrap.querySelector(".nsc-bubble");
+      if (pmBubble) processBubbleImages(pmBubble);
+      msgsEl.appendChild(wrap);
+    }
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  async function sendPmMessage() {
+    const peer = state.activePmPeer;
+    const ta = document.getElementById("nsc-pm-ta");
+    const btn = document.getElementById("nsc-pm-send");
+    const status = document.getElementById("nsc-pm-status");
+    if (!peer || !ta || !btn) return;
+    const content = ta.value.trim();
+    if (!content) return;
+
+    btn.disabled = true;
+    btn.textContent = "发送中...";
+    if (status) status.textContent = "正在发送私信...";
+    try {
+      const resp = await fetch("/api/notification/message/send", {
+        method: "POST",
+        credentials: "include",
+        headers: getNodeSeekPostHeaders(),
+        body: JSON.stringify({ receiverUid: Number(peer.uid), content, markdown: true }),
+      });
+      const resJson = await resp.json().catch(() => ({}));
+      if (!resp.ok || resJson.success === false) {
+        throw new Error(resJson.message || `HTTP ${resp.status}`);
+      }
+      ta.value = "";
+      if (status) status.textContent = "发送成功";
+      await openPmConversation(peer);
+      fetchPmList();
+    } catch (err) {
+      if (status) status.textContent = "发送失败: " + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "发送私信";
+    }
+  }
+
+  function highlightSysNoticeSegment(text) {
+    let s = String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    s = s.replace(/(新的帖子|新帖子|发布了|新主题)/g, '<span class="nsc-sn-kw-post">$1</span>');
+    s = s.replace(/(新的评论|评论了|评论|回复了|回复|引用了|引用)/g, '<span class="nsc-sn-kw-comment">$1</span>');
+    s = s.replace(/(鸡腿|星辰|奖励|中奖|抽奖|签到)/g, '<span class="nsc-sn-kw-reward">$1</span>');
+    s = s.replace(/(警告|封禁|禁言|违规|删除)/g, '<span class="nsc-sn-kw-warn">$1</span>');
+    s = s.replace(/(您关注的\s+)([^\s，。,:：]+)/g, '$1<span class="nsc-sn-user">$2</span>');
+    return s;
+  }
+
+  function formatSysNoticeHtml(rawContent) {
+    const src = String(rawContent || "");
+    const tokenRe = /\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)|((?:https?:\/\/(?:www\.)?nodeseek\.com)?\/(?:post-\d+(?:-\d+)?(?:#\d+)?|space\/\d+))/g;
+    let out = "";
+    let last = 0;
+    let firstPost = null;
+    let m;
+    while ((m = tokenRe.exec(src)) !== null) {
+      if (m.index > last) out += highlightSysNoticeSegment(src.slice(last, m.index));
+      const label = m[1] || m[3];
+      const url = m[2] || m[3];
+      const cleanLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const cleanUrl = url.replace(/"/g, "&quot;");
+      const spaceMatch = url.match(/\/space\/(\d+)/);
+      const postMatch = url.match(/\/post-(\d+)(?:-(\d+))?(?:#(\d+))?/);
+      if (spaceMatch) {
+        out += `<span class="nsc-sn-user" data-uid="${spaceMatch[1]}">${cleanLabel}</span>`;
+      } else if (postMatch) {
+        const postHref = `/post-${postMatch[1]}-${postMatch[2] || 1}`;
+        if (!firstPost) {
+          firstPost = {
+            postId: postMatch[1],
+            url: postHref,
+            title: m[1] ? m[1] : `帖子 #${postMatch[1]}`,
+            targetFloor: postMatch[3] || "",
+          };
+        }
+        out += `<a class="nsc-sn-post" href="${cleanUrl}" data-pid="${postMatch[1]}">${cleanLabel}</a>`;
+      } else {
+        out += `<a class="nsc-sn-post" href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanLabel}</a>`;
+      }
+      last = tokenRe.lastIndex;
+    }
+    if (last < src.length) out += highlightSysNoticeSegment(src.slice(last));
+    out = out.replace(/\n/g, "<br>");
+    return { html: out, firstPost };
+  }
+
+  function classifySysNoticeTag(rawContent) {
+    const s = String(rawContent || "");
+    if (/新的帖子|新帖子|发布了|新主题/.test(s)) return { label: "新帖动态", cls: "nsc-sn-kw-post" };
+    if (/评论|回复|引用/.test(s)) return { label: "评论通知", cls: "nsc-sn-kw-comment" };
+    if (/鸡腿|星辰|奖励|中奖|抽奖|签到/.test(s)) return { label: "福利奖励", cls: "nsc-sn-kw-reward" };
+    if (/警告|封禁|禁言|违规|删除/.test(s)) return { label: "管理提醒", cls: "nsc-sn-kw-warn" };
+    return { label: "系统通知", cls: "nsc-sn-user" };
+  }
+
+  async function fetchSysNotices(silent = false) {
+    if (state.sysNoticeList.loading) return;
+    state.sysNoticeList.loading = true;
+    state.sysNoticeList.error = null;
+    if (!silent && state.activeChannel === "sys-notice") renderTopicList();
+
+    detectCurrentUser();
+    try {
+      const resp = await fetch("/api/notification/message/with/5230", {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const rows = Array.isArray(json.msgArray) ? json.msgArray : [];
+      const myId = state.currentUserId;
+      const items = rows.map((r) => {
+        const parsed = formatSysNoticeHtml(r.content || "");
+        const tag = classifySysNoticeTag(r.content || "");
+        const isUnread = (!myId || Number(r.receiver_id) === myId) && (r.viewed === false || r.viewed === 0 || r.viewed === "0");
+        return {
+          id: Number(r.id) || 0,
+          content: String(r.content || ""),
+          html: parsed.html,
+          firstPost: parsed.firstPost,
+          tag,
+          timeText: formatChineseTime("", r.created_at, ""),
+          ts: new Date(r.created_at || 0).getTime() || 0,
+          unread: isUnread,
+        };
+      });
+      items.sort((a, b) => b.ts - a.ts || b.id - a.id);
+      state.sysNoticeList.items = items;
+      state.sysNoticeList.loaded = true;
+      state.unreadCounts.sysNotice = items.filter((x) => x.unread).length;
+      renderLeftNav();
+    } catch (err) {
+      state.sysNoticeList.error = err.message;
+    } finally {
+      state.sysNoticeList.loading = false;
+      if (state.activeChannel === "sys-notice") renderTopicList();
+    }
+  }
+
+  async function markSysNoticesRead(ids) {
+    const validIds = (ids || []).filter((id) => Number(id) > 0).map(Number);
+    if (validIds.length === 0) return;
+    try {
+      await fetch("/api/notification/message/markViewed", {
+        method: "POST",
+        credentials: "include",
+        headers: getNodeSeekPostHeaders(),
+        body: JSON.stringify({ messages: validIds }),
+      });
+      const idSet = new Set(validIds);
+      state.sysNoticeList.items.forEach((x) => {
+        if (idSet.has(x.id)) x.unread = false;
+      });
+      state.unreadCounts.sysNotice = state.sysNoticeList.items.filter((x) => x.unread).length;
+      renderLeftNav();
+      if (state.activeChannel === "sys-notice") renderTopicList();
+    } catch (_) {}
+  }
+
+  function renderListToolbar() {
+    const bar = document.getElementById("nsc-list-toolbar");
+    if (!bar) return;
+    bar.innerHTML = "";
+
+    if (state.activeChannel === "history") {
+      const tip = document.createElement("span");
+      tip.style.cssText = "font-size:11px;color:var(--nsc-muted);";
+      tip.textContent = "按最近阅读倒序";
+      const clr = document.createElement("button");
+      clr.type = "button";
+      clr.className = "nsc-mini-btn";
+      clr.textContent = "清空足迹";
+      clr.addEventListener("click", () => {
+        state.readMap = {};
+        saveJson(LS.READ_MAP, {});
+        renderLeftNav();
+        renderTopicList();
+      });
+      bar.appendChild(tip);
+      bar.appendChild(clr);
+      return;
+    }
+
+    if (state.activeChannel === "at-me" || state.activeChannel === "reply-me") {
+      const kind = state.activeChannel;
+      const btnAll = document.createElement("button");
+      btnAll.type = "button";
+      btnAll.className = "nsc-mini-btn";
+      btnAll.textContent = "全部标为已读";
+      btnAll.addEventListener("click", () => markNotificationViewed(kind, 0, true));
+
+      const btnRef = document.createElement("button");
+      btnRef.type = "button";
+      btnRef.className = "nsc-mini-btn";
+      btnRef.textContent = "刷新";
+      btnRef.addEventListener("click", () => {
+        fetchNotifications(kind);
+        fetchUnreadCounts();
+      });
+      bar.appendChild(btnAll);
+      bar.appendChild(btnRef);
+      return;
+    }
+
+    if (state.activeChannel === "pm") {
+      const btnRef = document.createElement("button");
+      btnRef.type = "button";
+      btnRef.className = "nsc-mini-btn";
+      btnRef.textContent = "刷新会话";
+      btnRef.addEventListener("click", () => {
+        fetchPmList();
+        fetchUnreadCounts();
+      });
+      const linkOrig = document.createElement("a");
+      linkOrig.className = "nsc-mini-btn";
+      linkOrig.style.textDecoration = "none";
+      linkOrig.href = "/notification#/message";
+      linkOrig.target = "_blank";
+      linkOrig.textContent = "原版私信 ↗";
+      bar.appendChild(btnRef);
+      bar.appendChild(linkOrig);
+      return;
+    }
+
+    if (state.activeChannel === "sys-notice") {
+      const btnAll = document.createElement("button");
+      btnAll.type = "button";
+      btnAll.className = "nsc-mini-btn";
+      btnAll.textContent = "全部标为已读";
+      btnAll.addEventListener("click", () => {
+        const unreadIds = state.sysNoticeList.items.filter((x) => x.unread && x.id).map((x) => x.id);
+        markSysNoticesRead(unreadIds);
+      });
+      const btnRef = document.createElement("button");
+      btnRef.type = "button";
+      btnRef.className = "nsc-mini-btn";
+      btnRef.textContent = "刷新";
+      btnRef.addEventListener("click", () => fetchSysNotices(false));
+      const linkOrig = document.createElement("a");
+      linkOrig.className = "nsc-mini-btn";
+      linkOrig.style.textDecoration = "none";
+      linkOrig.href = "/notification#/message?mode=talk&to=5230";
+      linkOrig.target = "_blank";
+      linkOrig.textContent = "原版 ↗";
+      bar.appendChild(btnAll);
+      bar.appendChild(btnRef);
+      bar.appendChild(linkOrig);
+      return;
+    }
+
+    const seg = document.createElement("div");
+    seg.className = "nsc-seg-tabs";
+    [
+      { id: "reply", label: "最新回复" },
+      { id: "post", label: "最新帖子" },
+    ].forEach((opt) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "nsc-seg-btn" + (state.sortMode === opt.id ? " is-active" : "");
+      b.textContent = opt.label;
+      b.addEventListener("click", () => {
+        state.sortMode = opt.id;
+        localStorage.setItem(LS.SORT, opt.id);
+        state.prioritizeUnread = false;
+        renderListToolbar();
+        fetchChannelData(state.activeChannel, 1, true, false);
+      });
+      seg.appendChild(b);
+    });
+
+    const rightBtns = document.createElement("div");
+    rightBtns.style.cssText = "display:inline-flex;gap:4px;";
+
+    const btnUnread = document.createElement("button");
+    btnUnread.type = "button";
+    btnUnread.className = "nsc-mini-btn" + (state.prioritizeUnread ? " is-active" : "");
+    btnUnread.title = "刷新列表并把未读/有新回复帖子排在最前面";
+    btnUnread.textContent = "未读";
+    btnUnread.addEventListener("click", () => {
+      state.prioritizeUnread = true;
+      fetchChannelData(state.activeChannel, 1, true, false);
+    });
+
+    const btnReadHistory = document.createElement("button");
+    btnReadHistory.type = "button";
+    btnReadHistory.className = "nsc-mini-btn";
+    btnReadHistory.title = "查看已读历史足迹";
+    btnReadHistory.textContent = "已读";
+    btnReadHistory.addEventListener("click", () => {
+      switchChannel("history");
+    });
+
+    rightBtns.appendChild(btnUnread);
+    rightBtns.appendChild(btnReadHistory);
+
+    bar.appendChild(seg);
+    bar.appendChild(rightBtns);
+  }
+
+  function parsePostListFromDoc(doc) {
+    const items = [];
+    const nodes = doc.querySelectorAll(".post-list-item, ul.post-list > li");
+    for (const li of nodes) {
+      const titleLink = li.querySelector(".post-title a[href*='/post-'], a[href*='/post-']");
+      if (!titleLink) continue;
+      const href = titleLink.getAttribute("href") || "";
+      const m = href.match(/\/post-(\d+)/);
+      if (!m) continue;
+      const postId = m[1];
+      const title = titleLink.textContent.trim();
+
+      const img = li.querySelector("img[src*='/avatar/'], img.avatar-normal, img");
+      const avatar = img ? img.getAttribute("src") : "";
+
+      const authorLink = li.querySelector(".post-info a[href*='/space/'], .info-author a, a[href*='/space/'], a[href*='/member']");
+      let author = authorLink ? authorLink.textContent.trim() : "";
+      let uid = "";
+      if (authorLink) {
+        const um = (authorLink.getAttribute("href") || "").match(/\/space\/(\d+)/);
+        if (um) uid = um[1];
+      }
+      if (!author) {
+        const authorSpan = li.querySelector(".info-author");
+        if (authorSpan) author = authorSpan.textContent.trim();
+      }
+
+      const catEl = li.querySelector("a[href*='/categories/']");
+      const category = catEl ? catEl.textContent.trim() : "";
+
+      const timeEl = li.querySelector("time");
+      const { text: timeText } = getTimeFromEl(timeEl);
+
+      let replies = 0;
+      let views = 0;
+      const infoEl = li.querySelector(".post-info") || li;
+      const commentUse = infoEl.querySelector('use[href*="comment"], use[xlink\\:href*="comment"]');
+      if (commentUse) {
+        const sp = commentUse.closest("span, div, a");
+        if (sp) {
+          const nm = sp.textContent.match(/(\d+)/);
+          if (nm) replies = Number(nm[1]);
+        }
+      }
+      const viewUse = infoEl.querySelector('use[href*="eye"], use[href*="preview"], use[xlink\\:href*="eye"]');
+      if (viewUse) {
+        const sp = viewUse.closest("span, div, a");
+        if (sp) {
+          const nm = sp.textContent.match(/(\d+)/);
+          if (nm) views = Number(nm[1]);
+        }
+      }
+      if (replies === 0 && views === 0) {
+        const nums = Array.from(infoEl.querySelectorAll("span")).map((s) => s.textContent.trim()).filter((t) => /^\d+$/.test(t));
+        if (nums.length >= 2) {
+          views = Number(nums[0]);
+          replies = Number(nums[1]);
+        } else if (nums.length === 1) {
+          replies = Number(nums[0]);
+        }
+      }
+
+      items.push({
+        postId,
+        url: href,
+        title,
+        avatar: avatar || (uid ? `/avatar/${uid}.png` : ""),
+        author: author || "Seeker",
+        uid,
+        category,
+        timeText,
+        replies,
+        views,
+      });
+    }
+    return items;
+  }
+
+  async function fetchChannelData(channelId, page = 1, reset = false, silent = false) {
+    const ch = CHANNELS.find((c) => c.id === channelId);
+    if (!ch || ch.path.startsWith("__")) return;
+
+    const cur = state.channelData[channelId] || { items: [], page: 0, loading: false, error: null };
+    if (cur.loading) return;
+    cur.loading = true;
+    cur.error = null;
+    state.channelData[channelId] = cur;
+    if (!silent && state.activeChannel === channelId) renderTopicList();
+
+    try {
+      const base = ch.path === "/" ? "" : ch.path;
+      const pagePart = page > 1 ? `${base}/page-${page}` : ch.path;
+      const sortQuery = ch.id === "award" ? "" : state.sortMode === "post" ? "?sortBy=postTime" : "";
+      const resp = await fetch(pagePart + sortQuery, { credentials: "include" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+      const parsed = parsePostListFromDoc(doc);
+      if (reset || page === 1) {
+        cur.items = parsed;
+      } else {
+        const seen = new Set(cur.items.map((x) => x.postId));
+        for (const it of parsed) {
+          if (!seen.has(it.postId)) cur.items.push(it);
+        }
+      }
+      cur.page = page;
+    } catch (err) {
+      cur.error = err.message;
+    } finally {
+      cur.loading = false;
+      renderLeftNav();
+      if (state.activeChannel === channelId) renderTopicList();
+    }
+  }
+
+  async function fetchHotPosts(tabType = state.hotTab) {
+    if (state.hotLoading) return;
+    state.hotLoading = true;
+    state.hotError = null;
+    if (state.rightTab === "hot") renderRightBody();
+
+    const apiMap = {
+      realtime: "https://api.bimg.eu.org/hot.json",
+      daily: "https://api.bimg.eu.org/daily.json",
+      weekly: "https://api.bimg.eu.org/weekly.json",
+    };
+
+    try {
+      const url = `${apiMap[tabType] || apiMap.realtime}?t=${Date.now()}`;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const resp = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (json && Array.isArray(json.posts)) {
+        const items = json.posts.map((item) => {
+          const p = item.post || item;
+          return {
+            postId: String(p.id),
+            url: `/post-${p.id}-1`,
+            title: p.title || "",
+            author: p.author || "Seeker",
+            uid: p.author_id ? String(p.author_id) : "",
+            avatar: p.author_id ? `/avatar/${p.author_id}.png` : "",
+            views: Number(p.views) || 0,
+            replies: Number(p.comments) || 0,
+            score: Math.floor(Number(item.score) || 0),
+          };
+        });
+        state.hotCache[tabType] = { items, updatedAt: json.updated_at || Math.floor(Date.now() / 1000) };
+      } else {
+        throw new Error("Invalid hot json");
+      }
+    } catch (err) {
+      try {
+        const map = new Map();
+        for (const pUrl of ["/", "/page-2"]) {
+          const r = await fetch(pUrl, { credentials: "include" });
+          if (!r.ok) continue;
+          const doc = new DOMParser().parseFromString(await r.text(), "text/html");
+          for (const it of parsePostListFromDoc(doc)) {
+            if (!map.has(it.postId)) {
+              it.score = it.replies * 4 + Math.round(it.views / 25);
+              map.set(it.postId, it);
+            }
+          }
+        }
+        const items = Array.from(map.values()).sort((a, b) => b.score - a.score);
+        state.hotCache[tabType] = { items, updatedAt: Math.floor(Date.now() / 1000) };
+      } catch (_) {
+        state.hotError = err.message;
+      }
+    } finally {
+      state.hotLoading = false;
+      if (state.rightTab === "hot") renderRightBody();
+    }
+  }
+
+  function renderTopicList() {
+    const scrollEl = document.getElementById("nsc-topic-scroll");
+    const subEl = document.getElementById("nsc-channel-sub");
+    if (!scrollEl) return;
+
+    const kw = state.searchKeyword;
+
+    if (state.activeChannel === "at-me" || state.activeChannel === "reply-me") {
+      const kind = state.activeChannel;
+      const st = state.notifData[kind];
+      if (st.loading && st.items.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state">正在同步消息通知...</div>`;
+        return;
+      }
+      if (st.error && st.items.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败: ${st.error}</div>`;
+        return;
+      }
+      const list = st.items.filter((it) => {
+        if (isMemberHidden(it.author)) return false;
+        if (!kw) return true;
+        return (it.title || "").toLowerCase().includes(kw) || (it.author || "").toLowerCase().includes(kw);
+      });
+      if (subEl) subEl.textContent = `${list.length} 条`;
+      if (list.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state">暂无${kind === "at-me" ? "@我的通知" : "回复我的消息"}</div>`;
+        return;
+      }
+      scrollEl.innerHTML = "";
+      list.forEach((it) => {
+        const rowKey = `${kind}:${it.id}:${it.postId}:${it.floorId}`;
+        const row = document.createElement("div");
+        row.className = "nsc-topic-item" + (it.viewed ? " is-read" : "") + (state.selectedNotifKey === rowKey ? " is-selected" : "");
+        row.innerHTML = `
+          ${it.avatar ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />` : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`}
+          <div class="nsc-topic-body">
+            <div class="nsc-topic-top">
+              <div class="nsc-topic-title"></div>
+              ${!it.viewed ? `<span class="nsc-badge-dot" title="未读"></span>` : `<span class="nsc-badge-read">已读</span>`}
+            </div>
+            <div class="nsc-topic-meta">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;"></span>
+              <span>#${it.floorId || 0}楼${it.timeText ? " · " + it.timeText : ""}</span>
+            </div>
+          </div>
+        `;
+        row.querySelector(".nsc-topic-title").textContent = it.title;
+        row.querySelector(".nsc-topic-meta span:first-child").textContent = `${it.author} ${kind === "at-me" ? "@了你" : "回复了你"}`;
+        row.addEventListener("click", () => {
+          state.selectedNotifKey = rowKey;
+          if (!it.viewed && it.id) markNotificationViewed(kind, it.id, false);
+          openPostInChat({
+            postId: it.postId,
+            url: it.url,
+            title: it.title,
+            author: it.author,
+            avatar: it.avatar,
+            targetFloor: it.floorId ? String(it.floorId) : "",
+          });
+        });
+        scrollEl.appendChild(row);
+      });
+      return;
+    }
+
+    if (state.activeChannel === "pm") {
+      const st = state.pmList;
+      if (st.loading && st.items.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state">正在读取私信会话...</div>`;
+        return;
+      }
+      if (st.error && st.items.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败: ${st.error}</div>`;
+        return;
+      }
+      const list = st.items.filter((it) => {
+        if (isMemberHidden(it.name)) return false;
+        if (!kw) return true;
+        return (it.name || "").toLowerCase().includes(kw) || (it.content || "").toLowerCase().includes(kw);
+      });
+      if (subEl) subEl.textContent = `${list.length} 位`;
+      if (list.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state">暂无站内私信会话</div>`;
+        return;
+      }
+      scrollEl.innerHTML = "";
+      list.forEach((it) => {
+        const row = document.createElement("div");
+        const isSel = state.activePmPeer && state.activePmPeer.uid === it.uid;
+        row.className = "nsc-topic-item" + (isSel ? " is-selected" : "");
+        row.innerHTML = `
+          <img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />
+          <div class="nsc-topic-body">
+            <div class="nsc-topic-top">
+              <div class="nsc-topic-title" style="-webkit-line-clamp:1;"></div>
+              ${it.unread ? `<span class="nsc-badge-dot" title="未读私信"></span>` : `<span class="nsc-badge-read">${it.timeText || ""}</span>`}
+            </div>
+            <div class="nsc-pm-preview"></div>
+          </div>
+        `;
+        row.querySelector(".nsc-topic-title").textContent = it.name;
+        row.querySelector(".nsc-pm-preview").textContent = it.content || "(无正文)";
+        row.addEventListener("click", () => openPmConversation(it));
+        scrollEl.appendChild(row);
+      });
+      return;
+    }
+
+    if (state.activeChannel === "sys-notice") {
+      const st = state.sysNoticeList;
+      if (st.loading && st.items.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state">正在读取系统通知...</div>`;
+        return;
+      }
+      if (st.error && st.items.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败: ${st.error}</div>`;
+        return;
+      }
+      const list = st.items.filter((it) => !kw || (it.content || "").toLowerCase().includes(kw));
+      if (subEl) subEl.textContent = `${list.length} 条`;
+      if (list.length === 0) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state">暂无系统通知</div>`;
+        return;
+      }
+      scrollEl.innerHTML = "";
+      list.forEach((it) => {
+        const rowKey = `sys:${it.id}`;
+        const card = document.createElement("div");
+        card.className =
+          "nsc-sn-card" +
+          (!it.unread ? " is-read" : "") +
+          (state.selectedNotifKey === rowKey ? " is-selected" : "");
+        card.innerHTML = `
+          <div class="nsc-sn-icon">${ICONS.bell}</div>
+          <div class="nsc-sn-body">
+            <div class="nsc-sn-head">
+              <span class="${it.tag.cls}">${it.tag.label}</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;">
+                ${it.timeText || ""}
+                ${it.unread ? `<span class="nsc-badge-dot" title="未读"></span>` : ""}
+              </span>
+            </div>
+            <div class="nsc-sn-text">${it.html}</div>
+          </div>
+        `;
+        card.querySelectorAll(".nsc-sn-user[data-uid]").forEach((uEl) => {
+          uEl.style.cursor = "pointer";
+          uEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openUserProfileModal({ uid: uEl.dataset.uid, name: uEl.textContent.trim() });
+          });
+        });
+        card.querySelectorAll(".nsc-sn-post[data-pid]").forEach((pEl) => {
+          pEl.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            state.selectedNotifKey = rowKey;
+            if (it.unread && it.id) markSysNoticesRead([it.id]);
+            openPostInChat({
+              postId: pEl.dataset.pid,
+              url: pEl.getAttribute("href"),
+              title: pEl.textContent.trim(),
+            });
+          });
+        });
+        card.addEventListener("click", () => {
+          state.selectedNotifKey = rowKey;
+          if (it.unread && it.id) markSysNoticesRead([it.id]);
+          if (it.firstPost) {
+            openPostInChat(it.firstPost);
+          } else {
+            renderTopicList();
+            const titleEl = document.getElementById("nsc-chat-title");
+            const subChat = document.getElementById("nsc-chat-subtitle");
+            const msgsEl = document.getElementById("nsc-chat-messages");
+            if (titleEl) titleEl.textContent = `系统通知 · ${it.tag.label}`;
+            if (subChat) subChat.textContent = it.timeText || "UID 5230";
+            if (msgsEl) {
+              msgsEl.innerHTML = `
+                <div class="nsc-msg">
+                  <div class="nsc-avatar-col"><button type="button" class="nsc-avatar-btn"><img src="/avatar/5230.png" alt="系统通知" /></button></div>
+                  <div class="nsc-msg-main">
+                    <div class="nsc-msg-meta"><span class="nsc-msg-author">系统通知</span><span class="${it.tag.cls}">${it.tag.label}</span><span>${it.timeText || ""}</span></div>
+                    <div class="nsc-bubble-row"><div class="nsc-bubble">${it.html}</div></div>
+                  </div>
+                </div>
+              `;
+            }
+          }
+        });
+        scrollEl.appendChild(card);
+      });
+      return;
+    }
+
+    let items = [];
+    let isLoading = false;
+    let error = null;
+    let page = 1;
+
+    if (state.activeChannel === "history") {
+      items = Object.values(state.readMap).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    } else {
+      const data = state.channelData[state.activeChannel];
+      if (!data) {
+        scrollEl.innerHTML = `<div class="nsc-empty-state">加载中...</div>`;
+        return;
+      }
+      isLoading = data.loading;
+      error = data.error;
+      page = data.page || 1;
+      items = [...(data.items || [])];
+    }
+
+    if (isLoading && items.length === 0) {
+      scrollEl.innerHTML = `<div class="nsc-empty-state">正在加载列表...</div>`;
+      return;
+    }
+    if (error && items.length === 0) {
+      scrollEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败: ${error}</div>`;
+      return;
+    }
+
+    items = items.filter((it) => {
+      if (isMemberHidden(it.author)) return false;
+      if (!kw) return true;
+      return (it.title || "").toLowerCase().includes(kw) || (it.author || "").toLowerCase().includes(kw);
+    });
+
+    if (state.prioritizeUnread && state.activeChannel !== "history") {
+      items.sort((a, b) => {
+        const ra = getReadStatus(a.postId, a.replies).status === "read" ? 1 : 0;
+        const rb = getReadStatus(b.postId, b.replies).status === "read" ? 1 : 0;
+        return ra - rb;
+      });
+    }
+
+    if (subEl) subEl.textContent = `${items.length} 条`;
+
+    if (items.length === 0) {
+      scrollEl.innerHTML = `<div class="nsc-empty-state">${state.activeChannel === "history" ? "暂无已读足迹，点击打开任意帖子后会记录在这里" : "暂无匹配帖子"}</div>`;
+      return;
+    }
+
+    scrollEl.innerHTML = "";
+    items.forEach((it) => {
+      const rs = state.activeChannel === "history" ? { status: "read", delta: 0 } : getReadStatus(it.postId, it.replies);
+      const row = document.createElement("div");
+      row.className =
+        "nsc-topic-item" +
+        (rs.status === "read" && state.activeChannel !== "history" ? " is-read" : "") +
+        (state.currentPostId === it.postId ? " is-selected" : "");
+
+      const avatarHtml = it.avatar
+        ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />`
+        : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`;
+
+      let badgeHtml = "";
+      if (state.activeChannel === "history") {
+        badgeHtml = `<span class="nsc-badge-read">${formatRelativeFromMs(it.ts)}</span>`;
+      } else if (rs.status === "unread") {
+        badgeHtml = `<span class="nsc-badge-dot" title="未读"></span>`;
+      } else if (rs.status === "updated") {
+        badgeHtml = `<span class="nsc-badge-delta" title="有 ${rs.delta} 条新回复">+${rs.delta}</span>`;
+      } else {
+        badgeHtml = `<span class="nsc-badge-read">已读</span>`;
+      }
+
+      row.innerHTML = `
+        ${avatarHtml}
+        <div class="nsc-topic-body">
+          <div class="nsc-topic-top">
+            <div class="nsc-topic-title"></div>
+            ${badgeHtml}
+          </div>
+          <div class="nsc-topic-meta">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;"></span>
+            <span>回复 ${it.replies || 0}${it.timeText ? " · " + it.timeText : ""}</span>
+          </div>
+        </div>
+      `;
+      row.querySelector(".nsc-topic-title").textContent = it.title;
+      row.querySelector(".nsc-topic-meta span:first-child").textContent =
+        `${it.author || "Seeker"}${it.category ? " · " + it.category : ""}`;
+
+      row.addEventListener("click", () => openPostInChat(it));
+      scrollEl.appendChild(row);
+    });
+
+    if (state.activeChannel !== "history") {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "nsc-load-more-btn";
+      more.textContent = isLoading ? "加载中..." : `加载第 ${page + 1} 页`;
+      more.addEventListener("click", () => fetchChannelData(state.activeChannel, page + 1, false, false));
+      scrollEl.appendChild(more);
+    }
+  }
+
