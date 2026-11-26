@@ -805,12 +805,16 @@
     const ch = CHANNELS.find((c) => c.id === channelId);
     if (!ch || ch.path.startsWith("__")) return;
 
-    const cur = state.channelData[channelId] || { items: [], page: 0, loading: false, error: null };
+    const cur = state.channelData[channelId] || { items: [], page: 0, loading: false, error: null, noMore: false };
     if (cur.loading) return;
     cur.loading = true;
     cur.error = null;
+    if (reset || page === 1) cur.noMore = false;
     state.channelData[channelId] = cur;
     if (!silent && state.activeChannel === channelId) renderTopicList();
+
+    const topicScroll = document.getElementById("nsc-topic-scroll");
+    const prevTop = topicScroll && page > 1 ? topicScroll.scrollTop : 0;
 
     try {
       const base = ch.path === "/" ? "" : ch.path;
@@ -820,13 +824,19 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
       const parsed = parsePostListFromDoc(doc);
+      if (parsed.length === 0) cur.noMore = true;
       if (reset || page === 1) {
         cur.items = parsed;
       } else {
         const seen = new Set(cur.items.map((x) => x.postId));
+        let added = 0;
         for (const it of parsed) {
-          if (!seen.has(it.postId)) cur.items.push(it);
+          if (!seen.has(it.postId)) {
+            cur.items.push(it);
+            added++;
+          }
         }
+        if (added === 0) cur.noMore = true;
       }
       cur.page = page;
     } catch (err) {
@@ -834,8 +844,21 @@
     } finally {
       cur.loading = false;
       renderLeftNav();
-      if (state.activeChannel === channelId) renderTopicList();
+      if (state.activeChannel === channelId) {
+        renderTopicList();
+        if (topicScroll && page > 1) topicScroll.scrollTop = prevTop;
+      }
     }
+  }
+
+  function tryAutoLoadNextTopicPage() {
+    const chId = state.activeChannel;
+    const ch = CHANNELS.find((c) => c.id === chId);
+    if (!ch || ch.path.startsWith("__")) return;
+    const data = state.channelData[chId];
+    if (!data || data.loading || data.noMore) return;
+    const nextPage = (data.page || 1) + 1;
+    fetchChannelData(chId, nextPage, false, false);
   }
 
   async function fetchHotPosts(tabType = state.hotTab) {
@@ -1192,12 +1215,22 @@
     });
 
     if (state.activeChannel !== "history") {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "nsc-load-more-btn";
-      more.textContent = isLoading ? "加载中..." : `加载第 ${page + 1} 页`;
-      more.addEventListener("click", () => fetchChannelData(state.activeChannel, page + 1, false, false));
-      scrollEl.appendChild(more);
+      const chData = state.channelData[state.activeChannel];
+      const wf = document.createElement("div");
+      wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:8px 4px;";
+      if (chData && chData.noMore) {
+        wf.textContent = "已加载全部帖子";
+      } else if (isLoading) {
+        wf.textContent = `正在瀑布流加载第 ${page + 1} 页...`;
+      } else {
+        wf.textContent = `下滑自动加载第 ${page + 1} 页`;
+      }
+      scrollEl.appendChild(wf);
+
+      // 搜索过滤结果较少时自动向下瀑布流预拉最多至第 4 页
+      if (kw && items.length < 8 && chData && !chData.loading && !chData.noMore && page < 4) {
+        setTimeout(() => tryAutoLoadNextTopicPage(), 80);
+      }
     }
   }
 

@@ -637,7 +637,7 @@
     btnLike.type = "button";
     btnLike.className = "nsc-hb-btn";
     btnLike.title = "点赞";
-    btnLike.innerHTML = `👍${obj.likes > 0 ? `<span class="nsc-hb-cnt">${obj.likes}</span>` : ""}`;
+    btnLike.textContent = "👍";
     btnLike.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "点赞", isNativePage, reactionsEl, bar);
@@ -647,7 +647,7 @@
     btnLeg.type = "button";
     btnLeg.className = "nsc-hb-btn";
     btnLeg.title = "加鸡腿";
-    btnLeg.innerHTML = `🍗${obj.legs > 0 ? `<span class="nsc-hb-cnt">${obj.legs}</span>` : ""}`;
+    btnLeg.textContent = "🍗";
     btnLeg.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl, bar);
@@ -744,8 +744,8 @@
     renderReactionPills(reactionsEl, obj, isNativePage);
 
     const hoverBar = buildHoverBar(obj, isNativePage, reactionsEl, false);
+    meta.appendChild(hoverBar);
     bubbleRow.appendChild(bubble);
-    bubbleRow.appendChild(hoverBar);
 
     mainCol.appendChild(meta);
     mainCol.appendChild(bubbleRow);
@@ -808,8 +808,8 @@
         const chReactions = ti.querySelector(".nsc-reactions");
         renderReactionPills(chReactions, ch, isNativePage);
         const chBar = buildHoverBar(ch, isNativePage, chReactions, true);
-        chBar.style.alignSelf = "flex-start";
-        ti.appendChild(chBar);
+        const chMeta = ti.querySelector(".nsc-thread-meta");
+        if (chMeta) chMeta.appendChild(chBar);
         threadWrap.appendChild(ti);
       }
 
@@ -824,11 +824,6 @@
 
   async function triggerReplyOrVote(obj, actionTitle, isNativePage, reactionsEl, hoverBar) {
     const syncBarCnt = () => {
-      if (hoverBar) {
-        const btns = hoverBar.querySelectorAll(".nsc-hb-btn");
-        if (btns[0]) btns[0].innerHTML = `👍${obj.likes > 0 ? `<span class="nsc-hb-cnt">${obj.likes}</span>` : ""}`;
-        if (btns[1]) btns[1].innerHTML = `🍗${obj.legs > 0 ? `<span class="nsc-hb-cnt">${obj.legs}</span>` : ""}`;
-      }
       if (reactionsEl) renderReactionPills(reactionsEl, obj, isNativePage);
     };
 

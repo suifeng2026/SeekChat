@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.6.0
+// @version      7.7.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -871,8 +871,24 @@
       .nsc-bubble img[src*="/sticker"],
       .nsc-thread-content img[src*="/emotion/"],
       .nsc-thread-content img[src*="/sticker"] {
-        max-width: 24px !important; max-height: 24px !important; display: inline-block; margin: 0 2px;
+        max-width: 44px !important; max-height: 36px !important;
+        height: 34px !important; width: auto !important;
+        display: inline-block; margin: 0 3px;
         border: none; background: transparent; cursor: default; vertical-align: middle;
+      }
+
+      /* 帖子多图联动网格画廊（贴图版块与多图贴自动排版） */
+      .nsc-img-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 8px; margin: 6px 0; max-width: 560px;
+      }
+      .nsc-img-grid img.nsc-zoomable-img {
+        width: 100% !important; height: 150px !important; max-width: none !important; max-height: none !important;
+        object-fit: cover !important; margin: 0 !important; border-radius: 10px;
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+      }
+      .nsc-img-grid img.nsc-zoomable-img:hover {
+        transform: scale(1.02); box-shadow: 0 6px 18px rgba(0,0,0,0.14);
       }
 
       .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
@@ -903,37 +919,29 @@
       }
       .nsc-react-pill:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
 
-      /* TG 风格悬停浮动胶囊操作条（无 backdrop-filter，零卡顿，透明桥接防断触） */
+      /* 悬停操作条内嵌在元信息行尾，不再飘出或重复数字 */
       .nsc-hover-bar {
-        position: absolute; bottom: 2px; left: calc(100% + 6px); z-index: 25;
-        display: inline-flex; align-items: center; gap: 2px; padding: 2px 5px;
+        display: inline-flex; align-items: center; gap: 1px; padding: 1px 4px; margin-left: 4px;
         border-radius: 999px; border: 1px solid var(--nsc-border);
         background: var(--nsc-bg-card);
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
         opacity: 0; pointer-events: none;
-        transition: opacity 0.08s linear;
-        white-space: nowrap;
+        transition: opacity 0.1s linear;
+        white-space: nowrap; flex: 0 0 auto;
       }
-      .nsc-hover-bar::before {
-        content: ""; position: absolute; left: -10px; right: -10px; top: -6px; bottom: -6px; z-index: -1;
-      }
-      .nsc-msg.is-self .nsc-hover-bar { left: auto; right: calc(100% + 6px); }
-      .nsc-hover-bar.is-thread-bar { position: absolute; top: -10px; bottom: auto; right: 6px; left: auto; }
-      .nsc-thread-item.is-right .nsc-hover-bar.is-thread-bar { right: auto; left: 6px; }
-      .nsc-msg:hover > .nsc-msg-main > .nsc-bubble-row > .nsc-hover-bar,
-      .nsc-bubble-row:hover > .nsc-hover-bar,
-      .nsc-thread-item:hover > .nsc-hover-bar.is-thread-bar {
+      .nsc-msg:hover > .nsc-msg-main > .nsc-msg-meta > .nsc-hover-bar,
+      .nsc-msg-meta:hover > .nsc-hover-bar,
+      .nsc-thread-item:hover > .nsc-thread-body > .nsc-thread-meta > .nsc-hover-bar,
+      .nsc-thread-meta:hover > .nsc-hover-bar {
         opacity: 1; pointer-events: auto;
       }
       .nsc-hb-btn {
         border: none; background: transparent; color: var(--nsc-muted);
-        height: 24px; min-width: 24px; padding: 0 6px; border-radius: 999px;
-        font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 3px;
-        cursor: pointer;
+        height: 20px; min-width: 22px; padding: 0 4px; border-radius: 999px;
+        font-size: 11.5px; display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; line-height: 1;
       }
-      .nsc-hb-btn svg { width: 13px; height: 13px; }
+      .nsc-hb-btn svg { width: 12px; height: 12px; }
       .nsc-hb-btn:hover { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
-      .nsc-hb-btn .nsc-hb-cnt { font-size: 10.5px; font-weight: 600; }
 
       .nsc-msg.has-thread .nsc-msg-main { flex: 1 1 auto; max-width: calc(100% - 54px); }
       .nsc-thread-toggle {
@@ -1051,15 +1059,15 @@
       }
       .nsc-composer-dock .mde-toolbar .toolbar-item svg { width: 13px !important; height: 13px !important; }
       .nsc-composer-dock .CodeMirror {
-        height: 46px !important; min-height: 44px !important; max-height: 92px !important;
-        font-size: 13px !important; line-height: 1.45 !important;
+        height: 88px !important; min-height: 84px !important; max-height: 150px !important;
+        font-size: 13px !important; line-height: 1.5 !important;
         background: transparent !important; color: var(--nsc-text) !important;
       }
-      .nsc-composer-dock .CodeMirror-scroll { min-height: 44px !important; max-height: 92px !important; padding-bottom: 0 !important; }
-      .nsc-composer-dock .CodeMirror-lines { padding: 4px 0 !important; }
+      .nsc-composer-dock .CodeMirror-scroll { min-height: 84px !important; max-height: 150px !important; padding-bottom: 0 !important; }
+      .nsc-composer-dock .CodeMirror-lines { padding: 5px 0 !important; }
       .nsc-fallback-textarea {
-        width: 100%; box-sizing: border-box; height: 48px; border: none; outline: none; resize: none;
-        padding: 6px 10px; font-size: 13px; line-height: 1.45; background: transparent; color: var(--nsc-text);
+        width: 100%; box-sizing: border-box; height: 90px; border: none; outline: none; resize: none;
+        padding: 8px 11px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
       /* 表情面板改为贴底悬浮层，彻底消除点击表情时的布局跳动与闪烁 */
@@ -1088,32 +1096,94 @@
         width: 288px; flex: 0 0 288px; background: var(--nsc-bg-right); backdrop-filter: blur(22px);
         border-left: 1px solid var(--nsc-border); display: flex; flex-direction: column; min-height: 0;
       }
-      .nsc-right-user { padding: 8px 10px 6px; border-bottom: 1px solid var(--nsc-border); }
+      .nsc-right-user { padding: 10px 10px 8px; border-bottom: 1px solid var(--nsc-border); }
       .nsc-right-user .user-card {
         border: none !important; box-shadow: none !important; background: transparent !important;
         padding: 0 !important; margin: 0 !important; width: 100% !important;
       }
+      .nsc-right-user .user-card .user-head {
+        display: flex !important; align-items: center !important; gap: 10px !important;
+        background: transparent !important; padding: 0 0 8px !important; margin: 0 !important;
+      }
+      .nsc-right-user .user-card .user-head .avatar-normal {
+        width: 44px !important; height: 44px !important; border-radius: 12px !important;
+        border: 2px solid var(--nsc-bg-card) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10) !important; object-fit: cover;
+      }
+      .nsc-right-user .user-card .user-head .menu {
+        flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;
+      }
+      .nsc-right-user .user-card .user-head .Username {
+        font-size: 14.5px !important; font-weight: 700 !important; color: var(--nsc-text) !important;
+        text-decoration: none !important; line-height: 1.2;
+      }
+      .nsc-right-user .user-card .user-head .menu > div {
+        display: flex !important; align-items: center !important; gap: 5px !important;
+      }
+      .nsc-right-user .user-card .user-head .menu > div > a,
+      .nsc-right-user .user-card .user-head .menu > div > span {
+        width: 24px !important; height: 24px !important; border-radius: 7px !important;
+        border: 1px solid var(--nsc-border) !important; background: var(--nsc-bg-card) !important;
+        display: inline-flex !important; align-items: center !important; justify-content: center !important;
+        color: var(--nsc-muted) !important; cursor: pointer; transition: all 0.13s ease !important;
+      }
+      .nsc-right-user .user-card .user-head .menu > div > a:hover,
+      .nsc-right-user .user-card .user-head .menu > div > span:hover {
+        border-color: var(--nsc-accent) !important; color: var(--nsc-accent) !important;
+        background: var(--nsc-accent-soft) !important; transform: translateY(-1px);
+      }
+      .nsc-right-user .user-card .user-head .menu > div svg { width: 13px !important; height: 13px !important; }
+      .nsc-right-user .user-card .user-stat {
+        background: var(--nsc-hover) !important; border: 1px solid var(--nsc-border) !important;
+        border-radius: 11px !important; padding: 7px 10px !important; margin: 0 !important;
+        display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px 10px !important;
+      }
+      .nsc-right-user .user-card .stat-block { display: flex !important; flex-direction: column !important; gap: 4px !important; }
+      .nsc-right-user .user-card .stat-block a {
+        font-size: 11.5px !important; color: var(--nsc-text) !important; text-decoration: none !important;
+        display: inline-flex !important; align-items: center !important; gap: 5px !important;
+        padding: 1px 0 !important;
+      }
+      .nsc-right-user .user-card .stat-block a:hover { color: var(--nsc-accent) !important; }
+      .nsc-right-user .user-card .stat-block svg { width: 13px !important; height: 13px !important; color: var(--nsc-muted) !important; flex: 0 0 13px; }
+      .nsc-right-user .user-card .notify-count {
+        background: linear-gradient(135deg, #ff5e7e, #ff2d55) !important; color: #fff !important;
+        border-radius: 999px !important; padding: 0 6px !important; font-size: 10px !important;
+        font-weight: 700 !important; line-height: 16px !important; height: 16px !important;
+      }
+
       .nsc-right-quickbar {
         display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
-        padding: 6px 10px; border-bottom: 1px solid var(--nsc-border);
+        padding: 7px 10px; border-bottom: 1px solid var(--nsc-border);
       }
       .nsc-quick-btn {
-        height: 26px; border-radius: 8px; border: 1px solid var(--nsc-border);
+        height: 27px; border-radius: 8px; border: 1px solid var(--nsc-border);
         background: var(--nsc-bg-card); color: var(--nsc-text);
         font-size: 11.5px; font-weight: 600; cursor: pointer;
         display: inline-flex; align-items: center; justify-content: center; gap: 3px;
-        text-decoration: none !important; transition: all 0.13s ease;
+        text-decoration: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        transition: all 0.13s ease;
       }
       .nsc-quick-btn:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
-      .nsc-quick-btn.is-primary { background: var(--nsc-accent); color: #fff; border-color: var(--nsc-accent); }
-      .nsc-quick-btn.is-primary:hover { filter: brightness(1.08); color: #fff; }
-      .nsc-pm-preview { font-size: 11px; color: var(--nsc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-      .nsc-right-tabs { display: flex; border-bottom: 1px solid var(--nsc-border); padding: 0 6px; }
-      .nsc-right-tab {
-        flex: 1; padding: 8px 2px; text-align: center; font-size: 12px; font-weight: 600;
-        color: var(--nsc-muted); border: none; background: transparent; border-bottom: 2px solid transparent; cursor: pointer;
+      .nsc-quick-btn.is-primary {
+        background: linear-gradient(180deg, #1a8cff 0%, #007aff 100%);
+        color: #fff; border-color: transparent; box-shadow: 0 2px 6px rgba(0, 122, 255, 0.26);
       }
-      .nsc-right-tab.is-active { color: var(--nsc-accent); border-bottom-color: var(--nsc-accent); }
+      .nsc-quick-btn.is-primary:hover { filter: brightness(1.06); color: #fff; }
+      .nsc-pm-preview { font-size: 11px; color: var(--nsc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+      .nsc-right-tabs {
+        display: flex; gap: 3px; margin: 7px 10px 3px; padding: 3px;
+        background: var(--nsc-hover); border-radius: 9px; border: 1px solid var(--nsc-border);
+      }
+      .nsc-right-tab {
+        flex: 1; padding: 4px 2px; text-align: center; font-size: 11.5px; font-weight: 600;
+        color: var(--nsc-muted); border: none; background: transparent; border-radius: 6px; cursor: pointer;
+        transition: all 0.13s ease;
+      }
+      .nsc-right-tab.is-active {
+        color: var(--nsc-text); background: var(--nsc-bg-card);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10);
+      }
       .nsc-right-scroll { flex: 1; overflow-y: auto; padding: 8px 9px 14px; }
 
       .nsc-qq-item {
@@ -1190,20 +1260,39 @@
 
       #nsc-lightbox {
         position: fixed; inset: 0; z-index: 10000;
-        background: rgba(0, 0, 0, 0.82); backdrop-filter: blur(8px);
+        background: rgba(12, 14, 18, 0.86); backdrop-filter: blur(14px);
         display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
       }
       #nsc-lightbox.is-open { display: flex; }
-      #nsc-lightbox img {
-        max-width: 92vw; max-height: 84vh; object-fit: contain;
-        border-radius: 12px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55); cursor: zoom-out;
+      .nsc-lightbox-stage {
+        position: relative; display: flex; align-items: center; justify-content: center;
+        max-width: 92vw; max-height: 82vh;
       }
-      .nsc-lightbox-bar { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
+      #nsc-lightbox img {
+        max-width: 90vw; max-height: 82vh; object-fit: contain;
+        border-radius: 12px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
+        transition: transform 0.18s ease;
+      }
+      #nsc-lightbox img.is-zoomed { transform: scale(1.65); cursor: zoom-out; }
+      .nsc-lb-nav {
+        position: fixed; top: 50%; transform: translateY(-50%);
+        width: 42px; height: 42px; border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.12);
+        color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: background 0.14s ease;
+      }
+      .nsc-lb-nav:hover { background: rgba(255,255,255,0.26); }
+      .nsc-lb-nav.prev { left: 22px; }
+      .nsc-lb-nav.next { right: 22px; }
+      .nsc-lb-nav:disabled { opacity: 0.25; cursor: default; }
+      .nsc-lightbox-bar { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .nsc-lightbox-btn {
-        padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25);
+        padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.22);
         background: rgba(255,255,255,0.12); color: #fff !important; font-size: 12px;
         text-decoration: none !important; cursor: pointer;
       }
+      .nsc-lightbox-btn:hover { background: rgba(255,255,255,0.22); }
+      .nsc-lightbox-count { font-size: 12px; color: rgba(255,255,255,0.78); font-weight: 600; padding: 0 4px; }
 
       #nsc-profile-backdrop {
         position: fixed; inset: 0; z-index: 9000;
@@ -1834,15 +1923,44 @@
     const lightbox = document.createElement("div");
     lightbox.id = "nsc-lightbox";
     lightbox.innerHTML = `
-      <img id="nsc-lightbox-img" src="" alt="原图" />
+      <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
+      <div class="nsc-lightbox-stage">
+        <img id="nsc-lightbox-img" src="" alt="原图" />
+      </div>
+      <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       <div class="nsc-lightbox-bar">
+        <span id="nsc-lb-count" class="nsc-lightbox-count"></span>
+        <button type="button" id="nsc-lb-copy" class="nsc-lightbox-btn">复制链接</button>
         <a id="nsc-lightbox-raw" class="nsc-lightbox-btn" href="" target="_blank" rel="noopener noreferrer">新窗口打开原图</a>
         <button type="button" id="nsc-lightbox-close" class="nsc-lightbox-btn">关闭 (Esc)</button>
       </div>
     `;
     lightbox.addEventListener("click", (e) => {
-      if (e.target === lightbox || e.target.id === "nsc-lightbox-img" || e.target.id === "nsc-lightbox-close") {
+      if (e.target === lightbox || e.target.id === "nsc-lightbox-close") {
         lightbox.classList.remove("is-open");
+      }
+    });
+    const lbImg = lightbox.querySelector("#nsc-lightbox-img");
+    lbImg.addEventListener("click", (e) => {
+      e.stopPropagation();
+      lbImg.classList.toggle("is-zoomed");
+    });
+    lightbox.querySelector("#nsc-lb-prev").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(-1);
+    });
+    lightbox.querySelector("#nsc-lb-next").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(1);
+    });
+    lightbox.querySelector("#nsc-lb-copy").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const src = lbImg.getAttribute("src") || "";
+      if (src && navigator.clipboard) {
+        navigator.clipboard.writeText(src).then(() => {
+          e.target.textContent = "已复制";
+          setTimeout(() => { e.target.textContent = "复制链接"; }, 1200);
+        }).catch(() => {});
       }
     });
     document.addEventListener("keydown", (e) => {
@@ -1851,6 +1969,9 @@
         backdrop.classList.remove("is-open");
         npBackdrop.classList.remove("is-open");
         if (niBackdrop) niBackdrop.classList.remove("is-open");
+      } else if (lightbox.classList.contains("is-open")) {
+        if (e.key === "ArrowLeft") stepLightbox(-1);
+        else if (e.key === "ArrowRight") stepLightbox(1);
       }
     });
     document.body.appendChild(lightbox);
@@ -2039,6 +2160,13 @@
           renderRightBody();
         }
       });
+    });
+
+    const topicScroll = shell.querySelector("#nsc-topic-scroll");
+    topicScroll.addEventListener("scroll", () => {
+      if (topicScroll.scrollHeight - topicScroll.scrollTop - topicScroll.clientHeight < 240) {
+        tryAutoLoadNextTopicPage();
+      }
     });
 
     const msgsEl = shell.querySelector("#nsc-chat-messages");
@@ -2396,18 +2524,46 @@
     if (dock) NodeImage.bindPasteAndDrop(dock, "chat", "#nsc-composer-status");
   }
 
-  function openLightbox(src) {
+  let _lbGallery = [];
+  let _lbIndex = 0;
+
+  function showLightboxAt(idx) {
     const lb = document.getElementById("nsc-lightbox");
     const img = document.getElementById("nsc-lightbox-img");
     const raw = document.getElementById("nsc-lightbox-raw");
-    if (!lb || !img || !raw) return;
+    const cnt = document.getElementById("nsc-lb-count");
+    const prevBtn = document.getElementById("nsc-lb-prev");
+    const nextBtn = document.getElementById("nsc-lb-next");
+    if (!lb || !img || !raw || _lbGallery.length === 0) return;
+    _lbIndex = Math.max(0, Math.min(idx, _lbGallery.length - 1));
+    const src = _lbGallery[_lbIndex];
+    img.classList.remove("is-zoomed");
     img.src = src;
     raw.href = src;
+    if (cnt) cnt.textContent = _lbGallery.length > 1 ? `${_lbIndex + 1} / ${_lbGallery.length}` : "";
+    if (prevBtn) prevBtn.disabled = _lbGallery.length <= 1 || _lbIndex <= 0;
+    if (nextBtn) nextBtn.disabled = _lbGallery.length <= 1 || _lbIndex >= _lbGallery.length - 1;
     lb.classList.add("is-open");
+  }
+
+  function stepLightbox(delta) {
+    if (_lbGallery.length <= 1) return;
+    const next = _lbIndex + delta;
+    if (next >= 0 && next < _lbGallery.length) showLightboxAt(next);
+  }
+
+  function openLightbox(src) {
+    const imgs = Array.from(document.querySelectorAll("#nsc-chat-messages img.nsc-zoomable-img")).map(
+      (el) => el.currentSrc || el.getAttribute("src") || ""
+    ).filter(Boolean);
+    _lbGallery = imgs.length > 0 ? Array.from(new Set(imgs)) : [src];
+    const idx = _lbGallery.indexOf(src);
+    showLightboxAt(idx >= 0 ? idx : 0);
   }
 
   function processBubbleImages(containerEl) {
     if (!containerEl) return;
+    const zoomImgs = [];
     for (const img of containerEl.querySelectorAll("img")) {
       const src = img.getAttribute("src") || "";
       if (
@@ -2420,12 +2576,49 @@
         continue;
       }
       img.classList.add("nsc-zoomable-img");
-      img.title = "点击查看大图";
+      img.title = "点击查看大图（支持左右键翻页）";
       img.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         openLightbox(img.currentSrc || src);
       });
+      zoomImgs.push(img);
+    }
+
+    // 同一段落或连续纯图片段落 >= 2 张时自动组合为整齐画廊网格
+    if (zoomImgs.length >= 2) {
+      const isPureImgP = (el) => {
+        if (!el || el.tagName !== "P") return false;
+        const imgs = el.querySelectorAll("img.nsc-zoomable-img");
+        return imgs.length > 0 && el.textContent.trim() === "";
+      };
+      for (const p of Array.from(containerEl.querySelectorAll("p"))) {
+        const imgs = p.querySelectorAll("img.nsc-zoomable-img");
+        if (imgs.length >= 2 && p.textContent.trim() === "") {
+          p.classList.add("nsc-img-grid");
+        }
+      }
+      let run = [];
+      const flushRun = () => {
+        if (run.length >= 2) {
+          const grid = document.createElement("div");
+          grid.className = "nsc-img-grid";
+          run[0].parentNode.insertBefore(grid, run[0]);
+          for (const p of run) {
+            for (const im of p.querySelectorAll("img.nsc-zoomable-img")) grid.appendChild(im);
+            p.remove();
+          }
+        }
+        run = [];
+      };
+      for (const child of Array.from(containerEl.children)) {
+        if (isPureImgP(child) && !child.classList.contains("nsc-img-grid")) {
+          run.push(child);
+        } else {
+          flushRun();
+        }
+      }
+      flushRun();
     }
   }
 
@@ -3239,12 +3432,16 @@
     const ch = CHANNELS.find((c) => c.id === channelId);
     if (!ch || ch.path.startsWith("__")) return;
 
-    const cur = state.channelData[channelId] || { items: [], page: 0, loading: false, error: null };
+    const cur = state.channelData[channelId] || { items: [], page: 0, loading: false, error: null, noMore: false };
     if (cur.loading) return;
     cur.loading = true;
     cur.error = null;
+    if (reset || page === 1) cur.noMore = false;
     state.channelData[channelId] = cur;
     if (!silent && state.activeChannel === channelId) renderTopicList();
+
+    const topicScroll = document.getElementById("nsc-topic-scroll");
+    const prevTop = topicScroll && page > 1 ? topicScroll.scrollTop : 0;
 
     try {
       const base = ch.path === "/" ? "" : ch.path;
@@ -3254,13 +3451,19 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
       const parsed = parsePostListFromDoc(doc);
+      if (parsed.length === 0) cur.noMore = true;
       if (reset || page === 1) {
         cur.items = parsed;
       } else {
         const seen = new Set(cur.items.map((x) => x.postId));
+        let added = 0;
         for (const it of parsed) {
-          if (!seen.has(it.postId)) cur.items.push(it);
+          if (!seen.has(it.postId)) {
+            cur.items.push(it);
+            added++;
+          }
         }
+        if (added === 0) cur.noMore = true;
       }
       cur.page = page;
     } catch (err) {
@@ -3268,8 +3471,21 @@
     } finally {
       cur.loading = false;
       renderLeftNav();
-      if (state.activeChannel === channelId) renderTopicList();
+      if (state.activeChannel === channelId) {
+        renderTopicList();
+        if (topicScroll && page > 1) topicScroll.scrollTop = prevTop;
+      }
     }
+  }
+
+  function tryAutoLoadNextTopicPage() {
+    const chId = state.activeChannel;
+    const ch = CHANNELS.find((c) => c.id === chId);
+    if (!ch || ch.path.startsWith("__")) return;
+    const data = state.channelData[chId];
+    if (!data || data.loading || data.noMore) return;
+    const nextPage = (data.page || 1) + 1;
+    fetchChannelData(chId, nextPage, false, false);
   }
 
   async function fetchHotPosts(tabType = state.hotTab) {
@@ -3626,12 +3842,22 @@
     });
 
     if (state.activeChannel !== "history") {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "nsc-load-more-btn";
-      more.textContent = isLoading ? "加载中..." : `加载第 ${page + 1} 页`;
-      more.addEventListener("click", () => fetchChannelData(state.activeChannel, page + 1, false, false));
-      scrollEl.appendChild(more);
+      const chData = state.channelData[state.activeChannel];
+      const wf = document.createElement("div");
+      wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:8px 4px;";
+      if (chData && chData.noMore) {
+        wf.textContent = "已加载全部帖子";
+      } else if (isLoading) {
+        wf.textContent = `正在瀑布流加载第 ${page + 1} 页...`;
+      } else {
+        wf.textContent = `下滑自动加载第 ${page + 1} 页`;
+      }
+      scrollEl.appendChild(wf);
+
+      // 搜索过滤结果较少时自动向下瀑布流预拉最多至第 4 页
+      if (kw && items.length < 8 && chData && !chData.loading && !chData.noMore && page < 4) {
+        setTimeout(() => tryAutoLoadNextTopicPage(), 80);
+      }
     }
   }
 
@@ -4277,7 +4503,7 @@
     btnLike.type = "button";
     btnLike.className = "nsc-hb-btn";
     btnLike.title = "点赞";
-    btnLike.innerHTML = `👍${obj.likes > 0 ? `<span class="nsc-hb-cnt">${obj.likes}</span>` : ""}`;
+    btnLike.textContent = "👍";
     btnLike.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "点赞", isNativePage, reactionsEl, bar);
@@ -4287,7 +4513,7 @@
     btnLeg.type = "button";
     btnLeg.className = "nsc-hb-btn";
     btnLeg.title = "加鸡腿";
-    btnLeg.innerHTML = `🍗${obj.legs > 0 ? `<span class="nsc-hb-cnt">${obj.legs}</span>` : ""}`;
+    btnLeg.textContent = "🍗";
     btnLeg.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl, bar);
@@ -4384,8 +4610,8 @@
     renderReactionPills(reactionsEl, obj, isNativePage);
 
     const hoverBar = buildHoverBar(obj, isNativePage, reactionsEl, false);
+    meta.appendChild(hoverBar);
     bubbleRow.appendChild(bubble);
-    bubbleRow.appendChild(hoverBar);
 
     mainCol.appendChild(meta);
     mainCol.appendChild(bubbleRow);
@@ -4448,8 +4674,8 @@
         const chReactions = ti.querySelector(".nsc-reactions");
         renderReactionPills(chReactions, ch, isNativePage);
         const chBar = buildHoverBar(ch, isNativePage, chReactions, true);
-        chBar.style.alignSelf = "flex-start";
-        ti.appendChild(chBar);
+        const chMeta = ti.querySelector(".nsc-thread-meta");
+        if (chMeta) chMeta.appendChild(chBar);
         threadWrap.appendChild(ti);
       }
 
@@ -4464,11 +4690,6 @@
 
   async function triggerReplyOrVote(obj, actionTitle, isNativePage, reactionsEl, hoverBar) {
     const syncBarCnt = () => {
-      if (hoverBar) {
-        const btns = hoverBar.querySelectorAll(".nsc-hb-btn");
-        if (btns[0]) btns[0].innerHTML = `👍${obj.likes > 0 ? `<span class="nsc-hb-cnt">${obj.likes}</span>` : ""}`;
-        if (btns[1]) btns[1].innerHTML = `🍗${obj.legs > 0 ? `<span class="nsc-hb-cnt">${obj.legs}</span>` : ""}`;
-      }
       if (reactionsEl) renderReactionPills(reactionsEl, obj, isNativePage);
     };
 

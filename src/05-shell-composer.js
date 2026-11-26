@@ -117,15 +117,44 @@
     const lightbox = document.createElement("div");
     lightbox.id = "nsc-lightbox";
     lightbox.innerHTML = `
-      <img id="nsc-lightbox-img" src="" alt="原图" />
+      <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
+      <div class="nsc-lightbox-stage">
+        <img id="nsc-lightbox-img" src="" alt="原图" />
+      </div>
+      <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       <div class="nsc-lightbox-bar">
+        <span id="nsc-lb-count" class="nsc-lightbox-count"></span>
+        <button type="button" id="nsc-lb-copy" class="nsc-lightbox-btn">复制链接</button>
         <a id="nsc-lightbox-raw" class="nsc-lightbox-btn" href="" target="_blank" rel="noopener noreferrer">新窗口打开原图</a>
         <button type="button" id="nsc-lightbox-close" class="nsc-lightbox-btn">关闭 (Esc)</button>
       </div>
     `;
     lightbox.addEventListener("click", (e) => {
-      if (e.target === lightbox || e.target.id === "nsc-lightbox-img" || e.target.id === "nsc-lightbox-close") {
+      if (e.target === lightbox || e.target.id === "nsc-lightbox-close") {
         lightbox.classList.remove("is-open");
+      }
+    });
+    const lbImg = lightbox.querySelector("#nsc-lightbox-img");
+    lbImg.addEventListener("click", (e) => {
+      e.stopPropagation();
+      lbImg.classList.toggle("is-zoomed");
+    });
+    lightbox.querySelector("#nsc-lb-prev").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(-1);
+    });
+    lightbox.querySelector("#nsc-lb-next").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(1);
+    });
+    lightbox.querySelector("#nsc-lb-copy").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const src = lbImg.getAttribute("src") || "";
+      if (src && navigator.clipboard) {
+        navigator.clipboard.writeText(src).then(() => {
+          e.target.textContent = "已复制";
+          setTimeout(() => { e.target.textContent = "复制链接"; }, 1200);
+        }).catch(() => {});
       }
     });
     document.addEventListener("keydown", (e) => {
@@ -134,6 +163,9 @@
         backdrop.classList.remove("is-open");
         npBackdrop.classList.remove("is-open");
         if (niBackdrop) niBackdrop.classList.remove("is-open");
+      } else if (lightbox.classList.contains("is-open")) {
+        if (e.key === "ArrowLeft") stepLightbox(-1);
+        else if (e.key === "ArrowRight") stepLightbox(1);
       }
     });
     document.body.appendChild(lightbox);
@@ -322,6 +354,13 @@
           renderRightBody();
         }
       });
+    });
+
+    const topicScroll = shell.querySelector("#nsc-topic-scroll");
+    topicScroll.addEventListener("scroll", () => {
+      if (topicScroll.scrollHeight - topicScroll.scrollTop - topicScroll.clientHeight < 240) {
+        tryAutoLoadNextTopicPage();
+      }
     });
 
     const msgsEl = shell.querySelector("#nsc-chat-messages");
@@ -679,18 +718,46 @@
     if (dock) NodeImage.bindPasteAndDrop(dock, "chat", "#nsc-composer-status");
   }
 
-  function openLightbox(src) {
+  let _lbGallery = [];
+  let _lbIndex = 0;
+
+  function showLightboxAt(idx) {
     const lb = document.getElementById("nsc-lightbox");
     const img = document.getElementById("nsc-lightbox-img");
     const raw = document.getElementById("nsc-lightbox-raw");
-    if (!lb || !img || !raw) return;
+    const cnt = document.getElementById("nsc-lb-count");
+    const prevBtn = document.getElementById("nsc-lb-prev");
+    const nextBtn = document.getElementById("nsc-lb-next");
+    if (!lb || !img || !raw || _lbGallery.length === 0) return;
+    _lbIndex = Math.max(0, Math.min(idx, _lbGallery.length - 1));
+    const src = _lbGallery[_lbIndex];
+    img.classList.remove("is-zoomed");
     img.src = src;
     raw.href = src;
+    if (cnt) cnt.textContent = _lbGallery.length > 1 ? `${_lbIndex + 1} / ${_lbGallery.length}` : "";
+    if (prevBtn) prevBtn.disabled = _lbGallery.length <= 1 || _lbIndex <= 0;
+    if (nextBtn) nextBtn.disabled = _lbGallery.length <= 1 || _lbIndex >= _lbGallery.length - 1;
     lb.classList.add("is-open");
+  }
+
+  function stepLightbox(delta) {
+    if (_lbGallery.length <= 1) return;
+    const next = _lbIndex + delta;
+    if (next >= 0 && next < _lbGallery.length) showLightboxAt(next);
+  }
+
+  function openLightbox(src) {
+    const imgs = Array.from(document.querySelectorAll("#nsc-chat-messages img.nsc-zoomable-img")).map(
+      (el) => el.currentSrc || el.getAttribute("src") || ""
+    ).filter(Boolean);
+    _lbGallery = imgs.length > 0 ? Array.from(new Set(imgs)) : [src];
+    const idx = _lbGallery.indexOf(src);
+    showLightboxAt(idx >= 0 ? idx : 0);
   }
 
   function processBubbleImages(containerEl) {
     if (!containerEl) return;
+    const zoomImgs = [];
     for (const img of containerEl.querySelectorAll("img")) {
       const src = img.getAttribute("src") || "";
       if (
@@ -703,12 +770,49 @@
         continue;
       }
       img.classList.add("nsc-zoomable-img");
-      img.title = "点击查看大图";
+      img.title = "点击查看大图（支持左右键翻页）";
       img.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         openLightbox(img.currentSrc || src);
       });
+      zoomImgs.push(img);
+    }
+
+    // 同一段落或连续纯图片段落 >= 2 张时自动组合为整齐画廊网格
+    if (zoomImgs.length >= 2) {
+      const isPureImgP = (el) => {
+        if (!el || el.tagName !== "P") return false;
+        const imgs = el.querySelectorAll("img.nsc-zoomable-img");
+        return imgs.length > 0 && el.textContent.trim() === "";
+      };
+      for (const p of Array.from(containerEl.querySelectorAll("p"))) {
+        const imgs = p.querySelectorAll("img.nsc-zoomable-img");
+        if (imgs.length >= 2 && p.textContent.trim() === "") {
+          p.classList.add("nsc-img-grid");
+        }
+      }
+      let run = [];
+      const flushRun = () => {
+        if (run.length >= 2) {
+          const grid = document.createElement("div");
+          grid.className = "nsc-img-grid";
+          run[0].parentNode.insertBefore(grid, run[0]);
+          for (const p of run) {
+            for (const im of p.querySelectorAll("img.nsc-zoomable-img")) grid.appendChild(im);
+            p.remove();
+          }
+        }
+        run = [];
+      };
+      for (const child of Array.from(containerEl.children)) {
+        if (isPureImgP(child) && !child.classList.contains("nsc-img-grid")) {
+          run.push(child);
+        } else {
+          flushRun();
+        }
+      }
+      flushRun();
     }
   }
 
