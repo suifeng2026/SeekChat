@@ -630,14 +630,45 @@
       .nsc-qq-info { flex: 1; min-width: 0; }
       .nsc-qq-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .nsc-qq-sub { font-size: 10.5px; color: var(--nsc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .nsc-eye-btn {
+      .nsc-eye-btn,
+      .nsc-icon-btn {
         width: 24px; height: 24px; padding: 0; border-radius: 6px; border: 1px solid var(--nsc-border);
         background: var(--nsc-bg-card); color: var(--nsc-muted); cursor: pointer;
         display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px;
+        transition: all 0.12s ease;
       }
-      .nsc-eye-btn svg { width: 13px; height: 13px; }
-      .nsc-eye-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); }
+      .nsc-eye-btn svg,
+      .nsc-icon-btn svg { width: 13px; height: 13px; }
+      .nsc-eye-btn:hover,
+      .nsc-icon-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-icon-btn.danger:hover { color: #ff3b30; border-color: rgba(255, 59, 48, 0.45); background: rgba(255, 59, 48, 0.10); }
       .nsc-eye-btn.is-loading { opacity: 0.5; cursor: wait; }
+
+      .nsc-pm-mode-btn {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+      }
+      .nsc-pm-mode-btn.is-active { background: var(--nsc-bg-card); color: var(--nsc-accent); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+      .nsc-pm-preview-pane {
+        display: none; min-height: 54px; max-height: 150px; overflow-y: auto;
+        padding: 8px 12px; font-size: 13px; line-height: 1.55; color: var(--nsc-text); word-break: break-word;
+      }
+      .nsc-pm-preview-pane.is-open { display: block; }
+      .nsc-pm-preview-pane img { max-width: 100%; max-height: 120px; border-radius: 8px; object-fit: contain; display: block; margin: 4px 0; }
+      .nsc-pm-preview-pane pre { padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.06); overflow-x: auto; }
+      .nsc-pm-preview-pane blockquote { margin: 4px 0; padding: 4px 10px; border-left: 3px solid var(--nsc-accent); background: var(--nsc-quote-bg); border-radius: 4px; }
+      .nsc-pm-emoji-pop {
+        position: absolute; bottom: calc(100% + 4px); left: 10px; z-index: 260;
+        display: none; flex-wrap: wrap; gap: 4px; width: min(320px, 90%);
+        padding: 8px; border-radius: 12px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-card); box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+      }
+      .nsc-pm-emoji-pop.is-open { display: flex; }
+      .nsc-pm-emoji-item {
+        width: 28px; height: 28px; border: none; border-radius: 7px; background: transparent;
+        font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      }
+      .nsc-pm-emoji-item:hover { background: var(--nsc-accent-soft); }
       .nsc-last-speak-box {
         margin-left: 39px; padding: 4px 8px; border-radius: 7px;
         background: var(--nsc-accent-soft); font-size: 11px; color: var(--nsc-text);

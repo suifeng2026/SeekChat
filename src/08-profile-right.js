@@ -407,27 +407,71 @@
     }
   }
 
+  async function runBatchLastSpeakQuery(items) {
+    if (state.batchQuery.running) {
+      state.batchQuery.stopRequested = true;
+      return;
+    }
+    const targets = (items || []).filter((u) => {
+      if (!u.uid) return false;
+      const c = state.lastSpeakCache[u.uid];
+      return !(c && Date.now() - c.ts < 30 * 60 * 1000);
+    });
+    if (targets.length === 0) {
+      renderRightBody();
+      return;
+    }
+    state.batchQuery = { running: true, done: 0, total: targets.length, stopRequested: false };
+    renderRightBody();
+
+    for (const u of targets) {
+      if (state.batchQuery.stopRequested) break;
+      await fetchUserLastSpeak(u.uid);
+      state.batchQuery.done += 1;
+      renderRightBody();
+      if (!state.batchQuery.stopRequested && state.batchQuery.done < state.batchQuery.total) {
+        await new Promise((r) => setTimeout(r, 260));
+      }
+    }
+    state.batchQuery.running = false;
+    state.batchQuery.stopRequested = false;
+    renderRightBody();
+  }
+
   function renderUserListPane(container, listItems, storeObj, typeLabel, onRemove) {
     const toolbar = document.createElement("div");
-    toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:4px;";
+    toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:5px;";
     const sortBtn = document.createElement("button");
     sortBtn.type = "button";
     sortBtn.className = "nsc-mini-btn" + (storeObj.sortByActive ? " is-active" : "");
-    sortBtn.textContent = "按最后发言排序";
+    sortBtn.style.flex = "1";
+    sortBtn.title = "按最后发言时间排序";
+    sortBtn.textContent = "排序";
     sortBtn.addEventListener("click", () => {
       storeObj.sortByActive = !storeObj.sortByActive;
       renderRightBody();
     });
 
+    const batchBtn = document.createElement("button");
+    batchBtn.type = "button";
+    batchBtn.className = "nsc-mini-btn" + (state.batchQuery.running ? " is-active" : "");
+    batchBtn.style.flex = "1";
+    batchBtn.title = state.batchQuery.running ? "点击停止批量查询" : "一键查询当前列表全部用户的最后发言时间";
+    batchBtn.textContent = state.batchQuery.running ? `${state.batchQuery.done}/${state.batchQuery.total}` : "查询";
+    batchBtn.addEventListener("click", () => runBatchLastSpeakQuery(listItems));
+
     const refBtn = document.createElement("button");
     refBtn.type = "button";
     refBtn.className = "nsc-mini-btn";
-    refBtn.textContent = storeObj.loading ? "同步中..." : `刷新${typeLabel}`;
+    refBtn.style.flex = "1";
+    refBtn.title = `刷新${typeLabel}列表`;
+    refBtn.textContent = storeObj.loading ? "同步" : "刷新";
     refBtn.addEventListener("click", () => {
       fetchFansOrFollow(typeLabel === "好友" ? "follow" : "fans");
     });
 
     toolbar.appendChild(sortBtn);
+    toolbar.appendChild(batchBtn);
     toolbar.appendChild(refBtn);
     container.appendChild(toolbar);
 
@@ -467,9 +511,9 @@
             <div class="nsc-qq-name"></div>
             <div class="nsc-qq-sub">${cachedSpeak ? `最后发言: ${cachedSpeak.timeStr}` : "点右侧眼睛查最后发言"}</div>
           </div>
-          <button type="button" class="nsc-eye-btn" title="点击查询最后发言时间">${ICONS.eye}</button>
-          <button type="button" class="nsc-mini-btn nsc-u-pm">私信</button>
-          <button type="button" class="nsc-mini-btn nsc-u-rm">移除</button>
+          <button type="button" class="nsc-eye-btn" title="查询最后发言时间">${ICONS.eye}</button>
+          <button type="button" class="nsc-icon-btn nsc-u-pm" title="发送私信">${ICONS.pm}</button>
+          <button type="button" class="nsc-icon-btn danger nsc-u-rm" title="移除">${ICONS.trash}</button>
         </div>
         ${cachedSpeak && cachedSpeak.title ? `<div class="nsc-last-speak-box" title="点击在聊天窗口打开该帖子"><div class="nsc-last-speak-title">${cachedSpeak.title}</div></div>` : ""}
       `;

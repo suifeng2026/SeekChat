@@ -573,15 +573,29 @@
     return tpl.innerHTML.trim();
   }
 
+  let _nscMdParser = null;
   function renderSimpleMarkdown(md) {
     if (!md) return "";
-    let s = String(md)
+    const src = String(md);
+    try {
+      const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+      const mdCtor = pageWin.markdownit || window.markdownit;
+      if (typeof mdCtor === "function") {
+        if (!_nscMdParser) _nscMdParser = mdCtor({ html: false, linkify: true, breaks: true });
+        return sanitizeSignatureHtml(_nscMdParser.render(src));
+      }
+    } catch (_) {}
+    let s = src
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
+    s = s.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code.replace(/^\n+|\n+$/g, "")}</code></pre>`);
+    s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
     s = s.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img src="$2" alt="$1" loading="lazy" />');
     s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+    s = s.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
     s = s.replace(/\n/g, "<br>");
     return s;
   }

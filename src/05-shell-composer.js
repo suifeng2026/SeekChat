@@ -437,20 +437,106 @@
     const box = document.createElement("div");
     box.className = "nsc-composer-box";
     box.id = "nsc-pm-composer";
+    box.style.position = "relative";
+    const emojis = ["🤝", "👍", "🍗", "✅", "❌", "👌", "🙏", "💰", "📦", "🔥", "😂", "😅", "🥳", "❤️", "🎉", "👀", "⚡", "🛡️"];
     box.innerHTML = `
-      <div class="nsc-composer-header">
-        <span id="nsc-pm-target-lbl" style="font-size:12px;font-weight:600;color:var(--nsc-text);">发送私信</span>
-        <a id="nsc-pm-native-link" class="nsc-nodeimage-btn" href="/notification#/message" target="_blank" rel="noopener noreferrer">原版私信 ↗</a>
+      <div class="nsc-composer-header" style="justify-content:space-between;">
+        <div style="display:inline-flex;align-items:center;gap:4px;">
+          <button type="button" class="nsc-pm-mode-btn is-active" data-pmmode="write">撰写</button>
+          <button type="button" class="nsc-pm-mode-btn" data-pmmode="preview">预览</button>
+          <span id="nsc-pm-target-lbl" style="font-size:11.5px;font-weight:600;color:var(--nsc-muted);margin-left:6px;">发送私信</span>
+        </div>
+        <div style="display:inline-flex;align-items:center;gap:8px;">
+          <button type="button" class="nsc-mini-btn" id="nsc-pm-emoji-btn" style="padding:1px 7px;">😊 表情</button>
+          <a id="nsc-pm-native-link" class="nsc-nodeimage-btn" href="/notification#/message" target="_blank" rel="noopener noreferrer" style="border:none;background:transparent;">原版 ↗</a>
+        </div>
       </div>
-      <textarea class="nsc-fallback-textarea" id="nsc-pm-ta" placeholder="输入私信内容，Enter 换行 · Ctrl + Enter 发送"></textarea>
+      <div class="nsc-pm-emoji-pop" id="nsc-pm-emoji-pop">
+        ${emojis.map((em) => `<button type="button" class="nsc-pm-emoji-item">${em}</button>`).join("")}
+      </div>
+      <div class="nsc-mde-toolbar" id="nsc-pm-toolbar">
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="- " title="列表">•</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片链接">🖼</button>
+      </div>
+      <textarea class="nsc-fallback-textarea" id="nsc-pm-ta" placeholder="支持完整 Markdown · 截图 Ctrl+V 直接上传图床 · Ctrl+Enter 发送"></textarea>
+      <div class="nsc-pm-preview-pane" id="nsc-pm-preview-pane"></div>
       <div class="nsc-composer-footer">
-        <span id="nsc-pm-status" style="font-size:11px;color:var(--nsc-muted);">Ctrl + Enter 快捷发送私信</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="nsc-nodeimage-btn" id="nsc-pm-ni-btn" title="NodeImage 图床上传/图库"><span class="nsc-ni-dot"></span>图床</button>
+          <span id="nsc-pm-status" style="font-size:11px;color:var(--nsc-muted);">支持 Markdown 与图床传图 · Ctrl+Enter 发送</span>
+        </div>
         <button type="button" class="nsc-send-btn" id="nsc-pm-send">发送私信</button>
       </div>
     `;
     const ta = box.querySelector("#nsc-pm-ta");
+    const previewPane = box.querySelector("#nsc-pm-preview-pane");
+    const emojiPop = box.querySelector("#nsc-pm-emoji-pop");
+    const toolbar = box.querySelector("#nsc-pm-toolbar");
+
     NodeImage.bindPasteAndDrop(ta, "pm", "#nsc-pm-status");
-    const doSend = () => sendPmMessage();
+    box.querySelector("#nsc-pm-ni-btn").addEventListener("click", () => openNodeImageModal("pm"));
+    NodeImage.syncDots();
+
+    box.querySelectorAll("[data-pmmode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const isPrev = btn.dataset.pmmode === "preview";
+        box.querySelectorAll("[data-pmmode]").forEach((b) => b.classList.toggle("is-active", b === btn));
+        if (isPrev) {
+          previewPane.innerHTML = renderSimpleMarkdown(ta.value.trim() || "*（暂无内容）*");
+          previewPane.classList.add("is-open");
+          ta.style.display = "none";
+          toolbar.style.display = "none";
+        } else {
+          previewPane.classList.remove("is-open");
+          ta.style.display = "block";
+          toolbar.style.display = "flex";
+          ta.focus();
+        }
+      });
+    });
+
+    box.querySelector("#nsc-pm-emoji-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      emojiPop.classList.toggle("is-open");
+    });
+    box.querySelectorAll(".nsc-pm-emoji-item").forEach((eb) => {
+      eb.addEventListener("click", () => {
+        const s = ta.selectionStart || 0;
+        const e = ta.selectionEnd || 0;
+        ta.setRangeText(eb.textContent, s, e, "end");
+        emojiPop.classList.remove("is-open");
+        ta.focus();
+      });
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#nsc-pm-composer")) emojiPop.classList.remove("is-open");
+    });
+
+    box.querySelectorAll("#nsc-pm-toolbar .nsc-mde-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const s = ta.selectionStart || 0;
+        const e = ta.selectionEnd || 0;
+        const sel = ta.value.slice(s, e);
+        let ins = "";
+        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
+        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
+        else if (b.dataset.tpl) ins = b.dataset.tpl;
+        ta.setRangeText(ins, s, e, "end");
+        ta.focus();
+      });
+    });
+
+    const doSend = () => {
+      box.querySelector('[data-pmmode="write"]').click();
+      sendPmMessage();
+    };
     box.querySelector("#nsc-pm-send").addEventListener("click", doSend);
     ta.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {

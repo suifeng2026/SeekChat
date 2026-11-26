@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.4.0
+// @version      7.5.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -91,6 +91,7 @@
     partner: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
     links: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
     bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
   };
 
   const CHANNELS = [
@@ -136,6 +137,7 @@
     hotError: null,
     followData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
     fansData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
+    batchQuery: { running: false, done: 0, total: 0, stopRequested: false },
     removedFans: new Set(),
     searchKeyword: "",
     prioritizeUnread: false,
@@ -1023,14 +1025,45 @@
       .nsc-qq-info { flex: 1; min-width: 0; }
       .nsc-qq-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .nsc-qq-sub { font-size: 10.5px; color: var(--nsc-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .nsc-eye-btn {
+      .nsc-eye-btn,
+      .nsc-icon-btn {
         width: 24px; height: 24px; padding: 0; border-radius: 6px; border: 1px solid var(--nsc-border);
         background: var(--nsc-bg-card); color: var(--nsc-muted); cursor: pointer;
         display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px;
+        transition: all 0.12s ease;
       }
-      .nsc-eye-btn svg { width: 13px; height: 13px; }
-      .nsc-eye-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); }
+      .nsc-eye-btn svg,
+      .nsc-icon-btn svg { width: 13px; height: 13px; }
+      .nsc-eye-btn:hover,
+      .nsc-icon-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-icon-btn.danger:hover { color: #ff3b30; border-color: rgba(255, 59, 48, 0.45); background: rgba(255, 59, 48, 0.10); }
       .nsc-eye-btn.is-loading { opacity: 0.5; cursor: wait; }
+
+      .nsc-pm-mode-btn {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+      }
+      .nsc-pm-mode-btn.is-active { background: var(--nsc-bg-card); color: var(--nsc-accent); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+      .nsc-pm-preview-pane {
+        display: none; min-height: 54px; max-height: 150px; overflow-y: auto;
+        padding: 8px 12px; font-size: 13px; line-height: 1.55; color: var(--nsc-text); word-break: break-word;
+      }
+      .nsc-pm-preview-pane.is-open { display: block; }
+      .nsc-pm-preview-pane img { max-width: 100%; max-height: 120px; border-radius: 8px; object-fit: contain; display: block; margin: 4px 0; }
+      .nsc-pm-preview-pane pre { padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.06); overflow-x: auto; }
+      .nsc-pm-preview-pane blockquote { margin: 4px 0; padding: 4px 10px; border-left: 3px solid var(--nsc-accent); background: var(--nsc-quote-bg); border-radius: 4px; }
+      .nsc-pm-emoji-pop {
+        position: absolute; bottom: calc(100% + 4px); left: 10px; z-index: 260;
+        display: none; flex-wrap: wrap; gap: 4px; width: min(320px, 90%);
+        padding: 8px; border-radius: 12px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-card); box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+      }
+      .nsc-pm-emoji-pop.is-open { display: flex; }
+      .nsc-pm-emoji-item {
+        width: 28px; height: 28px; border: none; border-radius: 7px; background: transparent;
+        font-size: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      }
+      .nsc-pm-emoji-item:hover { background: var(--nsc-accent-soft); }
       .nsc-last-speak-box {
         margin-left: 39px; padding: 4px 8px; border-radius: 7px;
         background: var(--nsc-accent-soft); font-size: 11px; color: var(--nsc-text);
@@ -2020,20 +2053,106 @@
     const box = document.createElement("div");
     box.className = "nsc-composer-box";
     box.id = "nsc-pm-composer";
+    box.style.position = "relative";
+    const emojis = ["🤝", "👍", "🍗", "✅", "❌", "👌", "🙏", "💰", "📦", "🔥", "😂", "😅", "🥳", "❤️", "🎉", "👀", "⚡", "🛡️"];
     box.innerHTML = `
-      <div class="nsc-composer-header">
-        <span id="nsc-pm-target-lbl" style="font-size:12px;font-weight:600;color:var(--nsc-text);">发送私信</span>
-        <a id="nsc-pm-native-link" class="nsc-nodeimage-btn" href="/notification#/message" target="_blank" rel="noopener noreferrer">原版私信 ↗</a>
+      <div class="nsc-composer-header" style="justify-content:space-between;">
+        <div style="display:inline-flex;align-items:center;gap:4px;">
+          <button type="button" class="nsc-pm-mode-btn is-active" data-pmmode="write">撰写</button>
+          <button type="button" class="nsc-pm-mode-btn" data-pmmode="preview">预览</button>
+          <span id="nsc-pm-target-lbl" style="font-size:11.5px;font-weight:600;color:var(--nsc-muted);margin-left:6px;">发送私信</span>
+        </div>
+        <div style="display:inline-flex;align-items:center;gap:8px;">
+          <button type="button" class="nsc-mini-btn" id="nsc-pm-emoji-btn" style="padding:1px 7px;">😊 表情</button>
+          <a id="nsc-pm-native-link" class="nsc-nodeimage-btn" href="/notification#/message" target="_blank" rel="noopener noreferrer" style="border:none;background:transparent;">原版 ↗</a>
+        </div>
       </div>
-      <textarea class="nsc-fallback-textarea" id="nsc-pm-ta" placeholder="输入私信内容，Enter 换行 · Ctrl + Enter 发送"></textarea>
+      <div class="nsc-pm-emoji-pop" id="nsc-pm-emoji-pop">
+        ${emojis.map((em) => `<button type="button" class="nsc-pm-emoji-item">${em}</button>`).join("")}
+      </div>
+      <div class="nsc-mde-toolbar" id="nsc-pm-toolbar">
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="- " title="列表">•</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片链接">🖼</button>
+      </div>
+      <textarea class="nsc-fallback-textarea" id="nsc-pm-ta" placeholder="支持完整 Markdown · 截图 Ctrl+V 直接上传图床 · Ctrl+Enter 发送"></textarea>
+      <div class="nsc-pm-preview-pane" id="nsc-pm-preview-pane"></div>
       <div class="nsc-composer-footer">
-        <span id="nsc-pm-status" style="font-size:11px;color:var(--nsc-muted);">Ctrl + Enter 快捷发送私信</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="nsc-nodeimage-btn" id="nsc-pm-ni-btn" title="NodeImage 图床上传/图库"><span class="nsc-ni-dot"></span>图床</button>
+          <span id="nsc-pm-status" style="font-size:11px;color:var(--nsc-muted);">支持 Markdown 与图床传图 · Ctrl+Enter 发送</span>
+        </div>
         <button type="button" class="nsc-send-btn" id="nsc-pm-send">发送私信</button>
       </div>
     `;
     const ta = box.querySelector("#nsc-pm-ta");
+    const previewPane = box.querySelector("#nsc-pm-preview-pane");
+    const emojiPop = box.querySelector("#nsc-pm-emoji-pop");
+    const toolbar = box.querySelector("#nsc-pm-toolbar");
+
     NodeImage.bindPasteAndDrop(ta, "pm", "#nsc-pm-status");
-    const doSend = () => sendPmMessage();
+    box.querySelector("#nsc-pm-ni-btn").addEventListener("click", () => openNodeImageModal("pm"));
+    NodeImage.syncDots();
+
+    box.querySelectorAll("[data-pmmode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const isPrev = btn.dataset.pmmode === "preview";
+        box.querySelectorAll("[data-pmmode]").forEach((b) => b.classList.toggle("is-active", b === btn));
+        if (isPrev) {
+          previewPane.innerHTML = renderSimpleMarkdown(ta.value.trim() || "*（暂无内容）*");
+          previewPane.classList.add("is-open");
+          ta.style.display = "none";
+          toolbar.style.display = "none";
+        } else {
+          previewPane.classList.remove("is-open");
+          ta.style.display = "block";
+          toolbar.style.display = "flex";
+          ta.focus();
+        }
+      });
+    });
+
+    box.querySelector("#nsc-pm-emoji-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      emojiPop.classList.toggle("is-open");
+    });
+    box.querySelectorAll(".nsc-pm-emoji-item").forEach((eb) => {
+      eb.addEventListener("click", () => {
+        const s = ta.selectionStart || 0;
+        const e = ta.selectionEnd || 0;
+        ta.setRangeText(eb.textContent, s, e, "end");
+        emojiPop.classList.remove("is-open");
+        ta.focus();
+      });
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#nsc-pm-composer")) emojiPop.classList.remove("is-open");
+    });
+
+    box.querySelectorAll("#nsc-pm-toolbar .nsc-mde-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const s = ta.selectionStart || 0;
+        const e = ta.selectionEnd || 0;
+        const sel = ta.value.slice(s, e);
+        let ins = "";
+        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
+        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
+        else if (b.dataset.tpl) ins = b.dataset.tpl;
+        ta.setRangeText(ins, s, e, "end");
+        ta.focus();
+      });
+    });
+
+    const doSend = () => {
+      box.querySelector('[data-pmmode="write"]').click();
+      sendPmMessage();
+    };
     box.querySelector("#nsc-pm-send").addEventListener("click", doSend);
     ta.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -3988,15 +4107,29 @@
     return tpl.innerHTML.trim();
   }
 
+  let _nscMdParser = null;
   function renderSimpleMarkdown(md) {
     if (!md) return "";
-    let s = String(md)
+    const src = String(md);
+    try {
+      const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+      const mdCtor = pageWin.markdownit || window.markdownit;
+      if (typeof mdCtor === "function") {
+        if (!_nscMdParser) _nscMdParser = mdCtor({ html: false, linkify: true, breaks: true });
+        return sanitizeSignatureHtml(_nscMdParser.render(src));
+      }
+    } catch (_) {}
+    let s = src
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
+    s = s.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code.replace(/^\n+|\n+$/g, "")}</code></pre>`);
+    s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
     s = s.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img src="$2" alt="$1" loading="lazy" />');
     s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+    s = s.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
     s = s.replace(/\n/g, "<br>");
     return s;
   }
@@ -4751,27 +4884,71 @@
     }
   }
 
+  async function runBatchLastSpeakQuery(items) {
+    if (state.batchQuery.running) {
+      state.batchQuery.stopRequested = true;
+      return;
+    }
+    const targets = (items || []).filter((u) => {
+      if (!u.uid) return false;
+      const c = state.lastSpeakCache[u.uid];
+      return !(c && Date.now() - c.ts < 30 * 60 * 1000);
+    });
+    if (targets.length === 0) {
+      renderRightBody();
+      return;
+    }
+    state.batchQuery = { running: true, done: 0, total: targets.length, stopRequested: false };
+    renderRightBody();
+
+    for (const u of targets) {
+      if (state.batchQuery.stopRequested) break;
+      await fetchUserLastSpeak(u.uid);
+      state.batchQuery.done += 1;
+      renderRightBody();
+      if (!state.batchQuery.stopRequested && state.batchQuery.done < state.batchQuery.total) {
+        await new Promise((r) => setTimeout(r, 260));
+      }
+    }
+    state.batchQuery.running = false;
+    state.batchQuery.stopRequested = false;
+    renderRightBody();
+  }
+
   function renderUserListPane(container, listItems, storeObj, typeLabel, onRemove) {
     const toolbar = document.createElement("div");
-    toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:4px;";
+    toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:5px;";
     const sortBtn = document.createElement("button");
     sortBtn.type = "button";
     sortBtn.className = "nsc-mini-btn" + (storeObj.sortByActive ? " is-active" : "");
-    sortBtn.textContent = "按最后发言排序";
+    sortBtn.style.flex = "1";
+    sortBtn.title = "按最后发言时间排序";
+    sortBtn.textContent = "排序";
     sortBtn.addEventListener("click", () => {
       storeObj.sortByActive = !storeObj.sortByActive;
       renderRightBody();
     });
 
+    const batchBtn = document.createElement("button");
+    batchBtn.type = "button";
+    batchBtn.className = "nsc-mini-btn" + (state.batchQuery.running ? " is-active" : "");
+    batchBtn.style.flex = "1";
+    batchBtn.title = state.batchQuery.running ? "点击停止批量查询" : "一键查询当前列表全部用户的最后发言时间";
+    batchBtn.textContent = state.batchQuery.running ? `${state.batchQuery.done}/${state.batchQuery.total}` : "查询";
+    batchBtn.addEventListener("click", () => runBatchLastSpeakQuery(listItems));
+
     const refBtn = document.createElement("button");
     refBtn.type = "button";
     refBtn.className = "nsc-mini-btn";
-    refBtn.textContent = storeObj.loading ? "同步中..." : `刷新${typeLabel}`;
+    refBtn.style.flex = "1";
+    refBtn.title = `刷新${typeLabel}列表`;
+    refBtn.textContent = storeObj.loading ? "同步" : "刷新";
     refBtn.addEventListener("click", () => {
       fetchFansOrFollow(typeLabel === "好友" ? "follow" : "fans");
     });
 
     toolbar.appendChild(sortBtn);
+    toolbar.appendChild(batchBtn);
     toolbar.appendChild(refBtn);
     container.appendChild(toolbar);
 
@@ -4811,9 +4988,9 @@
             <div class="nsc-qq-name"></div>
             <div class="nsc-qq-sub">${cachedSpeak ? `最后发言: ${cachedSpeak.timeStr}` : "点右侧眼睛查最后发言"}</div>
           </div>
-          <button type="button" class="nsc-eye-btn" title="点击查询最后发言时间">${ICONS.eye}</button>
-          <button type="button" class="nsc-mini-btn nsc-u-pm">私信</button>
-          <button type="button" class="nsc-mini-btn nsc-u-rm">移除</button>
+          <button type="button" class="nsc-eye-btn" title="查询最后发言时间">${ICONS.eye}</button>
+          <button type="button" class="nsc-icon-btn nsc-u-pm" title="发送私信">${ICONS.pm}</button>
+          <button type="button" class="nsc-icon-btn danger nsc-u-rm" title="移除">${ICONS.trash}</button>
         </div>
         ${cachedSpeak && cachedSpeak.title ? `<div class="nsc-last-speak-box" title="点击在聊天窗口打开该帖子"><div class="nsc-last-speak-title">${cachedSpeak.title}</div></div>` : ""}
       `;
