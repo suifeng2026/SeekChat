@@ -15,8 +15,8 @@
 // @connect      api.nodeimage.com
 // @connect      nodeimage.com
 // @connect      www.nodeimage.com
-// @updateURL    https://raw.githubusercontent.com/suifeng2026/nodeseek-chat-ui/main/dist/nodeseek-chat-ui.meta.js
-// @downloadURL  https://raw.githubusercontent.com/suifeng2026/nodeseek-chat-ui/main/dist/nodeseek-chat-ui.user.js
+// @updateURL    https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js
+// @downloadURL  https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.user.js
 // ==/UserScript==
 
 (function () {
