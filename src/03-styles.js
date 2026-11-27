@@ -689,6 +689,7 @@
         padding: 4px 6px 5px;
         flex: 0 0 auto;
         position: relative;
+        overflow-anchor: none;
       }
       .nsc-composer-box,
       .nsc-composer-dock .md-editor {
@@ -697,11 +698,16 @@
         background: var(--nsc-bg-card) !important;
         overflow: visible !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-        transition: none !important;
+        transition: border-color 0.16s ease, box-shadow 0.16s ease !important;
         margin: 0 !important;
         padding: 0 !important;
         width: 100% !important;
         box-sizing: border-box !important;
+      }
+      .nsc-composer-box:focus-within,
+      .nsc-composer-dock .md-editor:focus-within {
+        border-color: var(--nsc-accent) !important;
+        box-shadow: 0 0 0 2.5px var(--nsc-accent-soft) !important;
       }
       .nsc-composer-dock #editor-body { background: transparent !important; position: static !important; margin: 0 !important; padding: 0 !important; }
       .nsc-composer-dock #cm-editor-wrapper,

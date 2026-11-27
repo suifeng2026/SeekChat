@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.16.0
+// @version      7.16.1
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -1376,6 +1376,7 @@
         padding: 4px 6px 5px;
         flex: 0 0 auto;
         position: relative;
+        overflow-anchor: none;
       }
       .nsc-composer-box,
       .nsc-composer-dock .md-editor {
@@ -1384,11 +1385,16 @@
         background: var(--nsc-bg-card) !important;
         overflow: visible !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-        transition: none !important;
+        transition: border-color 0.16s ease, box-shadow 0.16s ease !important;
         margin: 0 !important;
         padding: 0 !important;
         width: 100% !important;
         box-sizing: border-box !important;
+      }
+      .nsc-composer-box:focus-within,
+      .nsc-composer-dock .md-editor:focus-within {
+        border-color: var(--nsc-accent) !important;
+        box-shadow: 0 0 0 2.5px var(--nsc-accent-soft) !important;
       }
       .nsc-composer-dock #editor-body { background: transparent !important; position: static !important; margin: 0 !important; padding: 0 !important; }
       .nsc-composer-dock #cm-editor-wrapper,
@@ -6663,7 +6669,21 @@
           (m) => (m.getAttribute("title") || "") === actionTitle || (m.textContent || "").includes(actionTitle)
         );
         if (target) {
+          const isQuoteOrReply = actionTitle === "引用" || actionTitle === "回复";
+          const msgsEl = document.getElementById("nsc-chat-messages");
+          const savedMsgScroll = msgsEl ? msgsEl.scrollTop : 0;
+          const dockEl = document.getElementById("nsc-composer-dock");
+          const origScrollIntoView = dockEl ? Element.prototype.scrollIntoView : null;
+          if (isQuoteOrReply && origScrollIntoView) {
+            Element.prototype.scrollIntoView = function () {
+              if (dockEl && dockEl.contains(this)) return;
+              return origScrollIntoView.apply(this, arguments);
+            };
+          }
           target.click();
+          if (isQuoteOrReply && origScrollIntoView) {
+            setTimeout(() => { Element.prototype.scrollIntoView = origScrollIntoView; }, 160);
+          }
           if (actionTitle === "点赞" || actionTitle === "加鸡腿" || actionTitle === "反对") {
             setTimeout(() => {
               const likeMenu = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"]');
@@ -6680,30 +6700,42 @@
               if (dislikeMenu && dislikeMenu.classList.contains("clicked")) obj.disliked = true;
               syncBarCnt();
             }, 350);
-          } else if (actionTitle === "引用" || actionTitle === "回复") {
-            setTimeout(() => {
+          } else if (isQuoteOrReply) {
+            if (msgsEl) msgsEl.scrollTop = savedMsgScroll;
+            requestAnimationFrame(() => {
+              if (msgsEl) msgsEl.scrollTop = savedMsgScroll;
               const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
               const cmEl =
                 (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
                 document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
               const cm = cmEl && (cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror));
               if (cm && typeof cm.getValue === "function") {
-                let val = cm.getValue();
-                if (actionTitle === "引用") {
-                  val = val.replace(/\n{2,}$/, "\n");
-                  if (!val.endsWith("\n")) val += "\n";
+                cm.operation(() => {
+                  const lastIdx = cm.lastLine();
+                  const tailStart = Math.max(0, lastIdx - 2);
+                  const tailText = cm.getRange({ line: tailStart, ch: 0 }, { line: lastIdx, ch: cm.getLine(lastIdx).length });
+                  const normalizedTail = actionTitle === "引用"
+                    ? tailText.replace(/\n{2,}$/, "\n")
+                    : tailText.replace(/[ \t]+$/, "");
+                  const finalTail = normalizedTail.endsWith("\n") ? normalizedTail : normalizedTail + "\n";
+                  if (tailText && finalTail !== tailText) {
+                    cm.replaceRange(finalTail, { line: tailStart, ch: 0 }, { line: lastIdx, ch: cm.getLine(lastIdx).length });
+                  }
+                  const endLine = cm.lastLine();
+                  cm.setCursor({ line: endLine, ch: cm.getLine(endLine).length });
+                  cm.scrollIntoView({ line: endLine, ch: 0 }, 8);
+                });
+                const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
+                if (inputField && typeof inputField.focus === "function") {
+                  inputField.focus({ preventScroll: true });
                 } else {
-                  val = val.replace(/[ \t]+$/, "");
-                  if (!val.endsWith("\n")) val += "\n";
+                  cm.focus();
                 }
-                cm.setValue(val);
-                cm.setCursor(cm.lineCount(), 0);
-                cm.focus();
                 return;
               }
               const ta = document.querySelector("#nsc-composer-body .CodeMirror textarea");
               if (ta) ta.focus({ preventScroll: true });
-            }, 70);
+            });
           }
           return;
         }

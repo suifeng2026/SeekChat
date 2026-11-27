@@ -1443,7 +1443,21 @@
           (m) => (m.getAttribute("title") || "") === actionTitle || (m.textContent || "").includes(actionTitle)
         );
         if (target) {
+          const isQuoteOrReply = actionTitle === "引用" || actionTitle === "回复";
+          const msgsEl = document.getElementById("nsc-chat-messages");
+          const savedMsgScroll = msgsEl ? msgsEl.scrollTop : 0;
+          const dockEl = document.getElementById("nsc-composer-dock");
+          const origScrollIntoView = dockEl ? Element.prototype.scrollIntoView : null;
+          if (isQuoteOrReply && origScrollIntoView) {
+            Element.prototype.scrollIntoView = function () {
+              if (dockEl && dockEl.contains(this)) return;
+              return origScrollIntoView.apply(this, arguments);
+            };
+          }
           target.click();
+          if (isQuoteOrReply && origScrollIntoView) {
+            setTimeout(() => { Element.prototype.scrollIntoView = origScrollIntoView; }, 160);
+          }
           if (actionTitle === "点赞" || actionTitle === "加鸡腿" || actionTitle === "反对") {
             setTimeout(() => {
               const likeMenu = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"]');
@@ -1460,30 +1474,42 @@
               if (dislikeMenu && dislikeMenu.classList.contains("clicked")) obj.disliked = true;
               syncBarCnt();
             }, 350);
-          } else if (actionTitle === "引用" || actionTitle === "回复") {
-            setTimeout(() => {
+          } else if (isQuoteOrReply) {
+            if (msgsEl) msgsEl.scrollTop = savedMsgScroll;
+            requestAnimationFrame(() => {
+              if (msgsEl) msgsEl.scrollTop = savedMsgScroll;
               const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
               const cmEl =
                 (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
                 document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
               const cm = cmEl && (cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror));
               if (cm && typeof cm.getValue === "function") {
-                let val = cm.getValue();
-                if (actionTitle === "引用") {
-                  val = val.replace(/\n{2,}$/, "\n");
-                  if (!val.endsWith("\n")) val += "\n";
+                cm.operation(() => {
+                  const lastIdx = cm.lastLine();
+                  const tailStart = Math.max(0, lastIdx - 2);
+                  const tailText = cm.getRange({ line: tailStart, ch: 0 }, { line: lastIdx, ch: cm.getLine(lastIdx).length });
+                  const normalizedTail = actionTitle === "引用"
+                    ? tailText.replace(/\n{2,}$/, "\n")
+                    : tailText.replace(/[ \t]+$/, "");
+                  const finalTail = normalizedTail.endsWith("\n") ? normalizedTail : normalizedTail + "\n";
+                  if (tailText && finalTail !== tailText) {
+                    cm.replaceRange(finalTail, { line: tailStart, ch: 0 }, { line: lastIdx, ch: cm.getLine(lastIdx).length });
+                  }
+                  const endLine = cm.lastLine();
+                  cm.setCursor({ line: endLine, ch: cm.getLine(endLine).length });
+                  cm.scrollIntoView({ line: endLine, ch: 0 }, 8);
+                });
+                const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
+                if (inputField && typeof inputField.focus === "function") {
+                  inputField.focus({ preventScroll: true });
                 } else {
-                  val = val.replace(/[ \t]+$/, "");
-                  if (!val.endsWith("\n")) val += "\n";
+                  cm.focus();
                 }
-                cm.setValue(val);
-                cm.setCursor(cm.lineCount(), 0);
-                cm.focus();
                 return;
               }
               const ta = document.querySelector("#nsc-composer-body .CodeMirror textarea");
               if (ta) ta.focus({ preventScroll: true });
-            }, 70);
+            });
           }
           return;
         }
