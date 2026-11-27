@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.31
+// @version      7.22.32
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -20,6 +20,7 @@
 // @connect      cdn.nodeimage.com
 // @connect      raw.githubusercontent.com
 // @connect      api.github.com
+// @connect      github.com
 // @connect      api.xxboxx.de
 // @connect      nodeseek-rulings.898252.xyz
 // @updateURL    https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js
@@ -341,7 +342,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.31",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.32",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -1077,6 +1078,15 @@
   }
 
   async function resolveLatestGithubSha(owner, repo, branch) {
+    try {
+      const refsText = await fetchRemoteMetaText(
+        `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}.git/info/refs?service=git-upload-pack`
+      );
+      const safeBranch = String(branch || "main").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const m = refsText.match(new RegExp(`([0-9a-f]{40})\\s+refs/heads/${safeBranch}(?:\\r|\\n|$)`, "i"));
+      if (m && m[1]) return m[1];
+    } catch (_) {}
+
     try {
       const apiText = await fetchRemoteMetaText(`https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`);
       const json = JSON.parse(apiText);
@@ -13155,13 +13165,15 @@
         `
         : "";
 
+      const srcLabel = rulingState.source === "rulings-web" ? "备用源 nodeseek-rulings" : rulingState.source === "xxboxx" ? "主源 api.xxboxx.de" : "";
       strip.innerHTML = `
         <div class="nsc-ruling-row">
           <div class="nsc-ruling-tags">
-            <span class="nsc-ruling-prefix">管理记录</span>
+            <span class="nsc-ruling-prefix" title="${escHtml(srcLabel || "管理记录")}">管理记录</span>
             ${tagsHtml}
           </div>
           <div class="nsc-ruling-ops">
+            ${rulingState.source === "rulings-web" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">备用源</span>` : ""}
             ${rulingState.error === "rate_limited" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">冷却 ${rulingState.retryAfter}s</span>` : ""}
             <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `明细 (${rows.length})`}</button>
             <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn">${rulingState.status === "loading" ? "..." : "刷新"}</button>

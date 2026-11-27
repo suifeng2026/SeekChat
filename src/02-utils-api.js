@@ -711,6 +711,15 @@
 
   async function resolveLatestGithubSha(owner, repo, branch) {
     try {
+      const refsText = await fetchRemoteMetaText(
+        `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}.git/info/refs?service=git-upload-pack`
+      );
+      const safeBranch = String(branch || "main").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const m = refsText.match(new RegExp(`([0-9a-f]{40})\\s+refs/heads/${safeBranch}(?:\\r|\\n|$)`, "i"));
+      if (m && m[1]) return m[1];
+    } catch (_) {}
+
+    try {
       const apiText = await fetchRemoteMetaText(`https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`);
       const json = JSON.parse(apiText);
       return (json && json.sha) ? String(json.sha) : "";

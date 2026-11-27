@@ -1,6 +1,6 @@
 # SeekChat 二次开发与架构规范
 
-- **当前基线**：`v7.22.31`（分支策略：`main` 存放正式发布版与基线 Tag；`dev` 分支用于日常测试与实验迭代，验证通过后合并至 `main`）
+- **当前基线**：`v7.22.32`（分支策略：`main` 存放正式发布版与基线 Tag；`dev` 分支用于日常测试与实验迭代，验证通过后合并至 `main`）
 - **目标平台**：NodeSeek（`https://www.nodeseek.com/*`、`https://nodeseek.com/*`）Tampermonkey / Violentmonkey
 - **构建产物**：`dist/nodeseek-chat-ui.user.js`、`dist/nodeseek-chat-ui.meta.js`
 - **工程定位**：零运行时依赖、词法模块化、插槽式可扩展、高性能并发安全、macOS 风格美化
@@ -226,7 +226,7 @@ node build.mjs --local
 
 状态约定：`- [x]` 表示已合入主线并随基线构建验证；`- [ ]` 表示规划待实现需求，**开发前需先补全或确认其「实现方式」条目中的接口与交互细节**。
 
-### 6.1 已完成能力清单（基线：`v7.22.31`）
+### 6.1 已完成能力清单（基线：`v7.22.32`）
 
 #### 工作台骨架、基座中心与外观主题
 - [x] macOS 四栏桌面布局与防闪屏启动守卫，支持「群聊模式 / 原版论坛」零残留切换，以及导航/帖子列表/右侧信息栏居中收缩扩展阅读区（`01`、`03`、`05`、`06`、`09`）
@@ -264,7 +264,7 @@ node build.mjs --local
 - [x] 右侧热榜（实时/日榜/周榜及站内降级回退）、关注/粉丝同步、服务器黑名单增删、单人及批量最后发言查询（`02`、`06`、`08`）
 - [x] 悬浮个人中心（通知/主题/评论/收藏/鸡腿/星辰/粉丝/等级额度）、名片预加载、名片内单人管理记录查询（`api.xxboxx.de/api/seek` 与 `nodeseek-rulings.898252.xyz` 双源适配器与限流无缝回退、UTC+8 北京时间换算、viewer 缓存回退、macOS 纯文字染色标签与悬停/展开详情及涉事帖楼层直达）、macOS 二级空间主页弹窗及固定/随机/每日首次访问自动签到（`02`、`03`、`05`、`08-profile-right.js`）
 - [x] 外链 `/jump?to=` 页内 macOS 二级跳转提醒（支持白名单直跳、就地勾选免提醒及「基座 -> 排版与回复」三档模式切换，`02`、`03`、`05`、`core-workbench-base.js`）
-- [x] 基于 `GM_info.script` 的单一权威源更新检测（1 小时节流、检测与安装双阶段均通过最新 Commit SHA / Tag 绕过 GitHub Raw Fastly 300s 缓存）与 `--local` 防覆盖构建模式（`02`、`build.mjs`）
+- [x] 基于 `GM_info.script` 的单一权威源更新检测（1 小时节流、优先直连 `github.com/.../info/refs?service=git-upload-pack` 零缓存零限流获取最新 Commit SHA 再读取不可变文件，绕过 `api.github.com` 60 次/小时限流与 Fastly 300s 缓存）与 `--local` 防覆盖构建模式（`02`、`build.mjs`）
 
 ---
 

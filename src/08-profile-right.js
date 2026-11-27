@@ -843,13 +843,15 @@
         `
         : "";
 
+      const srcLabel = rulingState.source === "rulings-web" ? "备用源 nodeseek-rulings" : rulingState.source === "xxboxx" ? "主源 api.xxboxx.de" : "";
       strip.innerHTML = `
         <div class="nsc-ruling-row">
           <div class="nsc-ruling-tags">
-            <span class="nsc-ruling-prefix">管理记录</span>
+            <span class="nsc-ruling-prefix" title="${escHtml(srcLabel || "管理记录")}">管理记录</span>
             ${tagsHtml}
           </div>
           <div class="nsc-ruling-ops">
+            ${rulingState.source === "rulings-web" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">备用源</span>` : ""}
             ${rulingState.error === "rate_limited" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">冷却 ${rulingState.retryAfter}s</span>` : ""}
             <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `明细 (${rows.length})`}</button>
             <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn">${rulingState.status === "loading" ? "..." : "刷新"}</button>
