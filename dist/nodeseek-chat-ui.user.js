@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.35
+// @version      7.22.36
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -184,6 +184,9 @@
     tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
     insert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 19h14"/></svg>`,
     zoomIn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
+    minus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="12" x2="18" y2="12"/></svg>`,
+    plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="6" x2="12" y2="18"/><line x1="6" y1="12" x2="18" y2="12"/></svg>`,
+    pinSolid: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -350,7 +353,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.35",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.36",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -3299,10 +3302,16 @@
       .nsc-composer-dock .tab-select.window_header,
       #nsc-np-editor-host .tab-select.window_header {
         display: flex !important; align-items: center !important; flex-wrap: nowrap !important; gap: 3px !important;
+        width: 100% !important; box-sizing: border-box !important;
         padding: 2px 8px !important; height: auto !important; min-height: 25px !important;
         overflow-x: auto !important; scrollbar-width: none !important;
         background: var(--nsc-hover) !important; border-bottom: 1px solid var(--nsc-border) !important;
         border-radius: 10px 10px 0 0 !important;
+      }
+      .nsc-composer-dock .tab-select.window_header .editor-top-button,
+      #nsc-np-editor-host .tab-select.window_header .editor-top-button {
+        padding: 2px 5px !important; margin: 0 1px !important; flex: 0 0 auto !important;
+        border-radius: 5px !important;
       }
       .nsc-composer-dock .tab-select.window_header::-webkit-scrollbar,
       .nsc-composer-dock .mde-toolbar::-webkit-scrollbar,
@@ -3504,16 +3513,26 @@
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > *:hover {
         background: var(--nsc-accent-soft) !important;
       }
-      /* 阅读区回复框多档高度（小/中/大）与自动紧凑态 */
+      /* 阅读区回复框五档高度（xs/sm/md/lg/xl，-/+ 步进）与自动紧凑态 */
+      #nsc-composer-dock[data-nsc-csize="xs"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="xs"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="xs"]:not(.is-compact) .nsc-u-preview {
+        height: 56px !important; min-height: 56px !important; max-height: 56px !important;
+      }
       #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
       #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-fallback-textarea,
       #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-u-preview {
-        height: 78px !important; min-height: 78px !important; max-height: 78px !important;
+        height: 84px !important; min-height: 84px !important; max-height: 84px !important;
       }
       #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
       #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-fallback-textarea,
       #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-u-preview {
-        height: 216px !important; min-height: 216px !important; max-height: 216px !important;
+        height: 188px !important; min-height: 188px !important; max-height: 188px !important;
+      }
+      #nsc-composer-dock[data-nsc-csize="xl"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="xl"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="xl"]:not(.is-compact) .nsc-u-preview {
+        height: 256px !important; min-height: 256px !important; max-height: 256px !important;
       }
       #nsc-composer-dock.is-compact .mde-toolbar,
       #nsc-composer-dock.is-compact .nsc-mde-toolbar,
@@ -3526,31 +3545,25 @@
         height: 36px !important; min-height: 36px !important; max-height: 36px !important;
       }
       .nsc-composer-ctrl-wrap {
-        display: inline-flex; align-items: center; gap: 4px; margin-left: auto; margin-right: 4px; flex: 0 0 auto;
+        display: inline-flex; align-items: center; gap: 1px; margin-left: auto; margin-right: 2px; flex: 0 0 auto;
       }
-      .nsc-csize-seg {
-        display: inline-flex; align-items: center; gap: 1px; padding: 1px;
-        border-radius: 5px; background: var(--nsc-hover); border: 1px solid var(--nsc-border);
-      }
-      .nsc-csize-btn {
-        border: none; background: transparent; color: var(--nsc-muted);
-        font-size: 10.5px; font-weight: 600; padding: 1px 5px; border-radius: 4px; cursor: pointer;
-        line-height: 1.3;
-      }
-      .nsc-csize-btn:hover { color: var(--nsc-text); }
-      .nsc-csize-btn.is-active {
-        background: var(--nsc-bg-card); color: var(--nsc-accent);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.10);
-      }
+      .nsc-ch-btn,
       .nsc-cpin-btn {
-        width: 22px; height: 20px; padding: 0; border-radius: 5px;
-        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
+        width: 21px; height: 21px; padding: 0; border-radius: 5px;
+        border: none; background: transparent; color: var(--nsc-muted);
         display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
       }
-      .nsc-cpin-btn svg { width: 12.5px; height: 12.5px; }
+      .nsc-ch-btn svg,
+      .nsc-cpin-btn svg { width: 13px; height: 13px; }
+      .nsc-ch-btn:hover:not(:disabled),
       .nsc-cpin-btn:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-ch-btn:disabled { opacity: 0.28; cursor: default; }
+      .nsc-cpin-btn { opacity: 0.62; }
+      .nsc-cpin-btn:hover { opacity: 1; }
       .nsc-cpin-btn.is-pinned {
-        background: var(--nsc-accent-soft); color: var(--nsc-accent); border-color: rgba(0, 122, 255, 0.25);
+        opacity: 1; color: var(--nsc-accent);
+        box-shadow: inset 0 -2px 0 var(--nsc-accent);
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-mde-sep { width: 1px; height: 14px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px; }
@@ -3585,14 +3598,35 @@
       .nsc-u-preview blockquote { margin: 3px 0; padding: 3px 9px; border-left: 3px solid var(--nsc-accent); background: var(--nsc-quote-bg); border-radius: 4px; }
       .nsc-u-preview table { width: 100%; border-collapse: collapse; font-size: 12px; }
       .nsc-u-preview th, .nsc-u-preview td { border: 1px solid var(--nsc-border); padding: 4px 7px; }
-      .nsc-composer-box.is-fullscreen {
-        position: fixed !important; inset: 48px 20px 14px !important; z-index: 9450 !important;
+      body.nsc-app-active #nsc-app-shell:has(.fullscreen, .is-fullscreen),
+      body.nsc-app-active .nsc-pane-chat:has(.fullscreen, .is-fullscreen),
+      body.nsc-app-active .nsc-composer-dock:has(.fullscreen, .is-fullscreen) {
+        backdrop-filter: none !important;
+        overflow: visible !important;
+      }
+      .nsc-composer-box.is-fullscreen,
+      .nsc-composer-dock .md-editor.fullscreen {
+        position: fixed !important; top: 54px !important; left: 50% !important; right: auto !important; bottom: auto !important;
+        transform: translateX(-50%) !important;
+        width: min(880px, 88vw) !important; height: min(76vh, 640px) !important;
+        z-index: 9500 !important; border-radius: 14px !important;
         display: flex !important; flex-direction: column !important;
         box-shadow: var(--nsc-shadow) !important;
       }
+      .nsc-composer-dock .md-editor.fullscreen #editor-body {
+        flex: 1 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important;
+      }
+      .nsc-composer-dock .md-editor.fullscreen #cm-editor-wrapper,
+      .nsc-composer-dock .md-editor.fullscreen .content-area,
+      .nsc-composer-dock .md-editor.fullscreen .split-view-container {
+        flex: 1 !important; min-height: 0 !important; height: 100% !important;
+      }
+      .nsc-composer-dock .md-editor.fullscreen .CodeMirror {
+        height: 100% !important; min-height: 0 !important; max-height: none !important;
+      }
       .nsc-composer-box.is-fullscreen .nsc-u-body { flex: 1; min-height: 0; }
       .nsc-composer-box.is-fullscreen .nsc-fallback-textarea,
-      .nsc-composer-box.is-fullscreen .nsc-u-preview { height: 100% !important; max-height: none !important; }
+      .nsc-composer-box.is-fullscreen .nsc-u-preview { height: 100% !important; min-height: 0 !important; max-height: none !important; }
       .nsc-u-app-pop {
         position: absolute; bottom: calc(100% + 4px); right: 12px; z-index: 265;
         display: none; flex-direction: column; gap: 6px; width: fit-content; min-width: 196px; max-width: 300px;
@@ -5128,9 +5162,6 @@
   let niBackdrop = null;
   let niTargetMode = "chat";
   let niFileInput = null;
-  const _niThumbCache = new Map();
-  const _niThumbQueue = [];
-  let _niThumbActive = 0;
 
   function formatNiBytes(bytes) {
     const n = Number(bytes);
@@ -5146,82 +5177,6 @@
     if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10);
     const pad = (x) => String(x).padStart(2, "0");
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
-  }
-
-  async function buildCompressedThumbUrl(directUrl) {
-    if (typeof GM_xmlhttpRequest !== "function" || typeof createImageBitmap !== "function") {
-      return directUrl;
-    }
-    if (/\.gif(\?|$)/i.test(directUrl)) return directUrl;
-    const blob = await new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: "GET",
-        url: directUrl,
-        responseType: "blob",
-        timeout: 12000,
-        onload: (r) => (r.status >= 200 && r.status < 300 && r.response ? resolve(r.response) : reject(new Error("fetch_fail"))),
-        onerror: () => reject(new Error("net_err")),
-        ontimeout: () => reject(new Error("timeout")),
-      });
-    });
-    if (blob.size && blob.size <= 45 * 1024) {
-      return URL.createObjectURL(blob);
-    }
-    const bmp = await createImageBitmap(blob);
-    try {
-      const maxW = 320;
-      const scale = bmp.width > maxW ? maxW / bmp.width : 1;
-      const w = Math.max(1, Math.round(bmp.width * scale));
-      const h = Math.max(1, Math.round(bmp.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return URL.createObjectURL(blob);
-      ctx.drawImage(bmp, 0, 0, w, h);
-      const outBlob = await new Promise((res) => canvas.toBlob(res, "image/webp", 0.78));
-      return URL.createObjectURL(outBlob || blob);
-    } finally {
-      if (typeof bmp.close === "function") bmp.close();
-    }
-  }
-
-  function pumpNiThumbQueue() {
-    while (_niThumbActive < 3 && _niThumbQueue.length > 0) {
-      const job = _niThumbQueue.shift();
-      if (!job || !job.imgEl || !job.imgEl.isConnected) continue;
-      if (_niThumbCache.has(job.key)) {
-        job.imgEl.src = _niThumbCache.get(job.key);
-        continue;
-      }
-      _niThumbActive += 1;
-      buildCompressedThumbUrl(job.url)
-        .then((thumbSrc) => {
-          _niThumbCache.set(job.key, thumbSrc);
-          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = thumbSrc;
-        })
-        .catch(() => {
-          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = job.url;
-        })
-        .finally(() => {
-          _niThumbActive = Math.max(0, _niThumbActive - 1);
-          pumpNiThumbQueue();
-        });
-    }
-  }
-
-  function attachNiThumb(imgEl, directUrl, apiThumbUrl, cacheKey) {
-    if (!imgEl) return;
-    if (apiThumbUrl) {
-      imgEl.src = apiThumbUrl;
-      return;
-    }
-    if (_niThumbCache.has(cacheKey)) {
-      imgEl.src = _niThumbCache.get(cacheKey);
-      return;
-    }
-    _niThumbQueue.push({ imgEl, url: directUrl, key: cacheKey });
-    pumpNiThumbQueue();
   }
 
   function openNodeImageModal(targetMode = "chat") {
@@ -5257,7 +5212,7 @@
               </div>
             </div>
             <div class="nsc-ni-toolbar">
-              <span id="nsc-ni-tip" style="font-size:11.5px;color:var(--nsc-muted);">支持拖拽或 Ctrl+V 粘贴传图，默认仅加载最近 12 张压缩预览</span>
+              <span id="nsc-ni-tip" style="font-size:11.5px;color:var(--nsc-muted);">支持拖拽或 Ctrl+V 粘贴传图，默认仅加载最近 12 张</span>
               <button type="button" class="nsc-mini-btn" id="nsc-ni-pick-btn">选择图片上传</button>
             </div>
             <div class="nsc-ni-batch-bar" id="nsc-ni-batch-bar">
@@ -5342,7 +5297,6 @@
       };
 
       const renderNiGrid = () => {
-        _niThumbQueue.length = 0;
         grid.innerHTML = "";
 
         const dropCard = document.createElement("button");
@@ -5373,7 +5327,7 @@
             <div class="nsc-ni-thumb-wrap" title="点击直接插入到编辑器">
               <input type="checkbox" class="nsc-ni-chk" ${isSel ? "checked" : ""} title="多选" />
               <button type="button" class="nsc-ni-overlay-btn nsc-ni-del" title="删除图片">${ICONS.trash}</button>
-              <img decoding="async" alt="" />
+              <img src="${escHtml(apiThumb || directUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" />
               <button type="button" class="nsc-ni-overlay-btn nsc-ni-zoom" title="查看大图">${ICONS.zoomIn}</button>
               <button type="button" class="nsc-ni-overlay-btn nsc-ni-ins" title="插入 Markdown">${ICONS.insert}</button>
             </div>
@@ -5390,9 +5344,6 @@
               </div>
             </div>
           `;
-
-          const imgEl = card.querySelector("img");
-          attachNiThumb(imgEl, directUrl, apiThumb, idKey || directUrl);
 
           const chk = card.querySelector(".nsc-ni-chk");
           chk.addEventListener("click", (e) => e.stopPropagation());
@@ -5478,7 +5429,7 @@
           const remain = _niImages.length - _niDisplayCount;
           const moreRow = document.createElement("div");
           moreRow.className = "nsc-ni-more-row";
-          moreRow.innerHTML = `<button type="button" class="nsc-mini-btn" id="nsc-ni-more-btn">显示更多压缩预览（再加载 ${Math.min(12, remain)} 张 · 剩余 ${remain} 张）</button>`;
+          moreRow.innerHTML = `<button type="button" class="nsc-mini-btn" id="nsc-ni-more-btn">显示更多（再加载 ${Math.min(12, remain)} 张 · 剩余 ${remain} 张）</button>`;
           moreRow.querySelector("#nsc-ni-more-btn").addEventListener("click", () => {
             _niDisplayCount += 12;
             renderNiGrid();
@@ -6320,6 +6271,7 @@
         if (hubBd) hubBd.classList.remove("is-open");
         const baseBd = document.getElementById("nsc-base-backdrop");
         if (baseBd) baseBd.classList.remove("is-open");
+        document.querySelectorAll(".nsc-composer-box.is-fullscreen").forEach((el) => el.classList.remove("is-fullscreen"));
         const spaceBd = document.getElementById("nsc-space-backdrop");
         if (spaceBd) spaceBd.classList.remove("is-open");
         const jumpBd = document.getElementById("nsc-jump-backdrop");
@@ -6854,19 +6806,31 @@
 
   let _composerEngaged = false;
 
+  const COMPOSER_SIZE_STEPS = ["xs", "sm", "md", "lg", "xl"];
+  const COMPOSER_SIZE_NAMES = { xs: "迷你", sm: "矮", md: "标准", lg: "高", xl: "超高" };
+
   function applyComposerPrefsToDom() {
     const prefs = state.composerPrefs || { pinned: false, size: "md" };
-    const size = ["sm", "md", "lg"].includes(prefs.size) ? prefs.size : "md";
+    const size = COMPOSER_SIZE_STEPS.includes(prefs.size) ? prefs.size : "md";
+    const idx = COMPOSER_SIZE_STEPS.indexOf(size);
     const pinned = Boolean(prefs.pinned);
     const dock = document.getElementById("nsc-composer-dock");
     if (dock) {
       dock.dataset.nscCsize = size;
-      dock.querySelectorAll(".nsc-csize-btn").forEach((b) => {
-        b.classList.toggle("is-active", b.dataset.csize === size);
-      });
+      const decBtn = dock.querySelector(".nsc-ch-dec");
+      const incBtn = dock.querySelector(".nsc-ch-inc");
+      if (decBtn) {
+        decBtn.disabled = idx <= 0;
+        decBtn.title = `减小高度（当前：${COMPOSER_SIZE_NAMES[size]}）`;
+      }
+      if (incBtn) {
+        incBtn.disabled = idx >= COMPOSER_SIZE_STEPS.length - 1;
+        incBtn.title = `增大高度（当前：${COMPOSER_SIZE_NAMES[size]}）`;
+      }
       dock.querySelectorAll(".nsc-cpin-btn").forEach((b) => {
         b.classList.toggle("is-pinned", pinned);
-        b.title = pinned ? "已固定展开不自动收缩（点击取消固定）" : "自动收缩模式（点击钉住固定展开）";
+        b.innerHTML = pinned ? ICONS.pinSolid : ICONS.pin;
+        b.title = pinned ? "已固定高度不自动收缩（点击取消固定）" : "自动收缩模式（点击固定展开高度）";
       });
       const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
       const cm = nat ? getNativeCodeMirror(nat) : null;
@@ -6876,27 +6840,35 @@
   }
 
   function createComposerCtrlWrap() {
+    const prefs = state.composerPrefs || { pinned: false, size: "md" };
+    const pinned = Boolean(prefs.pinned);
     const wrap = document.createElement("div");
     wrap.className = "nsc-composer-ctrl-wrap";
     wrap.innerHTML = `
-      <div class="nsc-csize-seg" title="调节回复框高度">
-        <button type="button" class="nsc-csize-btn" data-csize="sm">小</button>
-        <button type="button" class="nsc-csize-btn" data-csize="md">中</button>
-        <button type="button" class="nsc-csize-btn" data-csize="lg">大</button>
-      </div>
-      <button type="button" class="nsc-cpin-btn" title="固定展开不自动收缩">${ICONS.pin}</button>
+      <button type="button" class="nsc-ch-btn nsc-ch-dec" title="减小高度">${ICONS.minus}</button>
+      <button type="button" class="nsc-ch-btn nsc-ch-inc" title="增大高度">${ICONS.plus}</button>
+      <button type="button" class="nsc-cpin-btn ${pinned ? "is-pinned" : ""}" title="${pinned ? "已固定高度不自动收缩（点击取消固定）" : "自动收缩模式（点击固定展开高度）"}">${pinned ? ICONS.pinSolid : ICONS.pin}</button>
     `;
     wrap.addEventListener("mousedown", (e) => e.preventDefault());
-    wrap.querySelectorAll(".nsc-csize-btn").forEach((b) => {
-      b.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        _composerEngaged = true;
-        state.composerPrefs = { ...(state.composerPrefs || {}), size: b.dataset.csize || "md" };
-        saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
-        applyComposerPrefsToDom();
-        syncComposerCompactState(true);
-      });
+    const stepSize = (delta) => {
+      const cur = (state.composerPrefs && state.composerPrefs.size) || "md";
+      const idx = Math.max(0, COMPOSER_SIZE_STEPS.indexOf(cur));
+      const nextIdx = Math.max(0, Math.min(COMPOSER_SIZE_STEPS.length - 1, idx + delta));
+      _composerEngaged = true;
+      state.composerPrefs = { ...(state.composerPrefs || {}), size: COMPOSER_SIZE_STEPS[nextIdx] };
+      saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
+      applyComposerPrefsToDom();
+      syncComposerCompactState(true);
+    };
+    wrap.querySelector(".nsc-ch-dec").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      stepSize(-1);
+    });
+    wrap.querySelector(".nsc-ch-inc").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      stepSize(1);
     });
     wrap.querySelector(".nsc-cpin-btn").addEventListener("click", (e) => {
       e.preventDefault();

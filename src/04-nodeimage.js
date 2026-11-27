@@ -241,9 +241,6 @@
   let niBackdrop = null;
   let niTargetMode = "chat";
   let niFileInput = null;
-  const _niThumbCache = new Map();
-  const _niThumbQueue = [];
-  let _niThumbActive = 0;
 
   function formatNiBytes(bytes) {
     const n = Number(bytes);
@@ -259,82 +256,6 @@
     if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10);
     const pad = (x) => String(x).padStart(2, "0");
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
-  }
-
-  async function buildCompressedThumbUrl(directUrl) {
-    if (typeof GM_xmlhttpRequest !== "function" || typeof createImageBitmap !== "function") {
-      return directUrl;
-    }
-    if (/\.gif(\?|$)/i.test(directUrl)) return directUrl;
-    const blob = await new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: "GET",
-        url: directUrl,
-        responseType: "blob",
-        timeout: 12000,
-        onload: (r) => (r.status >= 200 && r.status < 300 && r.response ? resolve(r.response) : reject(new Error("fetch_fail"))),
-        onerror: () => reject(new Error("net_err")),
-        ontimeout: () => reject(new Error("timeout")),
-      });
-    });
-    if (blob.size && blob.size <= 45 * 1024) {
-      return URL.createObjectURL(blob);
-    }
-    const bmp = await createImageBitmap(blob);
-    try {
-      const maxW = 320;
-      const scale = bmp.width > maxW ? maxW / bmp.width : 1;
-      const w = Math.max(1, Math.round(bmp.width * scale));
-      const h = Math.max(1, Math.round(bmp.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return URL.createObjectURL(blob);
-      ctx.drawImage(bmp, 0, 0, w, h);
-      const outBlob = await new Promise((res) => canvas.toBlob(res, "image/webp", 0.78));
-      return URL.createObjectURL(outBlob || blob);
-    } finally {
-      if (typeof bmp.close === "function") bmp.close();
-    }
-  }
-
-  function pumpNiThumbQueue() {
-    while (_niThumbActive < 3 && _niThumbQueue.length > 0) {
-      const job = _niThumbQueue.shift();
-      if (!job || !job.imgEl || !job.imgEl.isConnected) continue;
-      if (_niThumbCache.has(job.key)) {
-        job.imgEl.src = _niThumbCache.get(job.key);
-        continue;
-      }
-      _niThumbActive += 1;
-      buildCompressedThumbUrl(job.url)
-        .then((thumbSrc) => {
-          _niThumbCache.set(job.key, thumbSrc);
-          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = thumbSrc;
-        })
-        .catch(() => {
-          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = job.url;
-        })
-        .finally(() => {
-          _niThumbActive = Math.max(0, _niThumbActive - 1);
-          pumpNiThumbQueue();
-        });
-    }
-  }
-
-  function attachNiThumb(imgEl, directUrl, apiThumbUrl, cacheKey) {
-    if (!imgEl) return;
-    if (apiThumbUrl) {
-      imgEl.src = apiThumbUrl;
-      return;
-    }
-    if (_niThumbCache.has(cacheKey)) {
-      imgEl.src = _niThumbCache.get(cacheKey);
-      return;
-    }
-    _niThumbQueue.push({ imgEl, url: directUrl, key: cacheKey });
-    pumpNiThumbQueue();
   }
 
   function openNodeImageModal(targetMode = "chat") {
@@ -370,7 +291,7 @@
               </div>
             </div>
             <div class="nsc-ni-toolbar">
-              <span id="nsc-ni-tip" style="font-size:11.5px;color:var(--nsc-muted);">支持拖拽或 Ctrl+V 粘贴传图，默认仅加载最近 12 张压缩预览</span>
+              <span id="nsc-ni-tip" style="font-size:11.5px;color:var(--nsc-muted);">支持拖拽或 Ctrl+V 粘贴传图，默认仅加载最近 12 张</span>
               <button type="button" class="nsc-mini-btn" id="nsc-ni-pick-btn">选择图片上传</button>
             </div>
             <div class="nsc-ni-batch-bar" id="nsc-ni-batch-bar">
@@ -455,7 +376,6 @@
       };
 
       const renderNiGrid = () => {
-        _niThumbQueue.length = 0;
         grid.innerHTML = "";
 
         const dropCard = document.createElement("button");
@@ -486,7 +406,7 @@
             <div class="nsc-ni-thumb-wrap" title="点击直接插入到编辑器">
               <input type="checkbox" class="nsc-ni-chk" ${isSel ? "checked" : ""} title="多选" />
               <button type="button" class="nsc-ni-overlay-btn nsc-ni-del" title="删除图片">${ICONS.trash}</button>
-              <img decoding="async" alt="" />
+              <img src="${escHtml(apiThumb || directUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" />
               <button type="button" class="nsc-ni-overlay-btn nsc-ni-zoom" title="查看大图">${ICONS.zoomIn}</button>
               <button type="button" class="nsc-ni-overlay-btn nsc-ni-ins" title="插入 Markdown">${ICONS.insert}</button>
             </div>
@@ -503,9 +423,6 @@
               </div>
             </div>
           `;
-
-          const imgEl = card.querySelector("img");
-          attachNiThumb(imgEl, directUrl, apiThumb, idKey || directUrl);
 
           const chk = card.querySelector(".nsc-ni-chk");
           chk.addEventListener("click", (e) => e.stopPropagation());
@@ -591,7 +508,7 @@
           const remain = _niImages.length - _niDisplayCount;
           const moreRow = document.createElement("div");
           moreRow.className = "nsc-ni-more-row";
-          moreRow.innerHTML = `<button type="button" class="nsc-mini-btn" id="nsc-ni-more-btn">显示更多压缩预览（再加载 ${Math.min(12, remain)} 张 · 剩余 ${remain} 张）</button>`;
+          moreRow.innerHTML = `<button type="button" class="nsc-mini-btn" id="nsc-ni-more-btn">显示更多（再加载 ${Math.min(12, remain)} 张 · 剩余 ${remain} 张）</button>`;
           moreRow.querySelector("#nsc-ni-more-btn").addEventListener("click", () => {
             _niDisplayCount += 12;
             renderNiGrid();

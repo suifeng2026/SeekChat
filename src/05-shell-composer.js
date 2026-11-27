@@ -667,6 +667,7 @@
         if (hubBd) hubBd.classList.remove("is-open");
         const baseBd = document.getElementById("nsc-base-backdrop");
         if (baseBd) baseBd.classList.remove("is-open");
+        document.querySelectorAll(".nsc-composer-box.is-fullscreen").forEach((el) => el.classList.remove("is-fullscreen"));
         const spaceBd = document.getElementById("nsc-space-backdrop");
         if (spaceBd) spaceBd.classList.remove("is-open");
         const jumpBd = document.getElementById("nsc-jump-backdrop");
@@ -1201,19 +1202,31 @@
 
   let _composerEngaged = false;
 
+  const COMPOSER_SIZE_STEPS = ["xs", "sm", "md", "lg", "xl"];
+  const COMPOSER_SIZE_NAMES = { xs: "迷你", sm: "矮", md: "标准", lg: "高", xl: "超高" };
+
   function applyComposerPrefsToDom() {
     const prefs = state.composerPrefs || { pinned: false, size: "md" };
-    const size = ["sm", "md", "lg"].includes(prefs.size) ? prefs.size : "md";
+    const size = COMPOSER_SIZE_STEPS.includes(prefs.size) ? prefs.size : "md";
+    const idx = COMPOSER_SIZE_STEPS.indexOf(size);
     const pinned = Boolean(prefs.pinned);
     const dock = document.getElementById("nsc-composer-dock");
     if (dock) {
       dock.dataset.nscCsize = size;
-      dock.querySelectorAll(".nsc-csize-btn").forEach((b) => {
-        b.classList.toggle("is-active", b.dataset.csize === size);
-      });
+      const decBtn = dock.querySelector(".nsc-ch-dec");
+      const incBtn = dock.querySelector(".nsc-ch-inc");
+      if (decBtn) {
+        decBtn.disabled = idx <= 0;
+        decBtn.title = `减小高度（当前：${COMPOSER_SIZE_NAMES[size]}）`;
+      }
+      if (incBtn) {
+        incBtn.disabled = idx >= COMPOSER_SIZE_STEPS.length - 1;
+        incBtn.title = `增大高度（当前：${COMPOSER_SIZE_NAMES[size]}）`;
+      }
       dock.querySelectorAll(".nsc-cpin-btn").forEach((b) => {
         b.classList.toggle("is-pinned", pinned);
-        b.title = pinned ? "已固定展开不自动收缩（点击取消固定）" : "自动收缩模式（点击钉住固定展开）";
+        b.innerHTML = pinned ? ICONS.pinSolid : ICONS.pin;
+        b.title = pinned ? "已固定高度不自动收缩（点击取消固定）" : "自动收缩模式（点击固定展开高度）";
       });
       const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
       const cm = nat ? getNativeCodeMirror(nat) : null;
@@ -1223,27 +1236,35 @@
   }
 
   function createComposerCtrlWrap() {
+    const prefs = state.composerPrefs || { pinned: false, size: "md" };
+    const pinned = Boolean(prefs.pinned);
     const wrap = document.createElement("div");
     wrap.className = "nsc-composer-ctrl-wrap";
     wrap.innerHTML = `
-      <div class="nsc-csize-seg" title="调节回复框高度">
-        <button type="button" class="nsc-csize-btn" data-csize="sm">小</button>
-        <button type="button" class="nsc-csize-btn" data-csize="md">中</button>
-        <button type="button" class="nsc-csize-btn" data-csize="lg">大</button>
-      </div>
-      <button type="button" class="nsc-cpin-btn" title="固定展开不自动收缩">${ICONS.pin}</button>
+      <button type="button" class="nsc-ch-btn nsc-ch-dec" title="减小高度">${ICONS.minus}</button>
+      <button type="button" class="nsc-ch-btn nsc-ch-inc" title="增大高度">${ICONS.plus}</button>
+      <button type="button" class="nsc-cpin-btn ${pinned ? "is-pinned" : ""}" title="${pinned ? "已固定高度不自动收缩（点击取消固定）" : "自动收缩模式（点击固定展开高度）"}">${pinned ? ICONS.pinSolid : ICONS.pin}</button>
     `;
     wrap.addEventListener("mousedown", (e) => e.preventDefault());
-    wrap.querySelectorAll(".nsc-csize-btn").forEach((b) => {
-      b.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        _composerEngaged = true;
-        state.composerPrefs = { ...(state.composerPrefs || {}), size: b.dataset.csize || "md" };
-        saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
-        applyComposerPrefsToDom();
-        syncComposerCompactState(true);
-      });
+    const stepSize = (delta) => {
+      const cur = (state.composerPrefs && state.composerPrefs.size) || "md";
+      const idx = Math.max(0, COMPOSER_SIZE_STEPS.indexOf(cur));
+      const nextIdx = Math.max(0, Math.min(COMPOSER_SIZE_STEPS.length - 1, idx + delta));
+      _composerEngaged = true;
+      state.composerPrefs = { ...(state.composerPrefs || {}), size: COMPOSER_SIZE_STEPS[nextIdx] };
+      saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
+      applyComposerPrefsToDom();
+      syncComposerCompactState(true);
+    };
+    wrap.querySelector(".nsc-ch-dec").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      stepSize(-1);
+    });
+    wrap.querySelector(".nsc-ch-inc").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      stepSize(1);
     });
     wrap.querySelector(".nsc-cpin-btn").addEventListener("click", (e) => {
       e.preventDefault();

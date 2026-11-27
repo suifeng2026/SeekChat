@@ -1066,10 +1066,16 @@
       .nsc-composer-dock .tab-select.window_header,
       #nsc-np-editor-host .tab-select.window_header {
         display: flex !important; align-items: center !important; flex-wrap: nowrap !important; gap: 3px !important;
+        width: 100% !important; box-sizing: border-box !important;
         padding: 2px 8px !important; height: auto !important; min-height: 25px !important;
         overflow-x: auto !important; scrollbar-width: none !important;
         background: var(--nsc-hover) !important; border-bottom: 1px solid var(--nsc-border) !important;
         border-radius: 10px 10px 0 0 !important;
+      }
+      .nsc-composer-dock .tab-select.window_header .editor-top-button,
+      #nsc-np-editor-host .tab-select.window_header .editor-top-button {
+        padding: 2px 5px !important; margin: 0 1px !important; flex: 0 0 auto !important;
+        border-radius: 5px !important;
       }
       .nsc-composer-dock .tab-select.window_header::-webkit-scrollbar,
       .nsc-composer-dock .mde-toolbar::-webkit-scrollbar,
@@ -1271,16 +1277,26 @@
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > *:hover {
         background: var(--nsc-accent-soft) !important;
       }
-      /* 阅读区回复框多档高度（小/中/大）与自动紧凑态 */
+      /* 阅读区回复框五档高度（xs/sm/md/lg/xl，-/+ 步进）与自动紧凑态 */
+      #nsc-composer-dock[data-nsc-csize="xs"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="xs"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="xs"]:not(.is-compact) .nsc-u-preview {
+        height: 56px !important; min-height: 56px !important; max-height: 56px !important;
+      }
       #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
       #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-fallback-textarea,
       #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-u-preview {
-        height: 78px !important; min-height: 78px !important; max-height: 78px !important;
+        height: 84px !important; min-height: 84px !important; max-height: 84px !important;
       }
       #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
       #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-fallback-textarea,
       #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-u-preview {
-        height: 216px !important; min-height: 216px !important; max-height: 216px !important;
+        height: 188px !important; min-height: 188px !important; max-height: 188px !important;
+      }
+      #nsc-composer-dock[data-nsc-csize="xl"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="xl"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="xl"]:not(.is-compact) .nsc-u-preview {
+        height: 256px !important; min-height: 256px !important; max-height: 256px !important;
       }
       #nsc-composer-dock.is-compact .mde-toolbar,
       #nsc-composer-dock.is-compact .nsc-mde-toolbar,
@@ -1293,31 +1309,25 @@
         height: 36px !important; min-height: 36px !important; max-height: 36px !important;
       }
       .nsc-composer-ctrl-wrap {
-        display: inline-flex; align-items: center; gap: 4px; margin-left: auto; margin-right: 4px; flex: 0 0 auto;
+        display: inline-flex; align-items: center; gap: 1px; margin-left: auto; margin-right: 2px; flex: 0 0 auto;
       }
-      .nsc-csize-seg {
-        display: inline-flex; align-items: center; gap: 1px; padding: 1px;
-        border-radius: 5px; background: var(--nsc-hover); border: 1px solid var(--nsc-border);
-      }
-      .nsc-csize-btn {
-        border: none; background: transparent; color: var(--nsc-muted);
-        font-size: 10.5px; font-weight: 600; padding: 1px 5px; border-radius: 4px; cursor: pointer;
-        line-height: 1.3;
-      }
-      .nsc-csize-btn:hover { color: var(--nsc-text); }
-      .nsc-csize-btn.is-active {
-        background: var(--nsc-bg-card); color: var(--nsc-accent);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.10);
-      }
+      .nsc-ch-btn,
       .nsc-cpin-btn {
-        width: 22px; height: 20px; padding: 0; border-radius: 5px;
-        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
+        width: 21px; height: 21px; padding: 0; border-radius: 5px;
+        border: none; background: transparent; color: var(--nsc-muted);
         display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
       }
-      .nsc-cpin-btn svg { width: 12.5px; height: 12.5px; }
+      .nsc-ch-btn svg,
+      .nsc-cpin-btn svg { width: 13px; height: 13px; }
+      .nsc-ch-btn:hover:not(:disabled),
       .nsc-cpin-btn:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-ch-btn:disabled { opacity: 0.28; cursor: default; }
+      .nsc-cpin-btn { opacity: 0.62; }
+      .nsc-cpin-btn:hover { opacity: 1; }
       .nsc-cpin-btn.is-pinned {
-        background: var(--nsc-accent-soft); color: var(--nsc-accent); border-color: rgba(0, 122, 255, 0.25);
+        opacity: 1; color: var(--nsc-accent);
+        box-shadow: inset 0 -2px 0 var(--nsc-accent);
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-mde-sep { width: 1px; height: 14px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px; }
@@ -1352,14 +1362,35 @@
       .nsc-u-preview blockquote { margin: 3px 0; padding: 3px 9px; border-left: 3px solid var(--nsc-accent); background: var(--nsc-quote-bg); border-radius: 4px; }
       .nsc-u-preview table { width: 100%; border-collapse: collapse; font-size: 12px; }
       .nsc-u-preview th, .nsc-u-preview td { border: 1px solid var(--nsc-border); padding: 4px 7px; }
-      .nsc-composer-box.is-fullscreen {
-        position: fixed !important; inset: 48px 20px 14px !important; z-index: 9450 !important;
+      body.nsc-app-active #nsc-app-shell:has(.fullscreen, .is-fullscreen),
+      body.nsc-app-active .nsc-pane-chat:has(.fullscreen, .is-fullscreen),
+      body.nsc-app-active .nsc-composer-dock:has(.fullscreen, .is-fullscreen) {
+        backdrop-filter: none !important;
+        overflow: visible !important;
+      }
+      .nsc-composer-box.is-fullscreen,
+      .nsc-composer-dock .md-editor.fullscreen {
+        position: fixed !important; top: 54px !important; left: 50% !important; right: auto !important; bottom: auto !important;
+        transform: translateX(-50%) !important;
+        width: min(880px, 88vw) !important; height: min(76vh, 640px) !important;
+        z-index: 9500 !important; border-radius: 14px !important;
         display: flex !important; flex-direction: column !important;
         box-shadow: var(--nsc-shadow) !important;
       }
+      .nsc-composer-dock .md-editor.fullscreen #editor-body {
+        flex: 1 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important;
+      }
+      .nsc-composer-dock .md-editor.fullscreen #cm-editor-wrapper,
+      .nsc-composer-dock .md-editor.fullscreen .content-area,
+      .nsc-composer-dock .md-editor.fullscreen .split-view-container {
+        flex: 1 !important; min-height: 0 !important; height: 100% !important;
+      }
+      .nsc-composer-dock .md-editor.fullscreen .CodeMirror {
+        height: 100% !important; min-height: 0 !important; max-height: none !important;
+      }
       .nsc-composer-box.is-fullscreen .nsc-u-body { flex: 1; min-height: 0; }
       .nsc-composer-box.is-fullscreen .nsc-fallback-textarea,
-      .nsc-composer-box.is-fullscreen .nsc-u-preview { height: 100% !important; max-height: none !important; }
+      .nsc-composer-box.is-fullscreen .nsc-u-preview { height: 100% !important; min-height: 0 !important; max-height: none !important; }
       .nsc-u-app-pop {
         position: absolute; bottom: calc(100% + 4px); right: 12px; z-index: 265;
         display: none; flex-direction: column; gap: 6px; width: fit-content; min-width: 196px; max-width: 300px;
