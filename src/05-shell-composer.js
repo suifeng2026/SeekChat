@@ -1024,16 +1024,23 @@
       if (tabBox.dataset.nscTabsInit === "1") continue;
       tabBox.dataset.nscTabsInit = "1";
 
-      const titles = Array.from(tabBox.querySelectorAll(".nsk-magic-tab-title"));
-      const bodies = Array.from(tabBox.querySelectorAll(".nsk-magic-tab-body"));
-      if (titles.length === 0 || bodies.length === 0) continue;
-
-      if (!tabBox.querySelector(".nsc-magic-tab-bar") && titles[0].parentElement === tabBox) {
-        const bar = document.createElement("div");
-        bar.className = "nsc-magic-tab-bar";
-        tabBox.insertBefore(bar, tabBox.firstChild);
-        for (const t of titles) bar.appendChild(t);
+      for (const oldBar of Array.from(tabBox.querySelectorAll(":scope > .nsc-magic-tab-bar"))) {
+        while (oldBar.firstChild) tabBox.insertBefore(oldBar.firstChild, oldBar);
+        oldBar.remove();
       }
+      for (const child of Array.from(tabBox.children)) {
+        if (
+          !child.classList.contains("nsk-magic-tab-title") &&
+          !child.classList.contains("nsk-magic-tab-body") &&
+          (child.tagName === "BR" || (child.tagName === "P" && (child.textContent || "").trim() === "" && !child.querySelector("img")))
+        ) {
+          child.remove();
+        }
+      }
+
+      const titles = Array.from(tabBox.querySelectorAll(":scope > .nsk-magic-tab-title"));
+      const bodies = Array.from(tabBox.querySelectorAll(":scope > .nsk-magic-tab-body"));
+      if (titles.length === 0 || bodies.length === 0) continue;
 
       let activeIdx = titles.findIndex((t) => t.classList.contains("active") || t.classList.contains("is-active"));
       if (activeIdx < 0) activeIdx = 0;

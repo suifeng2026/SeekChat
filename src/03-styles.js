@@ -542,29 +542,48 @@
         transform: scale(1.02); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
       }
 
-      /* 测评帖魔术标签页 (.nsk-magic-tabs) 适配与交互样式 */
-      .nsc-bubble .nsk-magic-tabs {
-        margin: 8px 0; border: 1px solid var(--nsc-border); border-radius: 10px;
-        background: var(--nsc-bg-card); overflow: hidden;
+      /* 测评帖魔术标签页 (.nsk-magic-tabs) 适配与交互样式（保持原生直系结构，避免触发站点校验提示） */
+      .nsc-bubble .nsk-magic-tabs,
+      .nsc-thread-content .nsk-magic-tabs {
+        display: flex !important; flex-wrap: wrap !important; align-items: center; gap: 4px;
+        margin: 8px 0; padding: 8px 10px 10px !important;
+        border: 1px solid var(--nsc-border) !important; border-radius: 12px !important;
+        background: var(--nsc-bg-card) !important; color: var(--nsc-text) !important;
+        overflow: hidden;
       }
-      .nsc-magic-tab-bar {
-        display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
-        padding: 5px 8px; background: var(--nsc-hover);
-        border-bottom: 1px solid var(--nsc-border);
+      .nsc-bubble .nsk-magic-tab-title,
+      .nsc-thread-content .nsk-magic-tab-title {
+        display: inline-flex !important; align-items: center; order: 0 !important;
+        padding: 4px 10px !important; margin: 0 !important;
+        border-radius: 7px !important; border: 1px solid transparent !important;
+        font-size: 12px !important; font-weight: 500;
+        color: var(--nsc-muted) !important; background: transparent !important;
+        cursor: pointer; user-select: none; transition: all 0.13s ease;
       }
-      .nsc-bubble .nsk-magic-tab-title {
-        display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 7px;
-        font-size: 12px; font-weight: 500; color: var(--nsc-muted); cursor: pointer;
-        user-select: none; transition: all 0.13s ease;
+      .nsc-bubble .nsk-magic-tab-title:hover,
+      .nsc-thread-content .nsk-magic-tab-title:hover {
+        color: var(--nsc-text) !important; background: var(--nsc-hover) !important;
       }
-      .nsc-bubble .nsk-magic-tab-title:hover { color: var(--nsc-text); background: var(--nsc-bg-card); }
       .nsc-bubble .nsk-magic-tab-title.is-active,
-      .nsc-bubble .nsk-magic-tab-title.active {
-        color: var(--nsc-accent); background: var(--nsc-bg-card); font-weight: 600;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      .nsc-bubble .nsk-magic-tab-title.active,
+      .nsc-thread-content .nsk-magic-tab-title.is-active,
+      .nsc-thread-content .nsk-magic-tab-title.active {
+        color: var(--nsc-accent) !important; background: var(--nsc-accent-soft) !important;
+        border-color: rgba(0, 122, 255, 0.22) !important; font-weight: 600 !important;
+        box-shadow: none !important;
       }
-      .nsc-bubble .nsk-magic-tab-body { padding: 10px 12px; }
-      .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img { margin: 4px 0 !important; }
+      .nsc-bubble .nsk-magic-tab-body,
+      .nsc-thread-content .nsk-magic-tab-body {
+        order: 100 !important; flex: 0 0 100% !important; width: 100% !important;
+        box-sizing: border-box !important; margin: 6px 0 0 !important;
+        padding: 10px 2px 2px !important;
+        border-top: 1px solid var(--nsc-border) !important;
+      }
+      .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img,
+      .nsc-thread-content .nsk-magic-tab-body img.nsc-zoomable-img {
+        margin: 4px 0 !important;
+        max-width: 100% !important; max-height: 520px !important;
+      }
 
       .nsc-bubble pre {
         position: relative; max-width: 100%; overflow-x: auto;

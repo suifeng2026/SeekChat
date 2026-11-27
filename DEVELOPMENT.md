@@ -1,6 +1,6 @@
 # SeekChat 二次开发与架构规范文档
 
-版本基线：`v7.20.1`  
+版本基线：`v7.20.2`  
 目标平台：NodeSeek (`https://www.nodeseek.com/*`) Tampermonkey / Violentmonkey 用户脚本  
 构建产物：`dist/nodeseek-chat-ui.user.js`、`dist/nodeseek-chat-ui.meta.js`
 
@@ -188,7 +188,7 @@ node build.mjs --local
 
 ## 6. 功能演进路线图
 
-### 6.1 已完成能力（截至 `v7.20.1`）
+### 6.1 已完成能力（截至 `v7.20.2`）
 
 - **桌面化工作台与外观系统**：四栏 macOS 布局、浅色 / 黄昏护眼 / 分层暗黑三态切换、无闪屏启动守卫、零残留退出恢复。
 - **频道浏览与进度追踪**：全部版块瀑布流加载、关键词搜索防抖与自动补页、未读/新回复增量标记、已读足迹本地记录、未读优先排序。
