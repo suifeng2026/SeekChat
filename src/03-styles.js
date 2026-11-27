@@ -1796,6 +1796,11 @@
       .nsc-ana-card {
         padding: 12px 14px; border-radius: 12px;
         background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        display: flex; flex-direction: column;
+      }
+      .nsc-ana-feeder-list {
+        flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 6px;
       }
       .nsc-ana-card-title {
         font-size: 13px; font-weight: 700; color: var(--nsc-text);
@@ -1824,6 +1829,12 @@
         padding: 8px 11px; background: var(--nsc-hover); color: var(--nsc-muted);
         font-weight: 600; border-bottom: 1px solid var(--nsc-border); white-space: nowrap;
       }
+      .nsc-ana-sort-th {
+        cursor: pointer; user-select: none; transition: color 0.12s ease, background 0.12s ease;
+      }
+      .nsc-ana-sort-th:hover { color: var(--nsc-text); background: var(--nsc-accent-soft); }
+      .nsc-ana-sort-th.is-sorted { color: var(--nsc-accent); }
+      .nsc-ana-sort-ind { margin-left: 4px; font-size: 10px; opacity: 0.75; }
       .nsc-ana-table td {
         padding: 8px 11px; border-bottom: 1px solid var(--nsc-border); color: var(--nsc-text);
         vertical-align: middle;

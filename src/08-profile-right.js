@@ -1185,7 +1185,14 @@
             else if (state.hubTab === "comments") loadHubComments(false);
             else if (state.hubTab === "collections") loadHubCollections(false);
             else if (state.hubTab === "credit") loadHubCredit(false);
-            else if (state.hubTab === "stardust") loadHubStardust(false);
+            else if (state.hubTab === "stardust") {
+              if (state.hubStardustView === "analytics") {
+                const sv = state.registry.hubSubViews && state.registry.hubSubViews.stardust;
+                if (sv && typeof sv.onScrollEnd === "function") sv.onScrollEnd(persistentBody);
+              } else {
+                loadHubStardust(false);
+              }
+            }
             else if (state.hubTab === "attendance") loadHubAttendanceBoard(false);
             else {
               const regTab = (state.registry.hubTabs || []).find((t) => t.id === state.hubTab);

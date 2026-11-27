@@ -271,7 +271,7 @@
           <span>🏆 投喂大佬排行榜</span>
           <span style="font-size:11.5px;font-weight:500;color:var(--nsc-muted);">共 ${sortedFeeders.length} 位${sortedFeeders.length > 20 ? " (Top 20)" : ""}</span>
         </div>
-        <div class="nsc-ana-feeder-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+        <div class="nsc-ana-feeder-list"></div>
       `;
 
       const feederListEl = feederCard.querySelector(".nsc-ana-feeder-list");
@@ -318,6 +318,13 @@
       split.appendChild(signCard);
       split.appendChild(feederCard);
       body.appendChild(split);
+
+      requestAnimationFrame(() => {
+        const h = signCard.clientHeight;
+        if (h > 180) {
+          feederListEl.style.maxHeight = `${Math.max(240, h - 54)}px`;
+        }
+      });
     }
 
     registerHubSubView("credit", {
@@ -327,15 +334,21 @@
     });
 
     // =========================================================================
-    // 2. 全量星辰账本分析器
+    // 2. 全量星辰账本分析器（收到/送出点赞 + 转账收支 + 全列排序 + 瀑布流 + 排行榜）
     // =========================================================================
     const stardustUi = {
       filter: "all",
       search: "",
-      page: 1,
+      sortKey: "time",
+      sortDir: "desc",
+      visibleCount: STARDUST_PAGE_SIZE,
+      rankCat: "upvote_in",
+      showRank: true,
       resolveSeq: 0,
       failedUids: new Set(),
       myUid: null,
+      lastTableHost: null,
+      lastRecords: [],
     };
 
     function formatExactTime(val) {
@@ -364,7 +377,7 @@
       const ignoreKeys = new Set([
         "id", "_id", "member_id", "peer_id", "ref_id", "post_id", "comment_id",
         "created_at", "updated_at", "timestamp", "time", "status", "code",
-        "floor", "balance", "remain", "type",
+        "floor", "balance", "remain", "type", "_querySide",
       ]);
       for (const [k, v] of Object.entries(r)) {
         if (!ignoreKeys.has(k)) {
@@ -395,15 +408,18 @@
     }
 
     function stardustRecordKey(r) {
+      const side = r._querySide || "recv";
       const rawCreatedAt = typeof r.created_at === "number"
         ? (r.created_at > 1e11 ? r.created_at : r.created_at * 1000)
         : new Date(r.created_at).getTime();
-      return r.id || `${rawCreatedAt || 0}_${r.peer_id || ""}_${r.member_id || ""}`;
+      const base = r.id || `${rawCreatedAt || 0}_${r.peer_id || ""}_${r.member_id || ""}`;
+      return `${side}:${base}`;
     }
 
     function normalizeStardustRecords(rawRows, selfUid) {
       const uidNum = Number(selfUid) || 0;
-      const list = (rawRows || []).map((r) => {
+      const list = [];
+      for (const r of rawRows || []) {
         const rawCreatedAt = typeof r.created_at === "number"
           ? (r.created_at > 1e11 ? r.created_at : r.created_at * 1000)
           : new Date(r.created_at).getTime();
@@ -411,9 +427,27 @@
         const pId = r.peer_id ? parseInt(r.peer_id, 10) : 0;
         const rawType = String(r.type || "").toLowerCase();
         const refId = parseInt(r.ref_id || r.refId || 0, 10);
-
         const extractedNum = extractAmount(r);
         const isUpvote = (refId === 10) || rawType.includes("upvote") || rawType.includes("like") || Boolean(r.comment_id);
+
+        if (r._querySide === "sent") {
+          // peer_id=uid 查询仅提取「送出点赞」，转账支出已由 member_id=uid 完整覆盖以防重复计账
+          if (!isUpvote) continue;
+          const targetUid = mId && mId !== uidNum ? mId : (pId && pId !== uidNum ? pId : 0);
+          list.push({
+            id: stardustRecordKey(r),
+            rawCreatedAt: rawCreatedAt || 0,
+            amount: Math.abs(extractedNum || 1),
+            targetUid: targetUid ? String(targetUid) : "",
+            memo: r.memo || r.reason || r.description || r.note || "",
+            balance: null,
+            category: "upvote_out",
+            postId: r.post_id ? String(r.post_id) : "",
+            refId: refId > 0 ? String(refId) : "",
+            time: formatExactTime(r.created_at),
+          });
+          continue;
+        }
 
         let category = "transfer_out";
         let finalAmount = 0;
@@ -438,7 +472,7 @@
           ? pId
           : ((mId && mId !== uidNum) ? mId : (pId || mId || null));
 
-        return {
+        list.push({
           id: stardustRecordKey(r),
           rawCreatedAt: rawCreatedAt || 0,
           amount: finalAmount,
@@ -446,9 +480,11 @@
           memo: r.memo || r.reason || r.description || r.note || "",
           balance: extractBalance(r),
           category,
+          postId: r.post_id ? String(r.post_id) : "",
+          refId: refId > 0 ? String(refId) : "",
           time: formatExactTime(r.created_at),
-        };
-      });
+        });
+      }
 
       list.sort((a, b) => b.rawCreatedAt - a.rawCreatedAt);
       return list;
@@ -492,6 +528,7 @@
       let totalExpense = 0;
       let upvoteInCount = 0;
       let upvoteInStardust = 0;
+      let upvoteOutCount = 0;
       let transferOutCount = 0;
       let transferOutStardust = 0;
       let transferInCount = 0;
@@ -502,6 +539,8 @@
           upvoteInCount += 1;
           upvoteInStardust += item.amount;
           totalIncome += item.amount;
+        } else if (item.category === "upvote_out") {
+          upvoteOutCount += 1;
         } else if (item.category === "transfer_in") {
           transferInCount += 1;
           transferInStardust += item.amount;
@@ -523,6 +562,7 @@
         totalExpense,
         upvoteInCount,
         upvoteInStardust,
+        upvoteOutCount,
         transferOutCount,
         transferOutStardust,
         transferInCount,
@@ -561,20 +601,37 @@
       keyOf: stardustRecordKey,
       async fetchPage({ cursor, signal }) {
         const uid = await ensureStardustUid(signal);
-        let url = `/api/stardust/list?count=1000&member_id=${encodeURIComponent(String(uid))}`;
-        if (cursor) url += `&before_id=${encodeURIComponent(String(cursor))}`;
+        let side = "recv";
+        let beforeId = "";
+        if (typeof cursor === "string" && cursor.includes(":")) {
+          const parts = cursor.split(":");
+          side = parts[0] === "sent" ? "sent" : "recv";
+          beforeId = parts[1] || "";
+        }
+
+        const paramKey = side === "sent" ? "peer_id" : "member_id";
+        let url = `/api/stardust/list?count=1000&${paramKey}=${encodeURIComponent(String(uid))}`;
+        if (beforeId) url += `&before_id=${encodeURIComponent(beforeId)}`;
 
         const resp = await fetch(url, { credentials: "include", signal });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json().catch(() => null);
-        if (!data || data.success === false || !Array.isArray(data.records) || data.records.length === 0) {
-          return { rows: [], nextCursor: null, hasMore: false };
+        const rows = (data && data.success !== false && Array.isArray(data.records))
+          ? data.records.map((r) => ({ ...r, _querySide: side }))
+          : [];
+
+        if (side === "recv") {
+          if (data && data.exist_more && data.cursor && rows.length > 0) {
+            return { rows, nextCursor: `recv:${data.cursor}`, hasMore: true };
+          }
+          // 第一阶段（收到/账户主流水）结束后无缝切换第二阶段（peer_id 送出点赞）
+          return { rows, nextCursor: "sent:", hasMore: true };
         }
-        return {
-          rows: data.records || [],
-          nextCursor: data.cursor,
-          hasMore: Boolean(data.exist_more && data.cursor),
-        };
+
+        if (data && data.exist_more && data.cursor && rows.length > 0) {
+          return { rows, nextCursor: `sent:${data.cursor}`, hasMore: true };
+        }
+        return { rows, nextCursor: null, hasMore: false };
       },
       onUpdate() {
         if (state.hubTab === "stardust" && state.hubStardustView === "analytics") {
@@ -608,152 +665,121 @@
             el.textContent = `@${name}`;
           });
         }
-        await new Promise((r) => setTimeout(r, 90));
+        await new Promise((r) => setTimeout(r, 80));
       }
     }
 
-    function buildMarkdownTable(list) {
-      if (!list || list.length === 0) return "*(暂无相关记录)*\n\n";
-
-      let md = "| 时间 | 类型 | 数额 | 对方 UID | 明细信息 (@对方用户名 / 变动后余额 / 留言) |\n";
-      md += "| :--- | :--- | :--- | :--- | :--- |\n";
-
-      for (const item of list) {
-        let typeLabel = "星辰流水";
-        if (item.category === "upvote_in") typeLabel = "💖 收到点赞";
-        else if (item.category === "transfer_out") typeLabel = "💸 送出转账";
-        else if (item.category === "transfer_in") typeLabel = "💰 收到转账";
-
-        const amountLabel = item.amount > 0 ? `+${item.amount}` : String(item.amount);
-        const uidLabel = item.targetUid
-          ? `[UID: ${item.targetUid}](https://www.nodeseek.com/space/${item.targetUid}#/general)`
-          : "-";
-
-        const detailParts = [];
-        if (item.targetUid) {
-          const handle = getDisplayUserHandle(item.targetUid);
-          detailParts.push(`[${handle}](https://www.nodeseek.com/space/${item.targetUid}#/general)`);
-        }
-        if (item.balance !== null && item.balance !== undefined) {
-          detailParts.push(`余额: ${item.balance}`);
-        }
-        if (item.memo) {
-          detailParts.push(`留言: ${String(item.memo).replace(/\|/g, "/")}`);
-        }
-
-        const detailLabel = detailParts.length > 0 ? detailParts.join(" · ") : "-";
-        md += `| ${item.time} | ${typeLabel} | ${amountLabel} | ${uidLabel} | ${detailLabel} |\n`;
+    function buildStardustRankList(records, category) {
+      const map = new Map();
+      for (const item of records) {
+        if (item.category !== category || !item.targetUid) continue;
+        const cur = map.get(item.targetUid) || {
+          uid: item.targetUid,
+          count: 0,
+          totalAmount: 0,
+          latestTs: 0,
+        };
+        cur.count += 1;
+        cur.totalAmount += Math.abs(item.amount);
+        if (item.rawCreatedAt > cur.latestTs) cur.latestTs = item.rawCreatedAt;
+        map.set(item.targetUid, cur);
       }
-      md += "\n";
-      return md;
-    }
-
-    function buildUserSummaryTable(list, actionText) {
-      if (!list || list.length === 0) return "";
-
-      const userMap = new Map();
-      for (const item of list) {
-        if (!item.targetUid) continue;
-        if (!userMap.has(item.targetUid)) {
-          userMap.set(item.targetUid, {
-            uid: item.targetUid,
-            name: getDisplayUserHandle(item.targetUid),
-            count: 0,
-            totalAmount: 0,
-          });
-        }
-        const stat = userMap.get(item.targetUid);
-        stat.count += 1;
-        stat.totalAmount += Math.abs(item.amount);
-      }
-
-      const sortedUsers = Array.from(userMap.values()).sort(
-        (a, b) => b.count - a.count || b.totalAmount - a.totalAmount
+      return Array.from(map.values()).sort(
+        (a, b) => b.totalAmount - a.totalAmount || b.count - a.count || b.latestTs - a.latestTs
       );
-      if (sortedUsers.length === 0) return "";
+    }
 
-      let md = `### 👑 贡献者统计排行 (小计共 ${sortedUsers.length} 位用户)\n\n`;
-      md += `| 排名 | 用户 (@昵称) | 对方 UID | ${actionText}次数 | 累计星辰 |\n`;
-      md += "| :--- | :--- | :--- | :--- | :--- |\n";
+    function buildMarkdownTopRankTable(rankList, category, limit = 20) {
+      if (!rankList || rankList.length === 0) return "*(暂无排行记录)*\n\n";
+      const totalAmt = rankList.reduce((s, u) => s + u.totalAmount, 0);
+      const isTransfer = category === "transfer_in" || category === "transfer_out";
+      const actionHdr = isTransfer ? "转账笔数" : "点赞次数";
+      const top = rankList.slice(0, limit);
 
-      sortedUsers.forEach((u, index) => {
-        const rank = index + 1;
-        const rankIcon = rank === 1 ? "🥇 1" : rank === 2 ? "🥈 2" : rank === 3 ? "🥉 3" : String(rank);
-        md += `| ${rankIcon} | [${u.name}](https://www.nodeseek.com/space/${u.uid}#/general) | [UID: ${u.uid}](https://www.nodeseek.com/space/${u.uid}#/general) | **${u.count} 次** | **${u.totalAmount}** |\n`;
+      let md = `| 排名 | 用户 | UID | ${actionHdr} | 累计星辰 | 占比 |\n`;
+      md += "| :--- | :--- | :--- | :--- | :--- | :--- |\n";
+      top.forEach((u, idx) => {
+        const rank = idx + 1;
+        const rankLabel = rank === 1 ? "🥇 1" : rank === 2 ? "🥈 2" : rank === 3 ? "🥉 3" : String(rank);
+        const handle = getDisplayUserHandle(u.uid);
+        const pct = totalAmt > 0 ? `${((u.totalAmount / totalAmt) * 100).toFixed(1)}%` : "0%";
+        md += `| ${rankLabel} | [${handle}](https://www.nodeseek.com/space/${u.uid}#/general) | ${u.uid} | ${u.count} 次 | **${u.totalAmount}** | ${pct} |\n`;
       });
-      md += "\n";
+      md += `\n`;
       return md;
     }
 
-    async function exportStardustMarkdown(records, btnEl) {
+    async function exportStardustSummaryMarkdown(records, btnEl) {
       if (!records || records.length === 0) return;
-      const origText = btnEl ? btnEl.textContent : "📋 导出 Markdown (含小计)";
+      const origText = btnEl ? btnEl.textContent : "📋 复制统计排行";
 
-      const distinctUids = Array.from(new Set(records.map((r) => r.targetUid).filter(Boolean)));
-      const uncachedUids = distinctUids.filter((uid) => !getResolvedStardustUserName(uid));
+      const rankUpIn = buildStardustRankList(records, "upvote_in");
+      const rankUpOut = buildStardustRankList(records, "upvote_out");
+      const rankTrIn = buildStardustRankList(records, "transfer_in");
+      const rankTrOut = buildStardustRankList(records, "transfer_out");
 
-      if (uncachedUids.length > 0) {
+      const topUids = Array.from(new Set([
+        ...rankUpIn.slice(0, 20).map((u) => u.uid),
+        ...rankUpOut.slice(0, 20).map((u) => u.uid),
+        ...rankTrIn.slice(0, 20).map((u) => u.uid),
+        ...rankTrOut.slice(0, 20).map((u) => u.uid),
+      ])).filter((uid) => uid && !getResolvedStardustUserName(uid));
+
+      if (topUids.length > 0) {
         if (btnEl) btnEl.disabled = true;
         let done = 0;
-        const total = uncachedUids.length;
-        for (let i = 0; i < total; i += STARDUST_BATCH_CONCURRENCY) {
-          const batch = uncachedUids.slice(i, i + STARDUST_BATCH_CONCURRENCY);
+        for (let i = 0; i < topUids.length; i += STARDUST_BATCH_CONCURRENCY) {
+          const batch = topUids.slice(i, i + STARDUST_BATCH_CONCURRENCY);
           await Promise.all(batch.map((uid) => fetchUserProfile(String(uid), "")));
           done += batch.length;
-          if (btnEl) {
-            btnEl.textContent = `⏳ 正在解析全量昵称 (${done}/${total})...`;
-          }
+          if (btnEl) btnEl.textContent = `⏳ 补全榜上昵称 (${done}/${topUids.length})...`;
           await new Promise((r) => setTimeout(r, 60));
         }
         if (btnEl) btnEl.disabled = false;
       }
 
-      const upvoteInList = records.filter((r) => r.category === "upvote_in");
-      const transferOutList = records.filter((r) => r.category === "transfer_out");
-      const transferInList = records.filter((r) => r.category === "transfer_in");
       const summary = computeStardustSummary(records);
-
       let fullMd = ":::: tabs\n";
 
-      fullMd += "::: tab-item 💖 收到的点赞\n";
-      fullMd += buildUserSummaryTable(upvoteInList, "获赠点赞");
-      fullMd += "### 📜 点赞明细记录\n\n";
-      fullMd += buildMarkdownTable(upvoteInList);
+      fullMd += "::: tab-item 📊 统计总览\n";
+      fullMd += "| 统计维度 | 笔数 / 次数 | 合计星辰 |\n";
+      fullMd += "| :--- | :--- | :--- |\n";
+      fullMd += `| 当前核算余额 | - | **${summary.displayBal}** |\n`;
+      fullMd += `| 收到点赞（他人赠予） | ${summary.upvoteInCount} 次 | **+${summary.upvoteInStardust}** |\n`;
+      fullMd += `| 送出点赞（赞赏他人） | ${summary.upvoteOutCount} 次 | - |\n`;
+      fullMd += `| 收到转账 | ${summary.transferInCount} 笔 | **+${summary.transferInStardust}** |\n`;
+      fullMd += `| 送出转账 | ${summary.transferOutCount} 笔 | **-${summary.transferOutStardust}** |\n`;
+      fullMd += `| 累计净收支 | ${summary.upvoteInCount + summary.transferInCount + summary.transferOutCount} 笔 | +${summary.totalIncome} / -${summary.totalExpense} |\n\n`;
       fullMd += ":::\n";
 
-      fullMd += "::: tab-item 💸 送出的转账\n";
-      fullMd += buildUserSummaryTable(transferOutList, "转出");
-      fullMd += "### 📜 送出转账明细\n\n";
-      fullMd += buildMarkdownTable(transferOutList);
+      fullMd += `::: tab-item 💖 获赞排行 Top 20\n`;
+      fullMd += `共 ${rankUpIn.length} 位社区好友为你点赞（合计 +${summary.upvoteInStardust} 星辰）\n\n`;
+      fullMd += buildMarkdownTopRankTable(rankUpIn, "upvote_in", 20);
       fullMd += ":::\n";
 
-      fullMd += "::: tab-item 💰 收到的转账\n";
-      fullMd += buildUserSummaryTable(transferInList, "转入");
-      fullMd += "### 📜 收到转账明细\n\n";
-      fullMd += buildMarkdownTable(transferInList);
+      fullMd += `::: tab-item 👍 送赞排行 Top 20\n`;
+      fullMd += `共为 ${rankUpOut.length} 位用户送出点赞（合计 ${summary.upvoteOutCount} 次）\n\n`;
+      fullMd += buildMarkdownTopRankTable(rankUpOut, "upvote_out", 20);
       fullMd += ":::\n";
 
-      fullMd += "::: tab-item 🎁 全部流水\n";
-      fullMd += "### 📊 账本总览汇总\n\n";
-      fullMd += `- **当前星辰余额**: ${summary.displayBal}\n`;
-      fullMd += `- **真实总流水**: ${records.length} 条\n`;
-      fullMd += `- **累计收入**: +${summary.totalIncome}\n`;
-      fullMd += `- **累计支出**: -${summary.totalExpense}\n`;
-      fullMd += `- **收到点赞**: ${summary.upvoteInCount} 次 (+${summary.upvoteInStardust})\n`;
-      fullMd += `- **送出转账**: ${summary.transferOutCount} 笔 (-${summary.transferOutStardust})\n`;
-      fullMd += `- **收到转账**: ${summary.transferInCount} 笔 (+${summary.transferInStardust})\n\n`;
-      fullMd += "### 📜 全部流水明细\n\n";
-      fullMd += buildMarkdownTable(records);
+      fullMd += `::: tab-item 💰 收到转账 Top 20\n`;
+      fullMd += `共 ${rankTrIn.length} 位用户向你转账（合计 +${summary.transferInStardust} 星辰）\n\n`;
+      fullMd += buildMarkdownTopRankTable(rankTrIn, "transfer_in", 20);
+      fullMd += ":::\n";
+
+      fullMd += `::: tab-item 💸 送出转账 Top 20\n`;
+      fullMd += `共向 ${rankTrOut.length} 位用户转账（合计 -${summary.transferOutStardust} 星辰）\n\n`;
+      fullMd += buildMarkdownTopRankTable(rankTrOut, "transfer_out", 20);
       fullMd += ":::\n";
 
       fullMd += "::::\n";
 
       const ok = await copyTextToClipboard(fullMd);
       if (btnEl) {
-        btnEl.textContent = ok ? "✅ 已复制全量 MD" : "❌ 复制失败";
+        btnEl.textContent = ok ? "✅ 已复制统计排行" : "❌ 复制失败";
         setTimeout(() => {
           btnEl.textContent = origText;
-        }, 2500);
+        }, 2400);
       }
 
       document.querySelectorAll("[data-nsc-sd-uid]").forEach((el) => {
@@ -763,54 +789,82 @@
       });
     }
 
-    function renderStardustTableSection(hostEl, records) {
-      const kw = stardustUi.search.trim().toLowerCase();
-      const filtered = records.filter((item) => {
-        if (stardustUi.filter !== "all" && item.category !== stardustUi.filter) return false;
-        if (kw) {
-          const uidStr = String(item.targetUid || "");
-          const nameStr = getResolvedStardustUserName(item.targetUid).toLowerCase();
-          const memoStr = String(item.memo || "").toLowerCase();
-          const timeStr = String(item.time || "").toLowerCase();
-          return (
-            uidStr.includes(kw) ||
-            nameStr.includes(kw) ||
-            memoStr.includes(kw) ||
-            timeStr.includes(kw)
-          );
+    function sortStardustList(list) {
+      const dir = stardustUi.sortDir === "asc" ? 1 : -1;
+      const key = stardustUi.sortKey || "time";
+      return [...list].sort((a, b) => {
+        if (key === "time") return (a.rawCreatedAt - b.rawCreatedAt) * dir;
+        if (key === "category") return a.category.localeCompare(b.category) * dir || (b.rawCreatedAt - a.rawCreatedAt);
+        if (key === "amount") return (a.amount - b.amount) * dir || (b.rawCreatedAt - a.rawCreatedAt);
+        if (key === "uid") return ((Number(a.targetUid) || 0) - (Number(b.targetUid) || 0)) * dir || (b.rawCreatedAt - a.rawCreatedAt);
+        if (key === "detail") {
+          const da = `${getDisplayUserHandle(a.targetUid)} ${a.memo || ""}`;
+          const db = `${getDisplayUserHandle(b.targetUid)} ${b.memo || ""}`;
+          return da.localeCompare(db, "zh-CN") * dir || (b.rawCreatedAt - a.rawCreatedAt);
         }
-        return true;
+        return (b.rawCreatedAt - a.rawCreatedAt);
       });
+    }
 
-      const totalItems = filtered.length;
-      const totalPages = Math.ceil(totalItems / STARDUST_PAGE_SIZE) || 1;
-      if (stardustUi.page > totalPages) stardustUi.page = totalPages;
-      if (stardustUi.page < 1) stardustUi.page = 1;
-
-      const startIdx = (stardustUi.page - 1) * STARDUST_PAGE_SIZE;
-      const pageRecords = filtered.slice(startIdx, startIdx + STARDUST_PAGE_SIZE);
+    function renderStardustTableSection(hostEl, records) {
+      stardustUi.lastTableHost = hostEl;
+      stardustUi.lastRecords = records;
+      const kw = stardustUi.search.trim().toLowerCase();
+      const filtered = sortStardustList(
+        records.filter((item) => {
+          if (stardustUi.filter !== "all" && item.category !== stardustUi.filter) return false;
+          if (kw) {
+            const uidStr = String(item.targetUid || "");
+            const nameStr = getResolvedStardustUserName(item.targetUid).toLowerCase();
+            const memoStr = String(item.memo || "").toLowerCase();
+            const timeStr = String(item.time || "").toLowerCase();
+            return (
+              uidStr.includes(kw) ||
+              nameStr.includes(kw) ||
+              memoStr.includes(kw) ||
+              timeStr.includes(kw)
+            );
+          }
+          return true;
+        })
+      );
 
       hostEl.innerHTML = "";
 
-      if (pageRecords.length === 0) {
+      if (filtered.length === 0) {
         hostEl.innerHTML = `<div class="nsc-empty-state">未找到符合条件的星辰流水记录</div>`;
         return;
       }
 
+      const sliceCount = Math.min(filtered.length, stardustUi.visibleCount);
+      const visibleRecords = filtered.slice(0, sliceCount);
+      const selfUid = stardustUi.myUid || state.currentUserId || "";
+
       const wrap = document.createElement("div");
       wrap.className = "nsc-ana-table-wrap";
 
+      const sortInd = (key) => {
+        if (stardustUi.sortKey !== key) return `<span class="nsc-ana-sort-ind">↕</span>`;
+        return `<span class="nsc-ana-sort-ind">${stardustUi.sortDir === "asc" ? "↑" : "↓"}</span>`;
+      };
+      const sortCls = (key) => "nsc-ana-sort-th" + (stardustUi.sortKey === key ? " is-sorted" : "");
+
       const visibleUids = [];
-      const rowsHtml = pageRecords.map((item) => {
-        const amountHtml = item.amount > 0
-          ? `<span style="color:#16a34a;font-weight:700;">+${item.amount}</span>`
-          : item.amount < 0
-            ? `<span style="color:#ff3b30;font-weight:700;">${item.amount}</span>`
-            : `<span>0</span>`;
+      const rowsHtml = visibleRecords.map((item) => {
+        let amountHtml = `<span>0</span>`;
+        if (item.category === "upvote_out") {
+          amountHtml = `<span style="color:var(--nsc-muted);font-weight:600;">👍 赞</span>`;
+        } else if (item.amount > 0) {
+          amountHtml = `<span style="color:#16a34a;font-weight:700;">+${item.amount}</span>`;
+        } else if (item.amount < 0) {
+          amountHtml = `<span style="color:#ff3b30;font-weight:700;">${item.amount}</span>`;
+        }
 
         let badgeHtml = `<span class="nsc-ana-badge out">💸 送出转账</span>`;
         if (item.category === "upvote_in") {
           badgeHtml = `<span class="nsc-ana-badge in">💖 收到点赞</span>`;
+        } else if (item.category === "upvote_out") {
+          badgeHtml = `<span class="nsc-ana-badge star">👍 送出点赞</span>`;
         } else if (item.category === "transfer_in") {
           badgeHtml = `<span class="nsc-ana-badge star">💰 收到转账</span>`;
         }
@@ -826,6 +880,12 @@
         }
         if (item.balance !== null && item.balance !== undefined) {
           detailParts.push(`<span class="nsc-badge-read">余额: ${escHtml(String(item.balance))}</span>`);
+        }
+        if (item.postId) {
+          detailParts.push(`<button type="button" class="nsc-mini-btn" data-sd-post="${escHtml(item.postId)}" style="padding:0 6px;font-size:10.5px;">帖子 #${escHtml(item.postId)}</button>`);
+        } else if (selfUid && item.targetUid && (item.category === "transfer_in" || item.category === "transfer_out")) {
+          const ledgerUrl = `/stardust/list?member_id=${encodeURIComponent(String(selfUid))}&peer_id=${encodeURIComponent(item.targetUid)}${item.refId ? `&ref_id=${encodeURIComponent(item.refId)}` : ""}`;
+          detailParts.push(`<a class="nsc-mini-btn" href="${ledgerUrl}" target="_blank" rel="noopener noreferrer" style="padding:0 6px;font-size:10.5px;text-decoration:none;">流水 ↗</a>`);
         }
         if (item.memo) {
           detailParts.push(`<span style="color:var(--nsc-text);">📝 ${escHtml(item.memo)}</span>`);
@@ -847,17 +907,31 @@
           <table class="nsc-ana-table">
             <thead>
               <tr>
-                <th style="width:155px;">时间 (精确秒级)</th>
-                <th style="width:105px;">类型</th>
-                <th style="width:74px;">数额</th>
-                <th style="width:96px;">对方 UID</th>
-                <th>明细信息 (@对方用户名 / 变动后余额 / 转账留言)</th>
+                <th class="${sortCls("time")}" data-sd-sort="time" style="width:155px;" title="按时间排序">时间${sortInd("time")}</th>
+                <th class="${sortCls("category")}" data-sd-sort="category" style="width:105px;" title="按类型排序">类型${sortInd("category")}</th>
+                <th class="${sortCls("amount")}" data-sd-sort="amount" style="width:78px;" title="按数额排序">数额${sortInd("amount")}</th>
+                <th class="${sortCls("uid")}" data-sd-sort="uid" style="width:98px;" title="按 UID 排序">对方 UID${sortInd("uid")}</th>
+                <th class="${sortCls("detail")}" data-sd-sort="detail" title="按用户名/明细排序">明细信息${sortInd("detail")}</th>
               </tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
       `;
+
+      wrap.querySelectorAll("[data-sd-sort]").forEach((th) => {
+        th.addEventListener("click", () => {
+          const k = th.getAttribute("data-sd-sort");
+          if (stardustUi.sortKey === k) {
+            stardustUi.sortDir = stardustUi.sortDir === "desc" ? "asc" : "desc";
+          } else {
+            stardustUi.sortKey = k;
+            stardustUi.sortDir = (k === "uid" || k === "detail" || k === "category") ? "asc" : "desc";
+          }
+          stardustUi.visibleCount = STARDUST_PAGE_SIZE;
+          renderStardustTableSection(hostEl, records);
+        });
+      });
 
       wrap.querySelectorAll("[data-sd-profile]").forEach((lnk) => {
         lnk.addEventListener("click", (e) => {
@@ -871,30 +945,28 @@
         });
       });
 
-      const pager = document.createElement("div");
-      pager.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px 2px;font-size:12px;color:var(--nsc-muted);";
-      pager.innerHTML = `
-        <span>第 ${stardustUi.page} / ${totalPages} 页 (共 ${totalItems} 条)</span>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <button type="button" class="nsc-mini-btn" data-sd-page="prev" ${stardustUi.page <= 1 ? "disabled" : ""}>上一页</button>
-          <button type="button" class="nsc-mini-btn" data-sd-page="next" ${stardustUi.page >= totalPages ? "disabled" : ""}>下一页</button>
-        </div>
-      `;
-      pager.querySelector('[data-sd-page="prev"]').addEventListener("click", () => {
-        if (stardustUi.page > 1) {
-          stardustUi.page -= 1;
-          renderStardustTableSection(hostEl, records);
-        }
-      });
-      pager.querySelector('[data-sd-page="next"]').addEventListener("click", () => {
-        if (stardustUi.page < totalPages) {
-          stardustUi.page += 1;
-          renderStardustTableSection(hostEl, records);
-        }
+      wrap.querySelectorAll("[data-sd-post]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const pid = btn.getAttribute("data-sd-post");
+          if (!pid) return;
+          const bd = document.getElementById("nsc-hub-backdrop");
+          if (bd) bd.classList.remove("is-open");
+          if (typeof openPostInChat === "function") {
+            openPostInChat({ postId: pid, url: `/post-${pid}-1`, title: `帖子 #${pid}` });
+          }
+        });
       });
 
+      const wfFoot = document.createElement("div");
+      wfFoot.style.cssText = "text-align:center;font-size:11.5px;color:var(--nsc-muted);padding:10px 4px;";
+      if (sliceCount < filtered.length) {
+        wfFoot.textContent = `继续下滑自动瀑布流加载更多（当前显示 ${sliceCount} / ${filtered.length} 条）`;
+      } else {
+        wfFoot.textContent = `已加载全部 ${filtered.length} 条流水`;
+      }
+
       hostEl.appendChild(wrap);
-      hostEl.appendChild(pager);
+      hostEl.appendChild(wfFoot);
 
       resolveVisibleStardustUids(visibleUids);
     }
@@ -914,10 +986,10 @@
       const statusBox = document.createElement("div");
       statusBox.style.cssText = "min-width:200px;flex:1;";
       const statusText = snap.running
-        ? `正在拉取第 ${snap.page + 1} 批（已去重 ${records.length} 条流水）...`
+        ? `正在全量拉取第 ${snap.page + 1} 批（已去重 ${records.length} 条记录）...`
         : records.length > 0
-          ? `已就绪 · 全量共 ${records.length} 条流水（按时间倒序）`
-          : "点击「开始全量拉取」获取个人完整星辰收支账本";
+          ? `已就绪 · 共分析 ${records.length} 条交互与转账记录`
+          : "点击「开始全量拉取」获取完整星辰收支与双向点赞统计";
       statusBox.innerHTML = `
         <div style="font-size:13px;font-weight:700;color:var(--nsc-text);">${escHtml(statusText)}</div>
         ${snap.error ? `<div style="font-size:11.5px;color:#ff3b30;margin-top:3px;">${escHtml(snap.error)}</div>` : ""}
@@ -940,8 +1012,8 @@
         fetchBtn.className = "nsc-checkin-btn primary";
         fetchBtn.textContent = records.length > 0 ? "🔄 重新抓取" : "开始全量拉取";
         fetchBtn.addEventListener("click", () => {
-          stardustUi.page = 1;
-          stardustEngine.runBatch({ maxPages: 200, delayMs: 300 });
+          stardustUi.visibleCount = STARDUST_PAGE_SIZE;
+          stardustEngine.runBatch({ maxPages: 300, delayMs: 300 });
         });
         btnGroup.appendChild(fetchBtn);
       }
@@ -949,9 +1021,9 @@
       const exportBtn = document.createElement("button");
       exportBtn.type = "button";
       exportBtn.className = "nsc-checkin-btn";
-      exportBtn.textContent = "📋 导出 Markdown (含小计)";
+      exportBtn.textContent = "📋 复制统计排行";
       exportBtn.disabled = records.length === 0 || snap.running;
-      exportBtn.addEventListener("click", () => exportStardustMarkdown(records, exportBtn));
+      exportBtn.addEventListener("click", () => exportStardustSummaryMarkdown(records, exportBtn));
       btnGroup.appendChild(exportBtn);
 
       topRow.appendChild(statusBox);
@@ -967,6 +1039,7 @@
       const filterDefs = [
         { id: "all", label: "全部" },
         { id: "upvote_in", label: "收到点赞" },
+        { id: "upvote_out", label: "送出点赞" },
         { id: "transfer_out", label: "送出转账" },
         { id: "transfer_in", label: "收到转账" },
       ];
@@ -979,7 +1052,7 @@
         b.textContent = f.label;
         b.addEventListener("click", () => {
           stardustUi.filter = f.id;
-          stardustUi.page = 1;
+          stardustUi.visibleCount = STARDUST_PAGE_SIZE;
           seg.querySelectorAll(".nsc-seg-btn").forEach((el) => el.classList.remove("is-active"));
           b.classList.add("is-active");
           if (records.length > 0) renderStardustTableSection(tableHost, records);
@@ -994,7 +1067,7 @@
       searchInput.style.cssText = "height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--nsc-border);background:var(--nsc-hover);color:var(--nsc-text);font-size:12px;outline:none;min-width:210px;";
       searchInput.addEventListener("input", () => {
         stardustUi.search = searchInput.value;
-        stardustUi.page = 1;
+        stardustUi.visibleCount = STARDUST_PAGE_SIZE;
         if (records.length > 0) renderStardustTableSection(tableHost, records);
       });
 
@@ -1007,7 +1080,7 @@
         if (!snap.running) {
           const empty = document.createElement("div");
           empty.className = "nsc-empty-state";
-          empty.textContent = "尚未拉取星辰账本数据，点击「开始全量拉取」即可完整核算收支与点赞。";
+          empty.textContent = "尚未拉取星辰账本数据，点击「开始全量拉取」即可完整核算双向点赞与转账排行。";
           body.appendChild(empty);
         }
         return;
@@ -1022,10 +1095,6 @@
           <div class="nsc-hub-kpi-val" style="color:var(--nsc-accent);">${escHtml(String(summary.displayBal))}</div>
         </div>
         <div class="nsc-hub-kpi">
-          <div class="nsc-hub-kpi-lbl">总流水</div>
-          <div class="nsc-hub-kpi-val">${records.length} 条</div>
-        </div>
-        <div class="nsc-hub-kpi">
           <div class="nsc-hub-kpi-lbl">累计收入</div>
           <div class="nsc-hub-kpi-val" style="color:#16a34a;">+${summary.totalIncome}</div>
         </div>
@@ -1038,6 +1107,10 @@
           <div class="nsc-hub-kpi-val" style="color:#16a34a;">${summary.upvoteInCount} 次 (+${summary.upvoteInStardust})</div>
         </div>
         <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">送出点赞</div>
+          <div class="nsc-hub-kpi-val" style="color:var(--nsc-accent);">${summary.upvoteOutCount} 次</div>
+        </div>
+        <div class="nsc-hub-kpi">
           <div class="nsc-hub-kpi-lbl">送出转账</div>
           <div class="nsc-hub-kpi-val" style="color:#ff3b30;">${summary.transferOutCount} 笔 (-${summary.transferOutStardust})</div>
         </div>
@@ -1047,6 +1120,99 @@
         </div>
       `;
       body.appendChild(kpi);
+
+      // 星辰互动排行榜卡片（可点击直接定位该用户的星辰转账/互动记录）
+      const rankCard = document.createElement("div");
+      rankCard.className = "nsc-ana-card";
+      rankCard.style.marginBottom = "12px";
+      const rankCats = [
+        { id: "upvote_in", label: "💖 获赞排行", unit: "星辰", sign: "+" },
+        { id: "upvote_out", label: "👍 送赞排行", unit: "次", sign: "" },
+        { id: "transfer_in", label: "💰 收到转账", unit: "星辰", sign: "+" },
+        { id: "transfer_out", label: "💸 送出转账", unit: "星辰", sign: "-" },
+      ];
+      const activeRankDef = rankCats.find((c) => c.id === stardustUi.rankCat) || rankCats[0];
+      const rankList = buildStardustRankList(records, activeRankDef.id);
+      const topRank = rankList.slice(0, 20);
+
+      rankCard.innerHTML = `
+        <div class="nsc-ana-card-title" style="flex-wrap:wrap;">
+          <span>🏆 星辰互动排行榜（点击用户直达其明细记录）</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <div class="nsc-seg-tabs" id="nsc-sd-rank-tabs"></div>
+            <button type="button" class="nsc-mini-btn" id="nsc-sd-rank-toggle">${stardustUi.showRank ? "收起" : "展开"}</button>
+          </div>
+        </div>
+        <div id="nsc-sd-rank-list" style="display:${stardustUi.showRank ? "grid" : "none"};grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px;"></div>
+      `;
+      const rTabs = rankCard.querySelector("#nsc-sd-rank-tabs");
+      rankCats.forEach((rc) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "nsc-seg-btn" + (activeRankDef.id === rc.id ? " is-active" : "");
+        b.textContent = rc.label;
+        b.addEventListener("click", () => {
+          stardustUi.rankCat = rc.id;
+          stardustUi.showRank = true;
+          renderUserHub();
+        });
+        rTabs.appendChild(b);
+      });
+      rankCard.querySelector("#nsc-sd-rank-toggle").addEventListener("click", () => {
+        stardustUi.showRank = !stardustUi.showRank;
+        renderUserHub();
+      });
+
+      const rListEl = rankCard.querySelector("#nsc-sd-rank-list");
+      if (stardustUi.showRank) {
+        if (topRank.length === 0) {
+          rListEl.innerHTML = `<div style="font-size:12px;color:var(--nsc-muted);padding:8px 2px;">暂无该分类排行数据</div>`;
+        } else {
+          const rankUidsToResolve = [];
+          topRank.forEach((u, idx) => {
+            rankUidsToResolve.push(u.uid);
+            const rank = idx + 1;
+            const rankLabel = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+            const handle = getDisplayUserHandle(u.uid);
+            const valText = activeRankDef.id === "upvote_out"
+              ? `${u.count} 次`
+              : `${activeRankDef.sign}${u.totalAmount} (${u.count}次)`;
+            const badgeCls = activeRankDef.sign === "-" ? "neg" : "pos";
+            const ledgerHref = selfUid
+              ? `/stardust/list?member_id=${encodeURIComponent(String(selfUid))}&peer_id=${encodeURIComponent(u.uid)}`
+              : `/stardust/list?member_id=${encodeURIComponent(u.uid)}`;
+
+            const row = document.createElement("div");
+            row.className = "nsc-hub-row";
+            row.style.marginBottom = "0";
+            row.style.padding = "7px 10px";
+            row.title = "点击筛选并跳转到该用户的星辰往来明细";
+            row.innerHTML = `
+              <span style="width:26px;text-align:center;font-weight:700;font-size:12px;flex:0 0 26px;">${rankLabel}</span>
+              <div class="nsc-hub-row-main">
+                <div class="nsc-hub-row-title" data-nsc-sd-uid="${escHtml(u.uid)}">${escHtml(handle)}</div>
+                <div class="nsc-hub-row-sub"><span>UID: ${escHtml(u.uid)}</span><a href="${ledgerHref}" target="_blank" rel="noopener noreferrer" data-sd-ext style="color:var(--nsc-accent);text-decoration:none;">原版流水 ↗</a></div>
+              </div>
+              <span class="nsc-hub-delta ${badgeCls}">${escHtml(valText)}</span>
+            `;
+            row.querySelector("[data-sd-ext]").addEventListener("click", (e) => e.stopPropagation());
+            row.addEventListener("click", () => {
+              stardustUi.search = String(u.uid);
+              stardustUi.filter = activeRankDef.id;
+              stardustUi.visibleCount = STARDUST_PAGE_SIZE;
+              searchInput.value = String(u.uid);
+              seg.querySelectorAll(".nsc-seg-btn").forEach((el, sIdx) => {
+                el.classList.toggle("is-active", filterDefs[sIdx] && filterDefs[sIdx].id === activeRankDef.id);
+              });
+              renderStardustTableSection(tableHost, records);
+              tableHost.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+            rListEl.appendChild(row);
+          });
+          resolveVisibleStardustUids(rankUidsToResolve);
+        }
+      }
+      body.appendChild(rankCard);
       body.appendChild(tableHost);
 
       renderStardustTableSection(tableHost, records);
@@ -1055,6 +1221,30 @@
     registerHubSubView("stardust", {
       render(body, subbar) {
         renderStardustAnalytics(body, subbar);
+      },
+      onScrollEnd() {
+        if (state.hubTab !== "stardust" || state.hubStardustView !== "analytics") return;
+        const host = stardustUi.lastTableHost;
+        const recs = stardustUi.lastRecords;
+        if (!host || !host.isConnected || !recs || recs.length === 0) return;
+        const kw = stardustUi.search.trim().toLowerCase();
+        const totalFiltered = recs.filter((item) => {
+          if (stardustUi.filter !== "all" && item.category !== stardustUi.filter) return false;
+          if (!kw) return true;
+          return (
+            String(item.targetUid || "").includes(kw) ||
+            getResolvedStardustUserName(item.targetUid).toLowerCase().includes(kw) ||
+            String(item.memo || "").toLowerCase().includes(kw) ||
+            String(item.time || "").toLowerCase().includes(kw)
+          );
+        }).length;
+        if (stardustUi.visibleCount < totalFiltered) {
+          stardustUi.visibleCount += STARDUST_PAGE_SIZE;
+          const hubBody = document.getElementById("nsc-hub-body");
+          const prevTop = hubBody ? hubBody.scrollTop : 0;
+          renderStardustTableSection(host, recs);
+          if (hubBody) hubBody.scrollTop = prevTop;
+        }
       },
     });
   })();
