@@ -354,6 +354,12 @@
       .nsc-msg.is-right .nsc-bubble {
         border-radius: 14px 14px 4px 14px;
       }
+      .nsc-msg.is-op-card .nsc-bubble,
+      .nsc-msg.is-op-bubble .nsc-bubble {
+        background: var(--nsc-bubble-op); color: var(--nsc-text);
+        border-color: rgba(245, 158, 11, 0.26);
+        border-radius: 14px 14px 14px 4px; width: fit-content;
+      }
       .nsc-msg.is-self .nsc-bubble {
         background: linear-gradient(180deg, #1686ff 0%, #007aff 100%);
         color: var(--nsc-bubble-self-text);
@@ -361,11 +367,6 @@
         box-shadow: 0 2px 8px rgba(0, 122, 255, 0.22);
       }
       .nsc-msg.is-self .nsc-bubble a { color: #e0f2fe; }
-      .nsc-msg.is-op-card .nsc-bubble,
-      .nsc-msg.is-op-bubble .nsc-bubble {
-        background: var(--nsc-bubble-op); border-color: rgba(245, 158, 11, 0.26);
-        border-radius: 14px 14px 14px 4px; width: fit-content;
-      }
 
       .nsc-bubble img,
       .nsc-bubble img.nsc-zoomable-img,

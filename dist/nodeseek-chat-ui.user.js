@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.10.0
+// @version      7.10.1
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -888,6 +888,12 @@
       .nsc-msg.is-right .nsc-bubble {
         border-radius: 14px 14px 4px 14px;
       }
+      .nsc-msg.is-op-card .nsc-bubble,
+      .nsc-msg.is-op-bubble .nsc-bubble {
+        background: var(--nsc-bubble-op); color: var(--nsc-text);
+        border-color: rgba(245, 158, 11, 0.26);
+        border-radius: 14px 14px 14px 4px; width: fit-content;
+      }
       .nsc-msg.is-self .nsc-bubble {
         background: linear-gradient(180deg, #1686ff 0%, #007aff 100%);
         color: var(--nsc-bubble-self-text);
@@ -895,11 +901,6 @@
         box-shadow: 0 2px 8px rgba(0, 122, 255, 0.22);
       }
       .nsc-msg.is-self .nsc-bubble a { color: #e0f2fe; }
-      .nsc-msg.is-op-card .nsc-bubble,
-      .nsc-msg.is-op-bubble .nsc-bubble {
-        background: var(--nsc-bubble-op); border-color: rgba(245, 158, 11, 0.26);
-        border-radius: 14px 14px 14px 4px; width: fit-content;
-      }
 
       .nsc-bubble img,
       .nsc-bubble img.nsc-zoomable-img,
