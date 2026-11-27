@@ -388,18 +388,23 @@
         border: none; background: transparent; cursor: default; vertical-align: middle;
       }
 
-      /* 帖子多图联动网格画廊（贴图版块与多图贴自动排版） */
+      /* 帖子多图朋友圈宫格画廊（2/4图两列，3/5+图三列九宫格） */
       .nsc-img-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
-        gap: 8px; margin: 6px 0; max-width: 620px;
+        display: grid; grid-template-columns: repeat(3, 1fr);
+        gap: 6px; margin: 6px 0; width: min(100%, 396px);
+      }
+      .nsc-img-grid.cols-2 {
+        grid-template-columns: repeat(2, 1fr);
+        width: min(100%, 300px);
       }
       .nsc-img-grid img.nsc-zoomable-img {
-        width: 100% !important; height: 170px !important; max-width: none !important; max-height: none !important;
-        object-fit: cover !important; margin: 0 !important; border-radius: 10px;
-        transition: transform 0.16s ease, box-shadow 0.16s ease;
+        width: 100% !important; height: auto !important; aspect-ratio: 1 / 1;
+        max-width: none !important; max-height: none !important;
+        object-fit: cover !important; margin: 0 !important; border-radius: 8px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
       .nsc-img-grid img.nsc-zoomable-img:hover {
-        transform: scale(1.02); box-shadow: 0 6px 18px rgba(0,0,0,0.14);
+        transform: scale(1.02); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
       }
 
       /* 悬停图片快速放大预览浮窗 */
@@ -857,16 +862,23 @@
       #nsc-lightbox img.is-pannable { cursor: grab; }
       #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
       .nsc-lb-nav {
-        position: fixed; top: 50%; transform: translateY(-50%);
-        width: 42px; height: 42px; border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.12);
-        color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-        transition: background 0.14s ease;
+        position: fixed; top: 50%; transform: translateY(-50%); z-index: 10002;
+        width: 46px; height: 46px; border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.26); background: rgba(20,22,28,0.62);
+        color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: background 0.14s ease, transform 0.14s ease;
       }
-      .nsc-lb-nav:hover { background: rgba(255,255,255,0.26); }
+      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.75); transform: translateY(-50%) scale(1.06); }
       .nsc-lb-nav.prev { left: 22px; }
       .nsc-lb-nav.next { right: 22px; }
-      .nsc-lb-nav:disabled { opacity: 0.25; cursor: default; }
+      .nsc-lb-nav:disabled { opacity: 0.22; cursor: default; }
+      .nsc-lb-top-badge {
+        position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10002;
+        padding: 4px 14px; border-radius: 999px;
+        background: rgba(20, 22, 28, 0.72); border: 1px solid rgba(255,255,255,0.18);
+        color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: 0.3px;
+      }
+      .nsc-lb-top-badge:empty { display: none; }
       .nsc-lightbox-bar { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .nsc-lightbox-btn {
         padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.22);

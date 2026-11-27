@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.4
+// @version      7.9.5
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -921,18 +921,23 @@
         border: none; background: transparent; cursor: default; vertical-align: middle;
       }
 
-      /* 帖子多图联动网格画廊（贴图版块与多图贴自动排版） */
+      /* 帖子多图朋友圈宫格画廊（2/4图两列，3/5+图三列九宫格） */
       .nsc-img-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
-        gap: 8px; margin: 6px 0; max-width: 620px;
+        display: grid; grid-template-columns: repeat(3, 1fr);
+        gap: 6px; margin: 6px 0; width: min(100%, 396px);
+      }
+      .nsc-img-grid.cols-2 {
+        grid-template-columns: repeat(2, 1fr);
+        width: min(100%, 300px);
       }
       .nsc-img-grid img.nsc-zoomable-img {
-        width: 100% !important; height: 170px !important; max-width: none !important; max-height: none !important;
-        object-fit: cover !important; margin: 0 !important; border-radius: 10px;
-        transition: transform 0.16s ease, box-shadow 0.16s ease;
+        width: 100% !important; height: auto !important; aspect-ratio: 1 / 1;
+        max-width: none !important; max-height: none !important;
+        object-fit: cover !important; margin: 0 !important; border-radius: 8px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
       .nsc-img-grid img.nsc-zoomable-img:hover {
-        transform: scale(1.02); box-shadow: 0 6px 18px rgba(0,0,0,0.14);
+        transform: scale(1.02); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
       }
 
       /* 悬停图片快速放大预览浮窗 */
@@ -1390,16 +1395,23 @@
       #nsc-lightbox img.is-pannable { cursor: grab; }
       #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
       .nsc-lb-nav {
-        position: fixed; top: 50%; transform: translateY(-50%);
-        width: 42px; height: 42px; border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.12);
-        color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-        transition: background 0.14s ease;
+        position: fixed; top: 50%; transform: translateY(-50%); z-index: 10002;
+        width: 46px; height: 46px; border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.26); background: rgba(20,22,28,0.62);
+        color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: background 0.14s ease, transform 0.14s ease;
       }
-      .nsc-lb-nav:hover { background: rgba(255,255,255,0.26); }
+      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.75); transform: translateY(-50%) scale(1.06); }
       .nsc-lb-nav.prev { left: 22px; }
       .nsc-lb-nav.next { right: 22px; }
-      .nsc-lb-nav:disabled { opacity: 0.25; cursor: default; }
+      .nsc-lb-nav:disabled { opacity: 0.22; cursor: default; }
+      .nsc-lb-top-badge {
+        position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10002;
+        padding: 4px 14px; border-radius: 999px;
+        background: rgba(20, 22, 28, 0.72); border: 1px solid rgba(255,255,255,0.18);
+        color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: 0.3px;
+      }
+      .nsc-lb-top-badge:empty { display: none; }
       .nsc-lightbox-bar { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .nsc-lightbox-btn {
         padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.22);
@@ -2093,13 +2105,16 @@
     const lightbox = document.createElement("div");
     lightbox.id = "nsc-lightbox";
     lightbox.innerHTML = `
+      <div id="nsc-lb-top-badge" class="nsc-lb-top-badge"></div>
       <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
       <div class="nsc-lightbox-stage" id="nsc-lb-stage">
         <img id="nsc-lightbox-img" src="" alt="原图" />
       </div>
       <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       <div class="nsc-lightbox-bar">
+        <button type="button" id="nsc-lb-bar-prev" class="nsc-lightbox-btn">‹ 上一张</button>
         <span id="nsc-lb-count" class="nsc-lightbox-count"></span>
+        <button type="button" id="nsc-lb-bar-next" class="nsc-lightbox-btn">下一张 ›</button>
         <button type="button" id="nsc-lb-zoom" class="nsc-lightbox-btn" title="点击重置适应窗口">100%</button>
         <button type="button" id="nsc-lb-orig" class="nsc-lightbox-btn" title="按原图 1:1 尺寸查看并可拖拽">原图 1:1</button>
         <button type="button" id="nsc-lb-copy" class="nsc-lightbox-btn">复制链接</button>
@@ -2198,6 +2213,14 @@
       stepLightbox(-1);
     });
     lightbox.querySelector("#nsc-lb-next").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(1);
+    });
+    lightbox.querySelector("#nsc-lb-bar-prev").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(-1);
+    });
+    lightbox.querySelector("#nsc-lb-bar-next").addEventListener("click", (e) => {
       e.stopPropagation();
       stepLightbox(1);
     });
@@ -2852,8 +2875,11 @@
     const img = document.getElementById("nsc-lightbox-img");
     const raw = document.getElementById("nsc-lightbox-raw");
     const cnt = document.getElementById("nsc-lb-count");
+    const topBadge = document.getElementById("nsc-lb-top-badge");
     const prevBtn = document.getElementById("nsc-lb-prev");
     const nextBtn = document.getElementById("nsc-lb-next");
+    const barPrev = document.getElementById("nsc-lb-bar-prev");
+    const barNext = document.getElementById("nsc-lb-bar-next");
     if (!lb || !img || !raw || _lbGallery.length === 0) return;
     _lbIndex = Math.max(0, Math.min(idx, _lbGallery.length - 1));
     const src = _lbGallery[_lbIndex];
@@ -2863,9 +2889,14 @@
     if (typeof window.__nscApplyLbTransform === "function") window.__nscApplyLbTransform();
     img.src = src;
     raw.href = src;
-    if (cnt) cnt.textContent = _lbGallery.length > 1 ? `${_lbIndex + 1} / ${_lbGallery.length}` : "";
-    if (prevBtn) prevBtn.disabled = _lbGallery.length <= 1 || _lbIndex <= 0;
-    if (nextBtn) nextBtn.disabled = _lbGallery.length <= 1 || _lbIndex >= _lbGallery.length - 1;
+    const multi = _lbGallery.length > 1;
+    const countStr = multi ? `第 ${_lbIndex + 1} 张 / 共 ${_lbGallery.length} 张` : "";
+    if (cnt) cnt.textContent = multi ? `${_lbIndex + 1} / ${_lbGallery.length}` : "";
+    if (topBadge) topBadge.textContent = countStr;
+    if (prevBtn) { prevBtn.style.display = multi ? "flex" : "none"; prevBtn.disabled = _lbIndex <= 0; }
+    if (nextBtn) { nextBtn.style.display = multi ? "flex" : "none"; nextBtn.disabled = _lbIndex >= _lbGallery.length - 1; }
+    if (barPrev) { barPrev.style.display = multi ? "inline-block" : "none"; barPrev.disabled = _lbIndex <= 0; }
+    if (barNext) { barNext.style.display = multi ? "inline-block" : "none"; barNext.disabled = _lbIndex >= _lbGallery.length - 1; }
     lb.classList.add("is-open");
   }
 
@@ -2875,11 +2906,15 @@
     if (next >= 0 && next < _lbGallery.length) showLightboxAt(next);
   }
 
-  function openLightbox(src) {
-    const imgs = Array.from(document.querySelectorAll("#nsc-chat-messages img.nsc-zoomable-img")).map(
-      (el) => el.currentSrc || el.getAttribute("src") || ""
-    ).filter(Boolean);
-    _lbGallery = imgs.length > 0 ? Array.from(new Set(imgs)) : [src];
+  function openLightbox(src, scopeUrls = null) {
+    if (Array.isArray(scopeUrls) && scopeUrls.length > 0) {
+      _lbGallery = Array.from(new Set(scopeUrls));
+    } else {
+      const imgs = Array.from(document.querySelectorAll("#nsc-chat-messages img.nsc-zoomable-img")).map(
+        (el) => el.currentSrc || el.getAttribute("src") || ""
+      ).filter(Boolean);
+      _lbGallery = imgs.length > 0 ? Array.from(new Set(imgs)) : [src];
+    }
     const idx = _lbGallery.indexOf(src);
     showLightboxAt(idx >= 0 ? idx : 0);
   }
@@ -2951,50 +2986,45 @@
         continue;
       }
       img.classList.add("nsc-zoomable-img");
-      img.title = "悬停放大预览 · 点击打开原图画廊（支持滚轮缩放）";
+      img.title = "悬停放大预览 · 点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
+      if (!img.closest("blockquote, pre, code")) {
+        zoomImgs.push(img);
+      }
+    }
+
+    const scopeUrls = zoomImgs.map((el) => el.currentSrc || el.getAttribute("src") || "").filter(Boolean);
+    for (const img of containerEl.querySelectorAll("img.nsc-zoomable-img")) {
+      const src = img.getAttribute("src") || "";
       img.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openLightbox(img.currentSrc || src);
+        openLightbox(img.currentSrc || src, scopeUrls.length >= 2 ? scopeUrls : null);
       });
       attachHoverImagePreview(img);
-      zoomImgs.push(img);
     }
 
-    // 同一段落或连续纯图片段落 >= 2 张时自动组合为整齐画廊网格
+    // 帖子内有 >= 2 张图片时，自动组合为朋友圈风格宫格（2/4张为两列，3/5+张为三列九宫格）
     if (zoomImgs.length >= 2) {
-      const isPureImgP = (el) => {
-        if (!el || el.tagName !== "P") return false;
-        const imgs = el.querySelectorAll("img.nsc-zoomable-img");
-        return imgs.length > 0 && el.textContent.trim() === "";
-      };
-      for (const p of Array.from(containerEl.querySelectorAll("p"))) {
-        const imgs = p.querySelectorAll("img.nsc-zoomable-img");
-        if (imgs.length >= 2 && p.textContent.trim() === "") {
-          p.classList.add("nsc-img-grid");
+      const grid = document.createElement("div");
+      grid.className = "nsc-img-grid" + (zoomImgs.length === 2 || zoomImgs.length === 4 ? " cols-2" : "");
+      const anchor = zoomImgs[0].closest("p, figure, div") || zoomImgs[0];
+      if (anchor && anchor.parentNode === containerEl) {
+        containerEl.insertBefore(grid, anchor);
+      } else {
+        containerEl.appendChild(grid);
+      }
+      const parentsToCheck = new Set();
+      for (const im of zoomImgs) {
+        const p = im.closest("p, figure, a");
+        if (p && p !== containerEl) parentsToCheck.add(p);
+        grid.appendChild(im);
+      }
+      for (const p of parentsToCheck) {
+        const txt = (p.textContent || "").trim();
+        if (!txt && !p.querySelector("img, video, iframe")) {
+          p.remove();
         }
       }
-      let run = [];
-      const flushRun = () => {
-        if (run.length >= 2) {
-          const grid = document.createElement("div");
-          grid.className = "nsc-img-grid";
-          run[0].parentNode.insertBefore(grid, run[0]);
-          for (const p of run) {
-            for (const im of p.querySelectorAll("img.nsc-zoomable-img")) grid.appendChild(im);
-            p.remove();
-          }
-        }
-        run = [];
-      };
-      for (const child of Array.from(containerEl.children)) {
-        if (isPureImgP(child) && !child.classList.contains("nsc-img-grid")) {
-          run.push(child);
-        } else {
-          flushRun();
-        }
-      }
-      flushRun();
     }
   }
 

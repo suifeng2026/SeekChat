@@ -117,13 +117,16 @@
     const lightbox = document.createElement("div");
     lightbox.id = "nsc-lightbox";
     lightbox.innerHTML = `
+      <div id="nsc-lb-top-badge" class="nsc-lb-top-badge"></div>
       <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
       <div class="nsc-lightbox-stage" id="nsc-lb-stage">
         <img id="nsc-lightbox-img" src="" alt="原图" />
       </div>
       <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       <div class="nsc-lightbox-bar">
+        <button type="button" id="nsc-lb-bar-prev" class="nsc-lightbox-btn">‹ 上一张</button>
         <span id="nsc-lb-count" class="nsc-lightbox-count"></span>
+        <button type="button" id="nsc-lb-bar-next" class="nsc-lightbox-btn">下一张 ›</button>
         <button type="button" id="nsc-lb-zoom" class="nsc-lightbox-btn" title="点击重置适应窗口">100%</button>
         <button type="button" id="nsc-lb-orig" class="nsc-lightbox-btn" title="按原图 1:1 尺寸查看并可拖拽">原图 1:1</button>
         <button type="button" id="nsc-lb-copy" class="nsc-lightbox-btn">复制链接</button>
@@ -222,6 +225,14 @@
       stepLightbox(-1);
     });
     lightbox.querySelector("#nsc-lb-next").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(1);
+    });
+    lightbox.querySelector("#nsc-lb-bar-prev").addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepLightbox(-1);
+    });
+    lightbox.querySelector("#nsc-lb-bar-next").addEventListener("click", (e) => {
       e.stopPropagation();
       stepLightbox(1);
     });
@@ -876,8 +887,11 @@
     const img = document.getElementById("nsc-lightbox-img");
     const raw = document.getElementById("nsc-lightbox-raw");
     const cnt = document.getElementById("nsc-lb-count");
+    const topBadge = document.getElementById("nsc-lb-top-badge");
     const prevBtn = document.getElementById("nsc-lb-prev");
     const nextBtn = document.getElementById("nsc-lb-next");
+    const barPrev = document.getElementById("nsc-lb-bar-prev");
+    const barNext = document.getElementById("nsc-lb-bar-next");
     if (!lb || !img || !raw || _lbGallery.length === 0) return;
     _lbIndex = Math.max(0, Math.min(idx, _lbGallery.length - 1));
     const src = _lbGallery[_lbIndex];
@@ -887,9 +901,14 @@
     if (typeof window.__nscApplyLbTransform === "function") window.__nscApplyLbTransform();
     img.src = src;
     raw.href = src;
-    if (cnt) cnt.textContent = _lbGallery.length > 1 ? `${_lbIndex + 1} / ${_lbGallery.length}` : "";
-    if (prevBtn) prevBtn.disabled = _lbGallery.length <= 1 || _lbIndex <= 0;
-    if (nextBtn) nextBtn.disabled = _lbGallery.length <= 1 || _lbIndex >= _lbGallery.length - 1;
+    const multi = _lbGallery.length > 1;
+    const countStr = multi ? `第 ${_lbIndex + 1} 张 / 共 ${_lbGallery.length} 张` : "";
+    if (cnt) cnt.textContent = multi ? `${_lbIndex + 1} / ${_lbGallery.length}` : "";
+    if (topBadge) topBadge.textContent = countStr;
+    if (prevBtn) { prevBtn.style.display = multi ? "flex" : "none"; prevBtn.disabled = _lbIndex <= 0; }
+    if (nextBtn) { nextBtn.style.display = multi ? "flex" : "none"; nextBtn.disabled = _lbIndex >= _lbGallery.length - 1; }
+    if (barPrev) { barPrev.style.display = multi ? "inline-block" : "none"; barPrev.disabled = _lbIndex <= 0; }
+    if (barNext) { barNext.style.display = multi ? "inline-block" : "none"; barNext.disabled = _lbIndex >= _lbGallery.length - 1; }
     lb.classList.add("is-open");
   }
 
@@ -899,11 +918,15 @@
     if (next >= 0 && next < _lbGallery.length) showLightboxAt(next);
   }
 
-  function openLightbox(src) {
-    const imgs = Array.from(document.querySelectorAll("#nsc-chat-messages img.nsc-zoomable-img")).map(
-      (el) => el.currentSrc || el.getAttribute("src") || ""
-    ).filter(Boolean);
-    _lbGallery = imgs.length > 0 ? Array.from(new Set(imgs)) : [src];
+  function openLightbox(src, scopeUrls = null) {
+    if (Array.isArray(scopeUrls) && scopeUrls.length > 0) {
+      _lbGallery = Array.from(new Set(scopeUrls));
+    } else {
+      const imgs = Array.from(document.querySelectorAll("#nsc-chat-messages img.nsc-zoomable-img")).map(
+        (el) => el.currentSrc || el.getAttribute("src") || ""
+      ).filter(Boolean);
+      _lbGallery = imgs.length > 0 ? Array.from(new Set(imgs)) : [src];
+    }
     const idx = _lbGallery.indexOf(src);
     showLightboxAt(idx >= 0 ? idx : 0);
   }
@@ -975,50 +998,45 @@
         continue;
       }
       img.classList.add("nsc-zoomable-img");
-      img.title = "悬停放大预览 · 点击打开原图画廊（支持滚轮缩放）";
+      img.title = "悬停放大预览 · 点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
+      if (!img.closest("blockquote, pre, code")) {
+        zoomImgs.push(img);
+      }
+    }
+
+    const scopeUrls = zoomImgs.map((el) => el.currentSrc || el.getAttribute("src") || "").filter(Boolean);
+    for (const img of containerEl.querySelectorAll("img.nsc-zoomable-img")) {
+      const src = img.getAttribute("src") || "";
       img.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openLightbox(img.currentSrc || src);
+        openLightbox(img.currentSrc || src, scopeUrls.length >= 2 ? scopeUrls : null);
       });
       attachHoverImagePreview(img);
-      zoomImgs.push(img);
     }
 
-    // 同一段落或连续纯图片段落 >= 2 张时自动组合为整齐画廊网格
+    // 帖子内有 >= 2 张图片时，自动组合为朋友圈风格宫格（2/4张为两列，3/5+张为三列九宫格）
     if (zoomImgs.length >= 2) {
-      const isPureImgP = (el) => {
-        if (!el || el.tagName !== "P") return false;
-        const imgs = el.querySelectorAll("img.nsc-zoomable-img");
-        return imgs.length > 0 && el.textContent.trim() === "";
-      };
-      for (const p of Array.from(containerEl.querySelectorAll("p"))) {
-        const imgs = p.querySelectorAll("img.nsc-zoomable-img");
-        if (imgs.length >= 2 && p.textContent.trim() === "") {
-          p.classList.add("nsc-img-grid");
+      const grid = document.createElement("div");
+      grid.className = "nsc-img-grid" + (zoomImgs.length === 2 || zoomImgs.length === 4 ? " cols-2" : "");
+      const anchor = zoomImgs[0].closest("p, figure, div") || zoomImgs[0];
+      if (anchor && anchor.parentNode === containerEl) {
+        containerEl.insertBefore(grid, anchor);
+      } else {
+        containerEl.appendChild(grid);
+      }
+      const parentsToCheck = new Set();
+      for (const im of zoomImgs) {
+        const p = im.closest("p, figure, a");
+        if (p && p !== containerEl) parentsToCheck.add(p);
+        grid.appendChild(im);
+      }
+      for (const p of parentsToCheck) {
+        const txt = (p.textContent || "").trim();
+        if (!txt && !p.querySelector("img, video, iframe")) {
+          p.remove();
         }
       }
-      let run = [];
-      const flushRun = () => {
-        if (run.length >= 2) {
-          const grid = document.createElement("div");
-          grid.className = "nsc-img-grid";
-          run[0].parentNode.insertBefore(grid, run[0]);
-          for (const p of run) {
-            for (const im of p.querySelectorAll("img.nsc-zoomable-img")) grid.appendChild(im);
-            p.remove();
-          }
-        }
-        run = [];
-      };
-      for (const child of Array.from(containerEl.children)) {
-        if (isPureImgP(child) && !child.classList.contains("nsc-img-grid")) {
-          run.push(child);
-        } else {
-          flushRun();
-        }
-      }
-      flushRun();
     }
   }
 
