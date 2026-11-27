@@ -1814,25 +1814,26 @@
       }
       .nsc-checkin-card {
         display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-        padding: 12px 14px; border-radius: 12px; margin-bottom: 12px;
+        padding: 12px 14px; border-radius: 10px; margin-bottom: 12px;
         background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
       }
-      .nsc-checkin-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-checkin-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
       .nsc-checkin-btn {
-        height: 30px; padding: 0 13px; border-radius: 8px; font-size: 12px; font-weight: 600;
+        height: 29px; padding: 0 13px; border-radius: 7px; font-size: 12px; font-weight: 600;
         border: 1px solid var(--nsc-border); background: var(--nsc-hover); color: var(--nsc-text);
         cursor: pointer; transition: all 0.13s ease;
       }
       .nsc-checkin-btn:hover:not(:disabled) { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
       .nsc-checkin-btn.primary { background: var(--nsc-accent); color: #fff; border-color: transparent; }
       .nsc-checkin-btn.primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; background: var(--nsc-accent); }
-      .nsc-checkin-btn:disabled { opacity: 0.55; cursor: default; }
+      .nsc-checkin-btn:disabled { opacity: 0.58; cursor: default; }
       .nsc-checkin-btn.is-loading:disabled { cursor: wait; }
       .nsc-checkin-auto-row {
         display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
         width: 100%; padding-top: 10px; margin-top: 2px; border-top: 1px dashed var(--nsc-border);
         font-size: 12px; color: var(--nsc-text);
       }
+      .nsc-checkin-auto-seg.is-dim { opacity: 0.55; }
       .nsc-switch {
         position: relative; display: inline-flex; align-items: center; width: 34px; height: 19px;
         border-radius: 999px; background: rgba(128, 128, 128, 0.28); border: none; padding: 2px;
@@ -2402,4 +2403,3 @@
     }
     st.textContent = rules.join("\n");
   }
-

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.28
+// @version      7.22.29
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -321,7 +321,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.28",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.29",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -3953,25 +3953,26 @@
       }
       .nsc-checkin-card {
         display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-        padding: 12px 14px; border-radius: 12px; margin-bottom: 12px;
+        padding: 12px 14px; border-radius: 10px; margin-bottom: 12px;
         background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
       }
-      .nsc-checkin-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-checkin-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
       .nsc-checkin-btn {
-        height: 30px; padding: 0 13px; border-radius: 8px; font-size: 12px; font-weight: 600;
+        height: 29px; padding: 0 13px; border-radius: 7px; font-size: 12px; font-weight: 600;
         border: 1px solid var(--nsc-border); background: var(--nsc-hover); color: var(--nsc-text);
         cursor: pointer; transition: all 0.13s ease;
       }
       .nsc-checkin-btn:hover:not(:disabled) { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
       .nsc-checkin-btn.primary { background: var(--nsc-accent); color: #fff; border-color: transparent; }
       .nsc-checkin-btn.primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; background: var(--nsc-accent); }
-      .nsc-checkin-btn:disabled { opacity: 0.55; cursor: default; }
+      .nsc-checkin-btn:disabled { opacity: 0.58; cursor: default; }
       .nsc-checkin-btn.is-loading:disabled { cursor: wait; }
       .nsc-checkin-auto-row {
         display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
         width: 100%; padding-top: 10px; margin-top: 2px; border-top: 1px dashed var(--nsc-border);
         font-size: 12px; color: var(--nsc-text);
       }
+      .nsc-checkin-auto-seg.is-dim { opacity: 0.55; }
       .nsc-switch {
         position: relative; display: inline-flex; align-items: center; width: 34px; height: 19px;
         border-radius: 999px; background: rgba(128, 128, 128, 0.28); border: none; padding: 2px;
@@ -14364,7 +14365,7 @@
 
     if (state.hubTab === "attendance") {
       const st = state.hubData.board;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">每日签到（固定 5 鸡腿 / 随机试试手气）与今日排行榜</span>`;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">每日签到与今日排行榜</span>`;
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
@@ -14386,15 +14387,15 @@
       const isLoadingCk = Boolean(state.hubData.checkinLoading);
       const subText = signedToday
         ? `今日已完成签到${todayGain !== null ? `，获得 +${todayGain} 鸡腿` : ""}${todayCurrent !== null ? ` · 当前余额 ${todayCurrent} 鸡腿` : ""}`
-        : (res && !res.ok ? `${res.mode}：${res.message}` : "固定签到稳定 +5 鸡腿；随机签到拼手气（1~10+ 鸡腿）");
+        : (res && !res.ok ? `${res.mode}：${res.message}` : "可选择固定领取 +5 鸡腿，或随机抽取手气奖励");
       const subColor = signedToday ? "var(--nsc-green)" : (res && !res.ok ? "#ff9f0a" : "var(--nsc-muted)");
       const ckCard = document.createElement("div");
       ckCard.className = "nsc-checkin-card";
       ckCard.innerHTML = `
         <div style="min-width:0;">
           <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span>每日签到领取鸡腿</span>
-            <span class="nsc-badge-read" style="${signedToday ? "color:var(--nsc-green);border-color:var(--nsc-green);" : ""}">${signedToday ? "今日已签" : "今日待签"}</span>
+            <span>每日签到</span>
+            <span class="nsc-badge-read" style="${signedToday ? "color:var(--nsc-green);border-color:var(--nsc-green);" : ""}">${signedToday ? "今日已签" : "待签到"}</span>
             ${todayGain !== null ? `<span class="nsc-badge-read" style="color:var(--nsc-green);border-color:rgba(52,199,89,0.45);background:rgba(52,199,89,0.10);font-weight:700;">+${todayGain} 鸡腿</span>` : ""}
           </div>
           <div style="font-size:11.5px;color:${subColor};margin-top:3px;">
@@ -14402,22 +14403,25 @@
           </div>
         </div>
         <div class="nsc-checkin-actions">
-          <button type="button" class="nsc-checkin-btn ${!signedToday ? "primary" : ""} ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-fixed" ${signedToday || isLoadingCk ? "disabled" : ""}>${signedToday ? "固定签到 (已签)" : "固定签到 (+5 鸡腿)"}</button>
-          <button type="button" class="nsc-checkin-btn ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-random" ${signedToday || isLoadingCk ? "disabled" : ""}>${signedToday ? "随机签到 (已签)" : "随机签到 (拼手气)"}</button>
+          ${signedToday
+            ? `<button type="button" class="nsc-checkin-btn" disabled>今日已签到</button>`
+            : `<button type="button" class="nsc-checkin-btn primary ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-fixed" ${isLoadingCk ? "disabled" : ""}>固定 +5</button>
+               <button type="button" class="nsc-checkin-btn ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-random" ${isLoadingCk ? "disabled" : ""}>试试手气</button>`}
         </div>
         <div class="nsc-checkin-auto-row">
           <div style="display:flex;align-items:center;gap:8px;">
-            <button type="button" class="nsc-switch ${state.autoCheckin ? "is-on" : ""}" id="nsc-auto-ck-toggle" aria-pressed="${state.autoCheckin ? "true" : "false"}" title="开启后每日首次打开论坛自动执行签到"><span class="nsc-switch-knob"></span></button>
-            <span style="font-weight:600;">每日首次访问自动签到</span>
+            <button type="button" class="nsc-switch ${state.autoCheckin ? "is-on" : ""}" id="nsc-auto-ck-toggle" aria-pressed="${state.autoCheckin ? "true" : "false"}" title="开启后每日首次访问自动执行签到"><span class="nsc-switch-knob"></span></button>
+            <span style="font-weight:600;">自动签到</span>
+            <span style="font-size:11px;color:var(--nsc-muted);">每日首次访问</span>
           </div>
-          <div class="nsc-seg-tabs" id="nsc-auto-ck-mode">
-            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">自动固定 (+5 鸡腿)</button>
-            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">自动随机 (拼手气)</button>
+          <div class="nsc-seg-tabs nsc-checkin-auto-seg ${state.autoCheckin ? "" : "is-dim"}" id="nsc-auto-ck-mode">
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">固定 +5</button>
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">拼手气</button>
           </div>
         </div>
       `;
-      ckCard.querySelector("#nsc-ck-fixed").addEventListener("click", () => performAttendance(false));
-      ckCard.querySelector("#nsc-ck-random").addEventListener("click", () => performAttendance(true));
+      ckCard.querySelector("#nsc-ck-fixed")?.addEventListener("click", () => performAttendance(false));
+      ckCard.querySelector("#nsc-ck-random")?.addEventListener("click", () => performAttendance(true));
       ckCard.querySelector("#nsc-auto-ck-toggle").addEventListener("click", () => {
         state.autoCheckin = !state.autoCheckin;
         localStorage.setItem(LS.AUTO_CHECKIN, state.autoCheckin ? "1" : "0");

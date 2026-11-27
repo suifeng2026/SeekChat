@@ -2700,7 +2700,7 @@
 
     if (state.hubTab === "attendance") {
       const st = state.hubData.board;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">每日签到（固定 5 鸡腿 / 随机试试手气）与今日排行榜</span>`;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">每日签到与今日排行榜</span>`;
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
@@ -2722,15 +2722,15 @@
       const isLoadingCk = Boolean(state.hubData.checkinLoading);
       const subText = signedToday
         ? `今日已完成签到${todayGain !== null ? `，获得 +${todayGain} 鸡腿` : ""}${todayCurrent !== null ? ` · 当前余额 ${todayCurrent} 鸡腿` : ""}`
-        : (res && !res.ok ? `${res.mode}：${res.message}` : "固定签到稳定 +5 鸡腿；随机签到拼手气（1~10+ 鸡腿）");
+        : (res && !res.ok ? `${res.mode}：${res.message}` : "可选择固定领取 +5 鸡腿，或随机抽取手气奖励");
       const subColor = signedToday ? "var(--nsc-green)" : (res && !res.ok ? "#ff9f0a" : "var(--nsc-muted)");
       const ckCard = document.createElement("div");
       ckCard.className = "nsc-checkin-card";
       ckCard.innerHTML = `
         <div style="min-width:0;">
           <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span>每日签到领取鸡腿</span>
-            <span class="nsc-badge-read" style="${signedToday ? "color:var(--nsc-green);border-color:var(--nsc-green);" : ""}">${signedToday ? "今日已签" : "今日待签"}</span>
+            <span>每日签到</span>
+            <span class="nsc-badge-read" style="${signedToday ? "color:var(--nsc-green);border-color:var(--nsc-green);" : ""}">${signedToday ? "今日已签" : "待签到"}</span>
             ${todayGain !== null ? `<span class="nsc-badge-read" style="color:var(--nsc-green);border-color:rgba(52,199,89,0.45);background:rgba(52,199,89,0.10);font-weight:700;">+${todayGain} 鸡腿</span>` : ""}
           </div>
           <div style="font-size:11.5px;color:${subColor};margin-top:3px;">
@@ -2738,22 +2738,25 @@
           </div>
         </div>
         <div class="nsc-checkin-actions">
-          <button type="button" class="nsc-checkin-btn ${!signedToday ? "primary" : ""} ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-fixed" ${signedToday || isLoadingCk ? "disabled" : ""}>${signedToday ? "固定签到 (已签)" : "固定签到 (+5 鸡腿)"}</button>
-          <button type="button" class="nsc-checkin-btn ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-random" ${signedToday || isLoadingCk ? "disabled" : ""}>${signedToday ? "随机签到 (已签)" : "随机签到 (拼手气)"}</button>
+          ${signedToday
+            ? `<button type="button" class="nsc-checkin-btn" disabled>今日已签到</button>`
+            : `<button type="button" class="nsc-checkin-btn primary ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-fixed" ${isLoadingCk ? "disabled" : ""}>固定 +5</button>
+               <button type="button" class="nsc-checkin-btn ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-random" ${isLoadingCk ? "disabled" : ""}>试试手气</button>`}
         </div>
         <div class="nsc-checkin-auto-row">
           <div style="display:flex;align-items:center;gap:8px;">
-            <button type="button" class="nsc-switch ${state.autoCheckin ? "is-on" : ""}" id="nsc-auto-ck-toggle" aria-pressed="${state.autoCheckin ? "true" : "false"}" title="开启后每日首次打开论坛自动执行签到"><span class="nsc-switch-knob"></span></button>
-            <span style="font-weight:600;">每日首次访问自动签到</span>
+            <button type="button" class="nsc-switch ${state.autoCheckin ? "is-on" : ""}" id="nsc-auto-ck-toggle" aria-pressed="${state.autoCheckin ? "true" : "false"}" title="开启后每日首次访问自动执行签到"><span class="nsc-switch-knob"></span></button>
+            <span style="font-weight:600;">自动签到</span>
+            <span style="font-size:11px;color:var(--nsc-muted);">每日首次访问</span>
           </div>
-          <div class="nsc-seg-tabs" id="nsc-auto-ck-mode">
-            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">自动固定 (+5 鸡腿)</button>
-            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">自动随机 (拼手气)</button>
+          <div class="nsc-seg-tabs nsc-checkin-auto-seg ${state.autoCheckin ? "" : "is-dim"}" id="nsc-auto-ck-mode">
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">固定 +5</button>
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">拼手气</button>
           </div>
         </div>
       `;
-      ckCard.querySelector("#nsc-ck-fixed").addEventListener("click", () => performAttendance(false));
-      ckCard.querySelector("#nsc-ck-random").addEventListener("click", () => performAttendance(true));
+      ckCard.querySelector("#nsc-ck-fixed")?.addEventListener("click", () => performAttendance(false));
+      ckCard.querySelector("#nsc-ck-random")?.addEventListener("click", () => performAttendance(true));
       ckCard.querySelector("#nsc-auto-ck-toggle").addEventListener("click", () => {
         state.autoCheckin = !state.autoCheckin;
         localStorage.setItem(LS.AUTO_CHECKIN, state.autoCheckin ? "1" : "0");
