@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.18
+// @version      7.22.19
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -314,7 +314,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.18",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.19",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -4850,6 +4850,7 @@
       chatScrollRaf = requestAnimationFrame(() => {
         chatScrollRaf = 0;
         if (state.activePmPeer || !state.currentRoom) return;
+        if (Date.now() < (state._suppressWaterfallUntil || 0)) return;
         if (msgsEl.scrollTop < 120) {
           tryAutoLoadPrevPage();
         }
@@ -8765,6 +8766,38 @@
 
   const _postRoomCache = new Map();
   const MAX_POST_ROOM_CACHE = 10;
+  const _expandedThreadFloors = new Set();
+  let _activeJumpTarget = { pid: "", floorId: "", ts: 0 };
+
+  function isThreadCollapsedForFloor(floorId) {
+    return Boolean(state.threadsCollapsed && !_expandedThreadFloors.has(String(floorId)));
+  }
+
+  async function ensureThreadParentLoadedForFloor(room, targetFloorId, reqSeq) {
+    if (!room || !targetFloorId) return;
+    let curId = String(targetFloorId);
+    for (let hop = 0; hop < 3; hop++) {
+      const curObj = room.flatComments.find((c) => String(c.floorId) === curId);
+      if (!curObj || !curObj.replyToFloor || curObj.replyToFloor === "0") break;
+      const parentId = String(curObj.replyToFloor);
+      const parentLoaded = room.flatComments.some((c) => String(c.floorId) === parentId);
+      if (parentLoaded) {
+        curId = parentId;
+        continue;
+      }
+      const pPage = Math.max(1, Math.ceil(Number(parentId) / 10));
+      if (state.loadedPages.has(pPage)) break;
+      try {
+        const pDoc = await fetchPostPageDoc(`/post-${room.pid}-${pPage}`);
+        if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== room.pid || state.currentRoom !== room) return;
+        mergePostPageComments(room, pDoc, pPage);
+        room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
+        curId = parentId;
+      } catch (_) {
+        break;
+      }
+    }
+  }
 
   function saveCurrentRoomToCache() {
     if (state.activePmPeer || !state.currentRoom || !state.currentRoom.pid) return;
@@ -8788,10 +8821,12 @@
 
   async function openPostInChat(itemMeta) {
     saveCurrentRoomToCache();
+    const prevPid = state.currentPostId;
     const reqSeq = ++state.chatViewSeq;
     state.activePmPeer = null;
     const url = itemMeta.url || `/post-${itemMeta.postId}-1`;
     const pid = String(itemMeta.postId || getPostIdFromPath(url) || "");
+    if (pid !== prevPid) _expandedThreadFloors.clear();
     const reqPage = parsePageNumFromUrl(url);
     state.currentRoom = null;
     state.loadedPages.clear();
@@ -8855,14 +8890,17 @@
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       if (msgsEl) msgsEl.classList.remove("is-switching");
       renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
-      saveCurrentRoomToCache();
-      if (itemMeta.targetFloor) {
-        const postRenderSeq = state.chatViewSeq;
-        setTimeout(() => {
-          if (postRenderSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
-          jumpToFloor(itemMeta.targetFloor);
-        }, 60);
+      if (itemMeta.targetFloor && state.currentRoom) {
+        state._suppressWaterfallUntil = Date.now() + 900;
+        const beforePages = state.loadedPages.size;
+        await ensureThreadParentLoadedForFloor(state.currentRoom, itemMeta.targetFloor, reqSeq);
+        if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
+        if (state.loadedPages.size > beforePages) {
+          renderChatRoom(state.currentRoom, true);
+        }
+        jumpToFloor(itemMeta.targetFloor, { instant: true });
       }
+      saveCurrentRoomToCache();
     } catch (err) {
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       if (msgsEl) {
@@ -9133,12 +9171,35 @@
       room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
       if (added > 0 || (prevPageObj.num === 1 && !hadOp && room.opObj)) {
         const msgsEl = document.getElementById("nsc-chat-messages");
+        let anchorFloorId = "";
+        let anchorOffset = 0;
+        if (msgsEl) {
+          const cTop = msgsEl.getBoundingClientRect().top;
+          for (const node of msgsEl.querySelectorAll(".nsc-msg[data-floor]")) {
+            const r = node.getBoundingClientRect();
+            if (r.bottom > cTop + 8) {
+              anchorFloorId = node.dataset.floor || "";
+              anchorOffset = r.top - cTop;
+              break;
+            }
+          }
+        }
         const prevH = msgsEl ? msgsEl.scrollHeight : 0;
         const prevTop = msgsEl ? msgsEl.scrollTop : 0;
         renderChatRoom(room, true);
         if (msgsEl) {
-          const delta = msgsEl.scrollHeight - prevH;
-          msgsEl.scrollTop = Math.max(0, prevTop + delta);
+          if (_activeJumpTarget.floorId && _activeJumpTarget.pid === room.pid && Date.now() - _activeJumpTarget.ts < 3000) {
+            jumpToFloor(_activeJumpTarget.floorId, { instant: true });
+          } else {
+            const anchorEl = anchorFloorId ? document.getElementById(`nsc-floor-${anchorFloorId}`) : null;
+            if (anchorEl) {
+              const curOffset = anchorEl.getBoundingClientRect().top - msgsEl.getBoundingClientRect().top;
+              msgsEl.scrollTop = Math.max(0, msgsEl.scrollTop + (curOffset - anchorOffset));
+            } else {
+              const delta = msgsEl.scrollHeight - prevH;
+              msgsEl.scrollTop = Math.max(0, prevTop + delta);
+            }
+          }
         }
       } else if (prevTip) {
         prevTip.textContent = `已加载至第 ${prevPageObj.num} 页`;
@@ -9150,9 +9211,12 @@
     }
   }
 
-  async function jumpToFloor(floorNumStr) {
+  async function jumpToFloor(floorNumStr, { instant = false } = {}) {
     const targetId = String(floorNumStr || "").replace(/[^\d]/g, "");
     if (!targetId || state.activePmPeer) return;
+
+    state._suppressWaterfallUntil = Date.now() + 900;
+    _activeJumpTarget = { pid: String(state.currentPostId || ""), floorId: targetId, ts: Date.now() };
 
     const msgsEl = document.getElementById("nsc-chat-messages");
     let target =
@@ -9189,6 +9253,8 @@
 
       if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
       room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
+      await ensureThreadParentLoadedForFloor(room, targetId, jumpSeq);
+      if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
       renderChatRoom(room, true);
       target =
         (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
@@ -9197,17 +9263,32 @@
 
     if (!target) return;
     const hiddenThread = target.closest(".nsc-thread-wrap.is-collapsed");
-    if (hiddenThread) hiddenThread.classList.remove("is-collapsed");
-    if (target.classList.contains("is-hidden-filter")) {
+    if (hiddenThread) {
+      hiddenThread.classList.remove("is-collapsed");
+      const parentMsg = hiddenThread.closest(".nsc-msg");
+      if (parentMsg) {
+        if (parentMsg.dataset.floor) _expandedThreadFloors.add(String(parentMsg.dataset.floor));
+        const pill = parentMsg.querySelector('.nsc-react-pill.is-reply[data-thread-toggle="1"]');
+        const sp = pill && pill.querySelector("span");
+        if (sp) sp.textContent = `${pill.dataset.count} 条回复 ▾`;
+      }
+    }
+    const hiddenMsg = target.closest(".nsc-msg.is-hidden-filter");
+    if (hiddenMsg || target.classList.contains("is-hidden-filter")) {
       state.onlyOp = false;
       state.onlyMember = "";
       applyMessageFilters();
     }
-    if (msgsEl) {
+    const scrollToTarget = (behaviorMode) => {
+      if (!msgsEl || !target.isConnected) return;
       const cRect = msgsEl.getBoundingClientRect();
       const tRect = target.getBoundingClientRect();
       const targetTop = msgsEl.scrollTop + (tRect.top - cRect.top) - Math.max(24, (msgsEl.clientHeight - tRect.height) / 2);
-      msgsEl.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+      msgsEl.scrollTo({ top: Math.max(0, targetTop), behavior: behaviorMode });
+    };
+    scrollToTarget(instant ? "auto" : "smooth");
+    if (instant) {
+      requestAnimationFrame(() => scrollToTarget("auto"));
     }
     target.classList.remove("nsc-flash");
     void target.offsetWidth;
@@ -9382,6 +9463,7 @@
 
     addBtn(state.threadsCollapsed ? "展开楼中楼" : "收起楼中楼", state.threadsCollapsed, (b) => {
       state.threadsCollapsed = !state.threadsCollapsed;
+      _expandedThreadFloors.clear();
       const lbl = b.querySelector("span");
       if (lbl) lbl.textContent = state.threadsCollapsed ? "展开楼中楼" : "收起楼中楼";
       b.classList.toggle("is-active", state.threadsCollapsed);
@@ -9708,7 +9790,7 @@
       p.title = isOpCard ? `共 ${replyCnt} 条评论` : `${replyCnt} 条楼中楼回复（点击展开/收起）`;
       p.innerHTML = isOpCard
         ? `${ICONS.reply}<span>${replyCnt}</span>`
-        : `${ICONS.reply}<span>${replyCnt} 条回复 ${state.threadsCollapsed ? "▸" : "▾"}</span>`;
+        : `${ICONS.reply}<span>${replyCnt} 条回复 ${isThreadCollapsedForFloor(obj.floorId) ? "▸" : "▾"}</span>`;
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         if (isOpCard) {
@@ -9720,6 +9802,8 @@
         const threadWrap = msgWrap && msgWrap.querySelector(".nsc-thread-wrap");
         if (threadWrap) {
           const collapsed = threadWrap.classList.toggle("is-collapsed");
+          if (collapsed) _expandedThreadFloors.delete(String(obj.floorId));
+          else _expandedThreadFloors.add(String(obj.floorId));
           const sp = p.querySelector("span");
           if (sp) sp.textContent = `${replyCnt} 条回复 ${collapsed ? "▸" : "▾"}`;
         }
@@ -10194,7 +10278,7 @@
     if (obj.children && obj.children.length > 0) {
       wrap.classList.add("has-thread");
       const threadWrap = document.createElement("div");
-      threadWrap.className = "nsc-thread-wrap" + (state.threadsCollapsed ? " is-collapsed" : "");
+      threadWrap.className = "nsc-thread-wrap" + (isThreadCollapsedForFloor(obj.floorId) ? " is-collapsed" : "");
 
       for (const ch of obj.children) {
         const chIsSelf = state.currentUser && ch.author === state.currentUser;

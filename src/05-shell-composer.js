@@ -767,6 +767,7 @@
       chatScrollRaf = requestAnimationFrame(() => {
         chatScrollRaf = 0;
         if (state.activePmPeer || !state.currentRoom) return;
+        if (Date.now() < (state._suppressWaterfallUntil || 0)) return;
         if (msgsEl.scrollTop < 120) {
           tryAutoLoadPrevPage();
         }
