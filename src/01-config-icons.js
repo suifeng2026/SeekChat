@@ -136,7 +136,9 @@
     {
       id: "yct",
       label: "洋葱头",
-      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`),
+      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`).filter(
+        (f) => f !== "017.gif" && f !== "018.gif" && f !== "019.gif"
+      ),
     },
     {
       id: "xhj",
@@ -281,7 +283,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.17",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.18",
       latest: "",
       installUrl: "",
       hasUpdate: false,

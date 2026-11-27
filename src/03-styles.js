@@ -1086,7 +1086,13 @@
         margin: 0 !important; flex: 0 0 auto !important;
       }
       .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33) {
+      #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]) {
         display: none !important;
       }
       .nsc-composer-dock .exp-container img,

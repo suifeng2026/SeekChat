@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.17
+// @version      7.22.18
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -167,7 +167,9 @@
     {
       id: "yct",
       label: "洋葱头",
-      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`),
+      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`).filter(
+        (f) => f !== "017.gif" && f !== "018.gif" && f !== "019.gif"
+      ),
     },
     {
       id: "xhj",
@@ -312,7 +314,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.17",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.18",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -2623,7 +2625,13 @@
         margin: 0 !important; flex: 0 0 auto !important;
       }
       .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33) {
+      #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]) {
         display: none !important;
       }
       .nsc-composer-dock .exp-container img,
