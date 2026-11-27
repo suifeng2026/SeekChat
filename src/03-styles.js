@@ -2469,7 +2469,9 @@
       .nsc-ruling-link-btn {
         border: none; background: transparent; color: var(--nsc-muted);
         font-size: 11px; font-weight: 600; padding: 2px 5px; border-radius: 4px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
       }
+      .nsc-ruling-link-btn svg { width: 12.5px; height: 12.5px; }
       .nsc-ruling-link-btn:hover { background: rgba(128, 128, 128, 0.12); color: var(--nsc-text); }
       .nsc-ruling-status { font-size: 11.5px; color: var(--nsc-muted); }
       .nsc-ruling-empty-ok {

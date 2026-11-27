@@ -790,7 +790,7 @@
               <span class="nsc-ruling-prefix">管理记录</span>
               <span class="nsc-ruling-empty-ok">无管理记录</span>
             </div>
-            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="重新请求最新记录">刷新</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="刷新管理记录">${ICONS.refresh}</button>
           </div>
         `;
         strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", () => {
@@ -853,8 +853,8 @@
           <div class="nsc-ruling-ops">
             ${rulingState.source === "rulings-web" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">备用源</span>` : ""}
             ${rulingState.error === "rate_limited" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">冷却 ${rulingState.retryAfter}s</span>` : ""}
-            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `明细 (${rows.length})`}</button>
-            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn">${rulingState.status === "loading" ? "..." : "刷新"}</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `详情 (${rows.length})`}</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="刷新管理记录">${rulingState.status === "loading" ? "..." : ICONS.refresh}</button>
           </div>
         </div>
         <div class="nsc-ruling-hover-tip" id="nsc-ruling-hover-tip"></div>
@@ -866,19 +866,16 @@
         if (!hoverTip || rulingState.drawerOpen) return;
         const previewList = filterRulingRows(rows, filterKey).slice(0, 4);
         if (previewList.length === 0) return;
-        hoverTip.innerHTML = `
-          ${previewList.map((r) => `
-            <div class="nsc-ruling-hover-item">
-              <div style="display:flex;justify-content:space-between;gap:8px;">
-                <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> #${escHtml(r.recordId || "-")}</span>
-                <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
-              </div>
-              <div>原因：${escHtml(r.reasonText)}</div>
-              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 关联 ${escHtml(r.postTarget.label)}` : ""}</div>
+        hoverTip.innerHTML = previewList.map((r) => `
+          <div class="nsc-ruling-hover-item">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> #${escHtml(r.recordId || "-")}</span>
+              <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
             </div>
-          `).join("")}
-          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开明细并查看关联内容</div>
-        `;
+            <div>原因：${escHtml(r.reasonText)}</div>
+            <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 关联 ${escHtml(r.postTarget.label)}` : ""}</div>
+          </div>
+        `).join("");
         hoverTip.classList.add("is-open");
       };
       const hideHoverPreview = () => {

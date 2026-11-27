@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.33
+// @version      7.22.34
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -344,7 +344,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.33",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.34",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -4643,7 +4643,9 @@
       .nsc-ruling-link-btn {
         border: none; background: transparent; color: var(--nsc-muted);
         font-size: 11px; font-weight: 600; padding: 2px 5px; border-radius: 4px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
       }
+      .nsc-ruling-link-btn svg { width: 12.5px; height: 12.5px; }
       .nsc-ruling-link-btn:hover { background: rgba(128, 128, 128, 0.12); color: var(--nsc-text); }
       .nsc-ruling-status { font-size: 11.5px; color: var(--nsc-muted); }
       .nsc-ruling-empty-ok {
@@ -13281,7 +13283,7 @@
               <span class="nsc-ruling-prefix">管理记录</span>
               <span class="nsc-ruling-empty-ok">无管理记录</span>
             </div>
-            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="重新请求最新记录">刷新</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="刷新管理记录">${ICONS.refresh}</button>
           </div>
         `;
         strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", () => {
@@ -13344,8 +13346,8 @@
           <div class="nsc-ruling-ops">
             ${rulingState.source === "rulings-web" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">备用源</span>` : ""}
             ${rulingState.error === "rate_limited" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">冷却 ${rulingState.retryAfter}s</span>` : ""}
-            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `明细 (${rows.length})`}</button>
-            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn">${rulingState.status === "loading" ? "..." : "刷新"}</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `详情 (${rows.length})`}</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="刷新管理记录">${rulingState.status === "loading" ? "..." : ICONS.refresh}</button>
           </div>
         </div>
         <div class="nsc-ruling-hover-tip" id="nsc-ruling-hover-tip"></div>
@@ -13357,19 +13359,16 @@
         if (!hoverTip || rulingState.drawerOpen) return;
         const previewList = filterRulingRows(rows, filterKey).slice(0, 4);
         if (previewList.length === 0) return;
-        hoverTip.innerHTML = `
-          ${previewList.map((r) => `
-            <div class="nsc-ruling-hover-item">
-              <div style="display:flex;justify-content:space-between;gap:8px;">
-                <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> #${escHtml(r.recordId || "-")}</span>
-                <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
-              </div>
-              <div>原因：${escHtml(r.reasonText)}</div>
-              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 关联 ${escHtml(r.postTarget.label)}` : ""}</div>
+        hoverTip.innerHTML = previewList.map((r) => `
+          <div class="nsc-ruling-hover-item">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> #${escHtml(r.recordId || "-")}</span>
+              <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
             </div>
-          `).join("")}
-          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开明细并查看关联内容</div>
-        `;
+            <div>原因：${escHtml(r.reasonText)}</div>
+            <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 关联 ${escHtml(r.postTarget.label)}` : ""}</div>
+          </div>
+        `).join("");
         hoverTip.classList.add("is-open");
       };
       const hideHoverPreview = () => {
