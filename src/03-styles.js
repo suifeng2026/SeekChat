@@ -407,6 +407,30 @@
         transform: scale(1.02); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
       }
 
+      /* 测评帖魔术标签页 (.nsk-magic-tabs) 适配与交互样式 */
+      .nsc-bubble .nsk-magic-tabs {
+        margin: 8px 0; border: 1px solid var(--nsc-border); border-radius: 10px;
+        background: var(--nsc-bg-card); overflow: hidden;
+      }
+      .nsc-magic-tab-bar {
+        display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
+        padding: 5px 8px; background: var(--nsc-hover);
+        border-bottom: 1px solid var(--nsc-border);
+      }
+      .nsc-bubble .nsk-magic-tab-title {
+        display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 7px;
+        font-size: 12px; font-weight: 500; color: var(--nsc-muted); cursor: pointer;
+        user-select: none; transition: all 0.13s ease;
+      }
+      .nsc-bubble .nsk-magic-tab-title:hover { color: var(--nsc-text); background: var(--nsc-bg-card); }
+      .nsc-bubble .nsk-magic-tab-title.is-active,
+      .nsc-bubble .nsk-magic-tab-title.active {
+        color: var(--nsc-accent); background: var(--nsc-bg-card); font-weight: 600;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+      .nsc-bubble .nsk-magic-tab-body { padding: 10px 12px; }
+      .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img { margin: 4px 0 !important; }
+
       .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
       body.dark-layout .nsc-bubble pre { background: rgba(0,0,0,0.35); }
       .nsc-bubble blockquote {

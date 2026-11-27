@@ -931,9 +931,51 @@
     showLightboxAt(idx >= 0 ? idx : 0);
   }
 
+  function enhanceMagicTabs(containerEl) {
+    if (!containerEl) return;
+    for (const tabBox of containerEl.querySelectorAll(".nsk-magic-tabs")) {
+      if (tabBox.dataset.nscTabsInit === "1") continue;
+      tabBox.dataset.nscTabsInit = "1";
+
+      const titles = Array.from(tabBox.querySelectorAll(".nsk-magic-tab-title"));
+      const bodies = Array.from(tabBox.querySelectorAll(".nsk-magic-tab-body"));
+      if (titles.length === 0 || bodies.length === 0) continue;
+
+      if (!tabBox.querySelector(".nsc-magic-tab-bar") && titles[0].parentElement === tabBox) {
+        const bar = document.createElement("div");
+        bar.className = "nsc-magic-tab-bar";
+        tabBox.insertBefore(bar, tabBox.firstChild);
+        for (const t of titles) bar.appendChild(t);
+      }
+
+      let activeIdx = titles.findIndex((t) => t.classList.contains("active") || t.classList.contains("is-active"));
+      if (activeIdx < 0) activeIdx = 0;
+
+      const activate = (idx) => {
+        titles.forEach((t, i) => {
+          const on = i === idx;
+          t.classList.toggle("is-active", on);
+          t.classList.toggle("active", on);
+        });
+        bodies.forEach((b, i) => {
+          b.style.display = i === idx ? "block" : "none";
+        });
+      };
+
+      titles.forEach((t, i) => {
+        t.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          activate(i);
+        });
+      });
+      activate(activeIdx);
+    }
+  }
+
   function processBubbleImages(containerEl) {
     if (!containerEl) return;
-    const zoomImgs = [];
+    const gridImgs = [];
     for (const img of containerEl.querySelectorAll("img")) {
       const src = img.getAttribute("src") || "";
       if (
@@ -947,33 +989,41 @@
       }
       img.classList.add("nsc-zoomable-img");
       img.title = "点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
-      if (!img.closest("blockquote, pre, code")) {
-        zoomImgs.push(img);
+      if (!img.closest('blockquote, pre, code, table, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"]')) {
+        gridImgs.push(img);
       }
     }
 
-    const scopeUrls = zoomImgs.map((el) => el.currentSrc || el.getAttribute("src") || "").filter(Boolean);
+    const scopeUrls = gridImgs.map((el) => el.currentSrc || el.getAttribute("src") || "").filter(Boolean);
     for (const img of containerEl.querySelectorAll("img.nsc-zoomable-img")) {
       const src = img.getAttribute("src") || "";
       img.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        const tabBox = img.closest(".nsk-magic-tabs");
+        if (tabBox) {
+          const tabUrls = Array.from(tabBox.querySelectorAll("img.nsc-zoomable-img"))
+            .map((el) => el.currentSrc || el.getAttribute("src") || "")
+            .filter(Boolean);
+          openLightbox(img.currentSrc || src, tabUrls.length >= 2 ? tabUrls : null);
+          return;
+        }
         openLightbox(img.currentSrc || src, scopeUrls.length >= 2 ? scopeUrls : null);
       });
     }
 
-    // 帖子内有 >= 2 张图片时，自动组合为朋友圈风格宫格（2/4张为两列，3/5+张为三列九宫格）
-    if (zoomImgs.length >= 2) {
+    // 仅将普通段落内的多张帖子图片组合为朋友圈宫格，不破坏测评 Tab / 折叠 / 表格等原有容器结构
+    if (gridImgs.length >= 2) {
       const grid = document.createElement("div");
-      grid.className = "nsc-img-grid" + (zoomImgs.length === 2 || zoomImgs.length === 4 ? " cols-2" : "");
-      const anchor = zoomImgs[0].closest("p, figure, div") || zoomImgs[0];
+      grid.className = "nsc-img-grid" + (gridImgs.length === 2 || gridImgs.length === 4 ? " cols-2" : "");
+      const anchor = gridImgs[0].closest("p, figure, div") || gridImgs[0];
       if (anchor && anchor.parentNode === containerEl) {
         containerEl.insertBefore(grid, anchor);
       } else {
         containerEl.appendChild(grid);
       }
       const parentsToCheck = new Set();
-      for (const im of zoomImgs) {
+      for (const im of gridImgs) {
         const p = im.closest("p, figure, a");
         if (p && p !== containerEl) parentsToCheck.add(p);
         grid.appendChild(im);

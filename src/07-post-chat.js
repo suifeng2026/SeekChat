@@ -742,6 +742,7 @@
       });
     }
     linkifyFloorReferences(bubble);
+    enhanceMagicTabs(bubble);
     processBubbleImages(bubble);
 
     const reactionsEl = document.createElement("div");
@@ -809,6 +810,7 @@
         ti.querySelector(".nsc-floor-tag").addEventListener("click", () => jumpToFloor(ch.floorId));
         const tc = ti.querySelector(".nsc-thread-content");
         linkifyFloorReferences(tc);
+        enhanceMagicTabs(tc);
         processBubbleImages(tc);
         const chReactions = ti.querySelector(".nsc-reactions");
         renderReactionPills(chReactions, ch, isNativePage);
