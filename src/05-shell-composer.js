@@ -2065,7 +2065,7 @@
     card.innerHTML = `
       <div class="nsc-sd-head">
         <div class="nsc-sd-peer">
-          <img class="nsc-sd-avatar" src="/avatar/${escHtml(receipt.memberId)}.png" alt="" loading="lazy" />
+          <img class="nsc-sd-avatar" src="/avatar/${escHtml(receipt.memberId)}.png" alt="" loading="lazy" decoding="async" />
           <div class="nsc-sd-peer-info">
             <div class="nsc-sd-name-row">
               <span class="nsc-sd-name">${escHtml(initName)}</span>

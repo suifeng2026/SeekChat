@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.11
+// @version      7.22.12
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -35,10 +35,13 @@
     ACTIVE_CHANNEL: "nsc_v7_channel",
     SORT: "nsc_v7_sort",
     HOT_TAB: "nsc_v7_hot_tab",
+    HOT_CACHE: "nsc_v7_hot_cache",
     READ_MAP: "nsc_v7_read_map",
     FRIENDS: "nsc_v7_friends",
     REMOVED_FRIENDS: "nsc_v7_removed_friends",
     BLACKLIST: "nsc_v7_blacklist",
+    BLACKLIST_TS: "nsc_v7_blacklist_ts",
+    COLLECTIONS: "nsc_v7_collections",
     RIGHT_TAB: "nsc_v7_right_tab",
     USER_CACHE: "nsc_v7_user_cache",
     LAST_SPEAK_CACHE: "nsc_v7_last_speak_cache",
@@ -223,7 +226,7 @@
   const state = {
     enabled: localStorage.getItem(LS.ENABLED) !== "0",
     themeMode: localStorage.getItem(LS.THEME) || "auto",
-    activeChannel: localStorage.getItem(LS.ACTIVE_CHANNEL) || "home",
+    activeChannel: "home",
     sortMode: localStorage.getItem(LS.SORT) || "reply",
     hotTab: localStorage.getItem(LS.HOT_TAB) || "realtime",
     readMap: loadJson(LS.READ_MAP, {}),
@@ -237,7 +240,7 @@
     postTitleCache: loadJson(LS.POST_TITLE_CACHE, {}),
     signatureCache: {},
     channelData: {},
-    hotCache: {},
+    hotCache: loadJson(LS.HOT_CACHE, {}),
     hotLoading: false,
     hotError: null,
     followData: { items: [], loading: false, loaded: false, error: null, sortByActive: false },
@@ -278,7 +281,7 @@
     loadedPages: new Set(),
     loadingNextPage: false,
     loadingPrevPage: false,
-    collectedSet: new Set(),
+    collectedSet: new Set(loadJson(LS.COLLECTIONS, [])),
     collectionsLoaded: false,
     hubTab: "notif",
     hubNotifSub: "reply-me",
@@ -308,7 +311,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.11",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.12",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -664,8 +667,14 @@
     renderRightBody();
   }
 
-  async function fetchServerBlockList(silent = false) {
+  async function fetchServerBlockList(silent = false, force = false) {
     if (state.blockListState.loading) return state.blacklist;
+    const lastSyncTs = Number(localStorage.getItem(LS.BLACKLIST_TS)) || 0;
+    if (silent && !force && lastSyncTs > 0 && Date.now() - lastSyncTs < 30 * 60 * 1000) {
+      state.blockListState.items = state.blacklist;
+      state.blockListState.loaded = true;
+      return state.blacklist;
+    }
     state.blockListState.loading = true;
     state.blockListState.error = null;
     if (!silent && state.rightTab === "blacklist") renderRightBody();
@@ -701,6 +710,7 @@
       state.blacklist = mapped;
       rebuildBlacklistSet();
       saveJson(LS.BLACKLIST, state.blacklist);
+      localStorage.setItem(LS.BLACKLIST_TS, String(Date.now()));
       renderTopicList();
       applyMessageFilters();
     } catch (err) {
@@ -724,7 +734,7 @@
         if (hit && hit.uid) targetUid = hit.uid;
       }
       if (!targetUid) {
-        await fetchServerBlockList(true);
+        await fetchServerBlockList(true, true);
         const hit = state.blacklist.find((b) => b.name === name);
         if (hit && hit.uid) targetUid = hit.uid;
       }
@@ -777,7 +787,7 @@
       rebuildBlacklistSet();
       saveJson(LS.BLACKLIST, state.blacklist);
     }
-    await fetchServerBlockList(true);
+    await fetchServerBlockList(true, true);
     renderRightBody();
     renderTopicList();
     applyMessageFilters();
@@ -829,43 +839,57 @@
     }
   }
 
-  async function prefetchCollectionsSet() {
-    if (state.collectionsLoaded) return;
-    state.collectionsLoaded = true;
-    try {
-      for (let page = 1; page <= 3; page++) {
-        const resp = await fetch(`/api/statistics/list-collection?page=${page}`, {
-          headers: { Accept: "application/json, text/plain, */*" },
-          credentials: "include",
-        });
-        if (!resp.ok) break;
-        const json = await resp.json().catch(() => null);
-        const rows = (json && (json.collections || json.data || json.list)) || [];
-        if (!Array.isArray(rows) || rows.length === 0) break;
-        for (const it of rows) {
-          const pid = String(it.post_id || it.postId || it.id || "").trim();
-          if (pid) state.collectedSet.add(pid);
+  let _collectionsPromise = null;
+  async function ensureCollectionsLoaded(force = false) {
+    if (state.collectionsLoaded && !force) return;
+    if (_collectionsPromise) return _collectionsPromise;
+    _collectionsPromise = (async () => {
+      try {
+        const nextSet = new Set();
+        for (let page = 1; page <= 3; page++) {
+          const resp = await fetch(`/api/statistics/list-collection?page=${page}`, {
+            headers: { Accept: "application/json, text/plain, */*" },
+            credentials: "include",
+          });
+          if (!resp.ok) break;
+          const json = await resp.json().catch(() => null);
+          const rows = (json && (json.collections || json.data || json.list)) || [];
+          if (!Array.isArray(rows) || rows.length === 0) break;
+          for (const it of rows) {
+            const pid = String(it.post_id || it.postId || it.id || "").trim();
+            if (pid) nextSet.add(pid);
+          }
+          if (rows.length < 15) break;
         }
-        if (rows.length < 15) break;
-      }
-      if (state.currentRoom && state.currentPostId) {
-        const colBtn = document.getElementById("nsc-collect-post-btn");
-        if (colBtn) {
-          const on = state.collectedSet.has(String(state.currentPostId));
-          colBtn.classList.toggle("is-active", on);
-          colBtn.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+        state.collectedSet = nextSet;
+        state.collectionsLoaded = true;
+        saveJson(LS.COLLECTIONS, Array.from(nextSet).slice(0, 300));
+        if (state.currentRoom && state.currentPostId) {
+          const colBtn = document.getElementById("nsc-collect-post-btn");
+          if (colBtn) {
+            const on = state.collectedSet.has(String(state.currentPostId));
+            colBtn.classList.toggle("is-active", on);
+            colBtn.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+          }
         }
+      } catch (_) {
+      } finally {
+        _collectionsPromise = null;
       }
-    } catch (_) {}
+    })();
+    return _collectionsPromise;
   }
 
   async function togglePostCollection(postId, btnEl = null) {
     const pid = String(postId || "").trim();
     if (!pid) return { ok: false };
-    const isCollected = state.collectedSet.has(pid);
-    const action = isCollected ? "remove" : "add";
     if (btnEl) btnEl.disabled = true;
     try {
+      if (!state.collectionsLoaded) {
+        await ensureCollectionsLoaded(false);
+      }
+      const isCollected = state.collectedSet.has(pid);
+      const action = isCollected ? "remove" : "add";
       const resp = await fetch("/api/statistics/collection", {
         method: "POST",
         credentials: "include",
@@ -878,6 +902,7 @@
       }
       if (action === "add") state.collectedSet.add(pid);
       else state.collectedSet.delete(pid);
+      saveJson(LS.COLLECTIONS, Array.from(state.collectedSet).slice(0, 300));
       state.hubData.collections = { items: [], page: 0, loading: false, noMore: false, error: null };
 
       if (btnEl) {
@@ -6003,7 +6028,7 @@
     card.innerHTML = `
       <div class="nsc-sd-head">
         <div class="nsc-sd-peer">
-          <img class="nsc-sd-avatar" src="/avatar/${escHtml(receipt.memberId)}.png" alt="" loading="lazy" />
+          <img class="nsc-sd-avatar" src="/avatar/${escHtml(receipt.memberId)}.png" alt="" loading="lazy" decoding="async" />
           <div class="nsc-sd-peer-info">
             <div class="nsc-sd-name-row">
               <span class="nsc-sd-name">${escHtml(initName)}</span>
@@ -6632,14 +6657,17 @@
 
     const rightScroll = document.getElementById("nsc-right-scroll");
     const rightHasContent = Boolean(rightScroll && rightScroll.children.length > 0);
-    if (state.rightTab === "hot" && !state.hotCache[state.hotTab]) {
-      fetchHotPosts(state.hotTab);
+    if (state.rightTab === "hot") {
+      const hc = state.hotCache[state.hotTab];
+      const hotFresh = Boolean(hc && hc.fetchedAt && Date.now() - hc.fetchedAt < 5 * 60 * 1000);
+      if (hc && hc.items && !rightHasContent) renderRightBody();
+      if (!hotFresh) fetchHotPosts(state.hotTab, false);
     } else if (state.rightTab === "friends" && !state.followData.loaded) {
       fetchFansOrFollow("follow");
     } else if (state.rightTab === "fans" && !state.fansData.loaded) {
       fetchFansOrFollow("fans");
     } else if (state.rightTab === "blacklist" && !state.blockListState.loaded) {
-      fetchServerBlockList(false);
+      fetchServerBlockList(false, true);
     } else if (!rightHasContent) {
       renderRightBody();
     }
@@ -6683,12 +6711,13 @@
       detectCurrentUser();
       mountNativeWidgetsIntoApp();
       if (firstInit || !wasActive) {
-        switchChannel(state.activeChannel, false);
-        fetchUnreadCounts();
-        setTimeout(() => fetchSysNotices(true), 600);
-        setTimeout(() => fetchServerBlockList(true), 800);
-        setTimeout(() => prefetchCollectionsSet(), 950);
-        setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
+        switchChannel("home", false);
+        fetchUnreadCounts().then(() => {
+          if (state.totalMessageUnread > 0 && !state.sysNoticeList.loaded) {
+            setTimeout(() => fetchSysNotices(true), 400);
+          }
+        });
+        setTimeout(() => fetchServerBlockList(true, false), 900);
         setTimeout(() => {
           if (typeof maybeRunAutoCheckin === "function") maybeRunAutoCheckin();
         }, 1600);
@@ -6713,11 +6742,23 @@
     }
   }
 
-  async function prefetchUnreadBadges(channelIds) {
-    for (const cid of channelIds) {
-      if (state.channelData[cid]) continue;
-      await fetchChannelData(cid, 1, true, true);
-    }
+  const HOME_SWR_KEY = "nsc_v7_home_swr";
+  function saveHomeSwrSnapshot(items) {
+    if (!Array.isArray(items) || items.length === 0 || state.sortMode !== "reply") return;
+    try {
+      sessionStorage.setItem(HOME_SWR_KEY, JSON.stringify({ ts: Date.now(), items: items.slice(0, 30) }));
+    } catch (_) {}
+  }
+
+  function loadHomeSwrSnapshot() {
+    if (state.sortMode !== "reply") return null;
+    try {
+      const raw = sessionStorage.getItem(HOME_SWR_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (obj && Array.isArray(obj.items) && obj.items.length > 0) return obj;
+    } catch (_) {}
+    return null;
   }
 
   function switchChannel(channelId, forceRefresh = false) {
@@ -6784,15 +6825,35 @@
     }
 
     if (channelId === "home" && !forceRefresh && !state.channelData.home && !isPostPath(location.pathname) && document.querySelector(".post-list-item")) {
+      const parsed = parsePostListFromDoc(document);
       state.channelData.home = {
-        items: parsePostListFromDoc(document),
+        items: parsed,
         page: 1,
         loading: false,
         error: null,
       };
+      saveHomeSwrSnapshot(parsed);
       renderLeftNav();
       renderTopicList();
       return;
+    }
+
+    if (channelId === "home" && !forceRefresh && !state.channelData.home) {
+      const snap = loadHomeSwrSnapshot();
+      if (snap) {
+        state.channelData.home = {
+          items: snap.items,
+          page: 1,
+          loading: false,
+          error: null,
+        };
+        renderLeftNav();
+        renderTopicList();
+        if (Date.now() - snap.ts >= 60 * 1000) {
+          fetchChannelData("home", 1, true, true);
+        }
+        return;
+      }
     }
 
     if (forceRefresh || !state.channelData[channelId]) {
@@ -7247,7 +7308,7 @@
     const tm = formatChineseTime("", m.created_at, "");
     wrap.innerHTML = `
       <div class="nsc-avatar-col">
-        <button type="button" class="nsc-avatar-btn"><img src="${av}" loading="lazy" alt="" /></button>
+        <button type="button" class="nsc-avatar-btn"><img src="${av}" loading="lazy" decoding="async" alt="" /></button>
       </div>
       <div class="nsc-msg-main">
         <div class="nsc-msg-meta">
@@ -7836,6 +7897,7 @@
       if (parsed.length === 0) cur.noMore = true;
       if (reset || page === 1) {
         cur.items = parsed;
+        if (channelId === "home") saveHomeSwrSnapshot(parsed);
       } else {
         const seen = new Set(cur.items.map((x) => x.postId));
         let added = 0;
@@ -7871,11 +7933,16 @@
     fetchChannelData(chId, nextPage, false, false);
   }
 
-  async function fetchHotPosts(tabType = state.hotTab) {
+  async function fetchHotPosts(tabType = state.hotTab, force = false) {
+    const cached = state.hotCache[tabType];
+    if (!force && cached && cached.fetchedAt && Date.now() - cached.fetchedAt < 5 * 60 * 1000) {
+      if (state.rightTab === "hot") renderRightBody();
+      return;
+    }
     if (state.hotLoading) return;
     state.hotLoading = true;
     state.hotError = null;
-    if (state.rightTab === "hot") renderRightBody();
+    if (state.rightTab === "hot" && !(cached && cached.items && cached.items.length > 0)) renderRightBody();
 
     const apiMap = {
       realtime: "https://api.bimg.eu.org/hot.json",
@@ -7906,7 +7973,8 @@
             score: Math.floor(Number(item.score) || 0),
           };
         });
-        state.hotCache[tabType] = { items, updatedAt: json.updated_at || Math.floor(Date.now() / 1000) };
+        state.hotCache[tabType] = { items, updatedAt: json.updated_at || Math.floor(Date.now() / 1000), fetchedAt: Date.now() };
+        scheduleSaveJson(LS.HOT_CACHE, state.hotCache);
       } else {
         throw new Error("Invalid hot json");
       }
@@ -7925,7 +7993,8 @@
           }
         }
         const items = Array.from(map.values()).sort((a, b) => b.score - a.score);
-        state.hotCache[tabType] = { items, updatedAt: Math.floor(Date.now() / 1000) };
+        state.hotCache[tabType] = { items, updatedAt: Math.floor(Date.now() / 1000), fetchedAt: Date.now() };
+        scheduleSaveJson(LS.HOT_CACHE, state.hotCache);
       } catch (_) {
         state.hotError = err.message;
       }
@@ -7988,7 +8057,7 @@
         const row = document.createElement("div");
         row.className = "nsc-topic-item" + (it.viewed ? " is-read" : "") + (state.selectedNotifKey === rowKey ? " is-selected" : "");
         row.innerHTML = `
-          ${it.avatar ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />` : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`}
+          ${it.avatar ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" decoding="async" alt="" />` : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`}
           <div class="nsc-topic-body">
             <div class="nsc-topic-top">
               <div class="nsc-topic-title"></div>
@@ -8048,7 +8117,7 @@
         const isSel = state.activePmPeer && state.activePmPeer.uid === it.uid;
         row.className = "nsc-topic-item" + (isSel ? " is-selected" : "");
         row.innerHTML = `
-          <img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />
+          <img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" decoding="async" alt="" />
           <div class="nsc-topic-body">
             <div class="nsc-topic-top">
               <div class="nsc-topic-title" style="-webkit-line-clamp:1;"></div>
@@ -8251,7 +8320,7 @@
         (state.currentPostId === it.postId ? " is-selected" : "");
 
       const avatarHtml = it.avatar
-        ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />`
+        ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" decoding="async" alt="" />`
         : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`;
 
       let badgeHtml = "";
@@ -8412,11 +8481,36 @@
     return added;
   }
 
+  const _postRoomCache = new Map();
+  const MAX_POST_ROOM_CACHE = 10;
+
+  function saveCurrentRoomToCache() {
+    if (state.activePmPeer || !state.currentRoom || !state.currentRoom.pid) return;
+    const pid = String(state.currentRoom.pid);
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    const scrollTop = msgsEl ? msgsEl.scrollTop : 0;
+    if (_postRoomCache.has(pid)) _postRoomCache.delete(pid);
+    _postRoomCache.set(pid, {
+      room: state.currentRoom,
+      loadedPages: Array.from(state.loadedPages),
+      opAuthor: state.opAuthor,
+      scrollTop,
+      ts: Date.now(),
+    });
+    while (_postRoomCache.size > MAX_POST_ROOM_CACHE) {
+      const oldestKey = _postRoomCache.keys().next().value;
+      if (oldestKey === undefined) break;
+      _postRoomCache.delete(oldestKey);
+    }
+  }
+
   async function openPostInChat(itemMeta) {
+    saveCurrentRoomToCache();
     const reqSeq = ++state.chatViewSeq;
     state.activePmPeer = null;
     const url = itemMeta.url || `/post-${itemMeta.postId}-1`;
-    const pid = itemMeta.postId || getPostIdFromPath(url);
+    const pid = String(itemMeta.postId || getPostIdFromPath(url) || "");
+    const reqPage = parsePageNumFromUrl(url);
     state.currentRoom = null;
     state.loadedPages.clear();
     state.loadingNextPage = false;
@@ -8439,6 +8533,32 @@
 
     const msgsEl = document.getElementById("nsc-chat-messages");
     const subEl = document.getElementById("nsc-chat-subtitle");
+
+    const cached = !itemMeta.forceRefresh && !itemMeta.targetFloor && pid ? _postRoomCache.get(pid) : null;
+    if (cached && cached.room && cached.loadedPages.includes(reqPage)) {
+      _postRoomCache.delete(pid);
+      _postRoomCache.set(pid, cached);
+      cached.room.isNativePage = (pid === state.nativePostId);
+      state.currentRoom = cached.room;
+      state.loadedPages = new Set(cached.loadedPages);
+      state.opAuthor = cached.opAuthor || "";
+      if (msgsEl) msgsEl.classList.remove("is-switching");
+      renderChatRoom(cached.room, true);
+      if (msgsEl) msgsEl.scrollTop = cached.scrollTop || 0;
+      if (Date.now() - cached.ts > 20000) {
+        const lastPage = Math.max(1, (cached.room.pages && cached.room.pages.length) || 1);
+        fetchPostPageDoc(`/post-${pid}-${lastPage}`).then((pDoc) => {
+          if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid || state.currentRoom !== cached.room) return;
+          const prevTop = msgsEl ? msgsEl.scrollTop : 0;
+          const added = appendRoomCommentsIncrementally(cached.room, pDoc, lastPage);
+          cached.ts = Date.now();
+          cached.loadedPages = Array.from(state.loadedPages);
+          if (added > 0 && msgsEl) msgsEl.scrollTop = prevTop;
+        }).catch(() => {});
+      }
+      return;
+    }
+
     if (subEl) subEl.innerHTML = `<span>正在载入帖子...</span>`;
     if (msgsEl) {
       if (msgsEl.children.length > 0 && !msgsEl.querySelector(".nsc-empty-state")) {
@@ -8453,6 +8573,7 @@
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       if (msgsEl) msgsEl.classList.remove("is-switching");
       renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
+      saveCurrentRoomToCache();
       if (itemMeta.targetFloor) {
         const postRenderSeq = state.chatViewSeq;
         setTimeout(() => {
@@ -9088,18 +9209,101 @@
     enrichVisibleMemberBadges();
   }
 
-  async function enrichVisibleMemberBadges() {
-    const room = state.currentRoom;
-    const uids = Array.from(new Set(state.members.map((m) => m.uid).filter(Boolean))).slice(0, 15);
-    for (const uid of uids) {
-      if (state.activePmPeer || state.currentRoom !== room) break;
-      if (state.userCache[uid] && Date.now() - state.userCache[uid].ts < 3600000) {
+  let _badgeIo = null;
+  let _badgeQueue = [];
+  let _badgeActive = 0;
+  const _badgeQueuedSet = new Set();
+
+  function pumpBadgeQueue(room, seq) {
+    if (state.activePmPeer || state.currentRoom !== room || seq !== state.chatViewSeq) {
+      _badgeQueue = [];
+      _badgeQueuedSet.clear();
+      return;
+    }
+    while (_badgeActive < 2 && _badgeQueue.length > 0) {
+      const uid = _badgeQueue.shift();
+      _badgeQueuedSet.delete(uid);
+      if (!uid) continue;
+      if (state.userCache[uid] && Date.now() - state.userCache[uid].ts < 12 * 3600000) {
         syncUserBadgeToChatDom(uid, state.userCache[uid]);
         continue;
       }
-      const info = await fetchUserProfile(uid, "");
-      if (state.activePmPeer || state.currentRoom !== room) break;
-      if (info) syncUserBadgeToChatDom(uid, info);
+      _badgeActive++;
+      fetchUserProfile(uid, "").then((info) => {
+        if (!state.activePmPeer && state.currentRoom === room && seq === state.chatViewSeq && info) {
+          syncUserBadgeToChatDom(uid, info);
+        }
+      }).catch(() => {}).finally(() => {
+        _badgeActive = Math.max(0, _badgeActive - 1);
+        setTimeout(() => pumpBadgeQueue(room, seq), 120);
+      });
+    }
+  }
+
+  function enrichVisibleMemberBadges() {
+    if (_badgeIo) {
+      _badgeIo.disconnect();
+      _badgeIo = null;
+    }
+    _badgeQueue = [];
+    _badgeQueuedSet.clear();
+
+    const room = state.currentRoom;
+    const seq = state.chatViewSeq;
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    if (!room || !msgsEl) return;
+
+    const nodes = Array.from(msgsEl.querySelectorAll(".nsc-msg[data-uid], .nsc-thread-item[data-uid]"));
+    const pendingNodes = [];
+    const seenCached = new Set();
+    for (const node of nodes) {
+      const uid = node.dataset.uid;
+      if (!uid) continue;
+      const uc = state.userCache[uid];
+      if (uc && Date.now() - uc.ts < 12 * 3600000) {
+        if (!seenCached.has(uid)) {
+          seenCached.add(uid);
+          syncUserBadgeToChatDom(uid, uc);
+        }
+        continue;
+      }
+      if (!node.querySelector(".nsc-lv-pill")) {
+        pendingNodes.push(node);
+      }
+    }
+    if (pendingNodes.length === 0) return;
+
+    const enqueueUid = (uid) => {
+      if (!uid || _badgeQueuedSet.has(uid)) return;
+      if (state.userCache[uid] && Date.now() - state.userCache[uid].ts < 12 * 3600000) {
+        syncUserBadgeToChatDom(uid, state.userCache[uid]);
+        return;
+      }
+      _badgeQueuedSet.add(uid);
+      _badgeQueue.push(uid);
+      pumpBadgeQueue(room, seq);
+    };
+
+    if (typeof IntersectionObserver !== "function") {
+      for (const n of pendingNodes.slice(0, 8)) enqueueUid(n.dataset.uid);
+      return;
+    }
+
+    _badgeIo = new IntersectionObserver((entries) => {
+      if (state.activePmPeer || state.currentRoom !== room || seq !== state.chatViewSeq) {
+        if (_badgeIo) { _badgeIo.disconnect(); _badgeIo = null; }
+        return;
+      }
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const uid = entry.target.dataset.uid;
+        if (_badgeIo) _badgeIo.unobserve(entry.target);
+        enqueueUid(uid);
+      }
+    }, { root: msgsEl, rootMargin: "120px 0px" });
+
+    for (const node of pendingNodes) {
+      _badgeIo.observe(node);
     }
   }
 
@@ -9656,7 +9860,7 @@
     avBtn.type = "button";
     avBtn.className = "nsc-avatar-btn";
     avBtn.title = `查看 ${obj.author} 的名片与签名`;
-    avBtn.innerHTML = `<img src="${obj.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" alt="${obj.author}" />`;
+    avBtn.innerHTML = `<img src="${obj.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" alt="${obj.author}" />`;
     avBtn.addEventListener("click", () => openUserProfileModal(obj));
     avatarCol.appendChild(avBtn);
 
@@ -9724,7 +9928,7 @@
         ti.dataset.author = ch.author;
         ti.dataset.uid = ch.uid || "";
         ti.innerHTML = `
-          <img class="nsc-t-avatar" src="${ch.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" alt="${ch.author}" />
+          <img class="nsc-t-avatar" src="${ch.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" alt="${ch.author}" />
           <div class="nsc-thread-body">
             <div class="nsc-thread-meta">
               <button type="button" class="nsc-msg-author"></button>
@@ -9956,7 +10160,7 @@
   // ==========================================================================
   async function fetchUserProfile(uid, nameFallback) {
     const cached = uid ? state.userCache[uid] : null;
-    if (cached && cached.v >= 2 && Date.now() - cached.ts < 3600000) {
+    if (cached && cached.v >= 2 && Date.now() - cached.ts < 12 * 3600000) {
       return cached;
     }
     const info = {
@@ -10447,7 +10651,7 @@
       row.className = "nsc-qq-item";
       row.innerHTML = `
         <div class="nsc-qq-main">
-          <img class="nsc-qq-avatar" src="${u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" />
+          <img class="nsc-qq-avatar" src="${u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" loading="lazy" decoding="async" />
           <div class="nsc-qq-info">
             <div class="nsc-qq-name"></div>
             <div class="nsc-qq-sub">${cachedSpeak ? `最后发言: ${cachedSpeak.timeStr}` : "点右侧眼睛查最后发言"}</div>
@@ -10537,7 +10741,7 @@
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
       refBtn.textContent = state.hotLoading ? "刷新中" : "刷新";
-      refBtn.addEventListener("click", () => fetchHotPosts(state.hotTab));
+      refBtn.addEventListener("click", () => fetchHotPosts(state.hotTab, true));
       toolbar.appendChild(seg);
       toolbar.appendChild(refBtn);
       container.appendChild(toolbar);
@@ -10678,7 +10882,7 @@
       row.className = "nsc-qq-item";
       row.innerHTML = `
         <div class="nsc-qq-main">
-          <img class="nsc-qq-avatar" src="${b.avatar || (b.uid ? `/avatar/${b.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" />
+          <img class="nsc-qq-avatar" src="${b.avatar || (b.uid ? `/avatar/${b.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" loading="lazy" decoding="async" />
           <div class="nsc-qq-info">
             <div class="nsc-qq-name"></div>
             <div class="nsc-qq-sub">${b.uid ? `UID: ${b.uid} · 已屏蔽` : "已屏蔽"}</div>
@@ -10783,6 +10987,8 @@
             if (!seen.has(pid)) { st.items.push(r); seen.add(pid); }
           }
         }
+        state.collectionsLoaded = true;
+        saveJson(LS.COLLECTIONS, Array.from(state.collectedSet).slice(0, 300));
       },
       reset,
       false
@@ -11313,7 +11519,7 @@
           const row = document.createElement("div");
           row.className = "nsc-hub-row" + (it.viewed ? " is-read" : "");
           row.innerHTML = `
-            <img src="${it.avatar || "/static/image/favicon/android-chrome-192x192.png"}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
+            <img src="${it.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
             <div class="nsc-hub-row-main">
               <div class="nsc-hub-row-title">${escHtml(it.title)}</div>
               <div class="nsc-hub-row-sub">
@@ -11353,7 +11559,7 @@
           const row = document.createElement("div");
           row.className = "nsc-hub-row" + (!it.unread ? " is-read" : "");
           row.innerHTML = `
-            <img src="${it.avatar}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
+            <img src="${it.avatar}" loading="lazy" decoding="async" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
             <div class="nsc-hub-row-main">
               <div class="nsc-hub-row-title">${escHtml(it.name)}</div>
               <div class="nsc-hub-row-sub"><span>${escHtml(it.content || "(无正文)")}</span><span>${escHtml(it.timeText || "")}</span></div>
@@ -11822,7 +12028,7 @@
         const avatarSrc = u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png");
         card.innerHTML = `
           <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-            <img src="${escHtml(avatarSrc)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
+            <img src="${escHtml(avatarSrc)}" loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
             <div class="nsc-hub-row-main">
               <div class="nsc-hub-row-title">${escHtml(u.name)}</div>
               <div class="nsc-hub-row-sub">${cachedSpeak ? `发言: ${escHtml(cachedSpeak.timeStr)}` : `UID: ${escHtml(u.uid)}`}</div>
@@ -11948,7 +12154,7 @@
         row.className = "nsc-hub-row";
         row.innerHTML = `
           <span class="nsc-hot-rank ${rankCls}" style="margin-top:0;">${rank}</span>
-          <img src="${uidStr ? `/avatar/${uidStr}.png` : "/static/image/favicon/android-chrome-192x192.png"}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex:0 0 30px;" />
+          <img src="${uidStr ? `/avatar/${uidStr}.png` : "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex:0 0 30px;" />
           <div class="nsc-hub-row-main">
             <div class="nsc-hub-row-title">${escHtml(it.member_name || `用户 #${uidStr}`)}</div>
             <div class="nsc-hub-row-sub">${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}</div>

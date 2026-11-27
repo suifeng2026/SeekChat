@@ -100,11 +100,36 @@
     return added;
   }
 
+  const _postRoomCache = new Map();
+  const MAX_POST_ROOM_CACHE = 10;
+
+  function saveCurrentRoomToCache() {
+    if (state.activePmPeer || !state.currentRoom || !state.currentRoom.pid) return;
+    const pid = String(state.currentRoom.pid);
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    const scrollTop = msgsEl ? msgsEl.scrollTop : 0;
+    if (_postRoomCache.has(pid)) _postRoomCache.delete(pid);
+    _postRoomCache.set(pid, {
+      room: state.currentRoom,
+      loadedPages: Array.from(state.loadedPages),
+      opAuthor: state.opAuthor,
+      scrollTop,
+      ts: Date.now(),
+    });
+    while (_postRoomCache.size > MAX_POST_ROOM_CACHE) {
+      const oldestKey = _postRoomCache.keys().next().value;
+      if (oldestKey === undefined) break;
+      _postRoomCache.delete(oldestKey);
+    }
+  }
+
   async function openPostInChat(itemMeta) {
+    saveCurrentRoomToCache();
     const reqSeq = ++state.chatViewSeq;
     state.activePmPeer = null;
     const url = itemMeta.url || `/post-${itemMeta.postId}-1`;
-    const pid = itemMeta.postId || getPostIdFromPath(url);
+    const pid = String(itemMeta.postId || getPostIdFromPath(url) || "");
+    const reqPage = parsePageNumFromUrl(url);
     state.currentRoom = null;
     state.loadedPages.clear();
     state.loadingNextPage = false;
@@ -127,6 +152,32 @@
 
     const msgsEl = document.getElementById("nsc-chat-messages");
     const subEl = document.getElementById("nsc-chat-subtitle");
+
+    const cached = !itemMeta.forceRefresh && !itemMeta.targetFloor && pid ? _postRoomCache.get(pid) : null;
+    if (cached && cached.room && cached.loadedPages.includes(reqPage)) {
+      _postRoomCache.delete(pid);
+      _postRoomCache.set(pid, cached);
+      cached.room.isNativePage = (pid === state.nativePostId);
+      state.currentRoom = cached.room;
+      state.loadedPages = new Set(cached.loadedPages);
+      state.opAuthor = cached.opAuthor || "";
+      if (msgsEl) msgsEl.classList.remove("is-switching");
+      renderChatRoom(cached.room, true);
+      if (msgsEl) msgsEl.scrollTop = cached.scrollTop || 0;
+      if (Date.now() - cached.ts > 20000) {
+        const lastPage = Math.max(1, (cached.room.pages && cached.room.pages.length) || 1);
+        fetchPostPageDoc(`/post-${pid}-${lastPage}`).then((pDoc) => {
+          if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid || state.currentRoom !== cached.room) return;
+          const prevTop = msgsEl ? msgsEl.scrollTop : 0;
+          const added = appendRoomCommentsIncrementally(cached.room, pDoc, lastPage);
+          cached.ts = Date.now();
+          cached.loadedPages = Array.from(state.loadedPages);
+          if (added > 0 && msgsEl) msgsEl.scrollTop = prevTop;
+        }).catch(() => {});
+      }
+      return;
+    }
+
     if (subEl) subEl.innerHTML = `<span>正在载入帖子...</span>`;
     if (msgsEl) {
       if (msgsEl.children.length > 0 && !msgsEl.querySelector(".nsc-empty-state")) {
@@ -141,6 +192,7 @@
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       if (msgsEl) msgsEl.classList.remove("is-switching");
       renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
+      saveCurrentRoomToCache();
       if (itemMeta.targetFloor) {
         const postRenderSeq = state.chatViewSeq;
         setTimeout(() => {
@@ -776,18 +828,101 @@
     enrichVisibleMemberBadges();
   }
 
-  async function enrichVisibleMemberBadges() {
-    const room = state.currentRoom;
-    const uids = Array.from(new Set(state.members.map((m) => m.uid).filter(Boolean))).slice(0, 15);
-    for (const uid of uids) {
-      if (state.activePmPeer || state.currentRoom !== room) break;
-      if (state.userCache[uid] && Date.now() - state.userCache[uid].ts < 3600000) {
+  let _badgeIo = null;
+  let _badgeQueue = [];
+  let _badgeActive = 0;
+  const _badgeQueuedSet = new Set();
+
+  function pumpBadgeQueue(room, seq) {
+    if (state.activePmPeer || state.currentRoom !== room || seq !== state.chatViewSeq) {
+      _badgeQueue = [];
+      _badgeQueuedSet.clear();
+      return;
+    }
+    while (_badgeActive < 2 && _badgeQueue.length > 0) {
+      const uid = _badgeQueue.shift();
+      _badgeQueuedSet.delete(uid);
+      if (!uid) continue;
+      if (state.userCache[uid] && Date.now() - state.userCache[uid].ts < 12 * 3600000) {
         syncUserBadgeToChatDom(uid, state.userCache[uid]);
         continue;
       }
-      const info = await fetchUserProfile(uid, "");
-      if (state.activePmPeer || state.currentRoom !== room) break;
-      if (info) syncUserBadgeToChatDom(uid, info);
+      _badgeActive++;
+      fetchUserProfile(uid, "").then((info) => {
+        if (!state.activePmPeer && state.currentRoom === room && seq === state.chatViewSeq && info) {
+          syncUserBadgeToChatDom(uid, info);
+        }
+      }).catch(() => {}).finally(() => {
+        _badgeActive = Math.max(0, _badgeActive - 1);
+        setTimeout(() => pumpBadgeQueue(room, seq), 120);
+      });
+    }
+  }
+
+  function enrichVisibleMemberBadges() {
+    if (_badgeIo) {
+      _badgeIo.disconnect();
+      _badgeIo = null;
+    }
+    _badgeQueue = [];
+    _badgeQueuedSet.clear();
+
+    const room = state.currentRoom;
+    const seq = state.chatViewSeq;
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    if (!room || !msgsEl) return;
+
+    const nodes = Array.from(msgsEl.querySelectorAll(".nsc-msg[data-uid], .nsc-thread-item[data-uid]"));
+    const pendingNodes = [];
+    const seenCached = new Set();
+    for (const node of nodes) {
+      const uid = node.dataset.uid;
+      if (!uid) continue;
+      const uc = state.userCache[uid];
+      if (uc && Date.now() - uc.ts < 12 * 3600000) {
+        if (!seenCached.has(uid)) {
+          seenCached.add(uid);
+          syncUserBadgeToChatDom(uid, uc);
+        }
+        continue;
+      }
+      if (!node.querySelector(".nsc-lv-pill")) {
+        pendingNodes.push(node);
+      }
+    }
+    if (pendingNodes.length === 0) return;
+
+    const enqueueUid = (uid) => {
+      if (!uid || _badgeQueuedSet.has(uid)) return;
+      if (state.userCache[uid] && Date.now() - state.userCache[uid].ts < 12 * 3600000) {
+        syncUserBadgeToChatDom(uid, state.userCache[uid]);
+        return;
+      }
+      _badgeQueuedSet.add(uid);
+      _badgeQueue.push(uid);
+      pumpBadgeQueue(room, seq);
+    };
+
+    if (typeof IntersectionObserver !== "function") {
+      for (const n of pendingNodes.slice(0, 8)) enqueueUid(n.dataset.uid);
+      return;
+    }
+
+    _badgeIo = new IntersectionObserver((entries) => {
+      if (state.activePmPeer || state.currentRoom !== room || seq !== state.chatViewSeq) {
+        if (_badgeIo) { _badgeIo.disconnect(); _badgeIo = null; }
+        return;
+      }
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const uid = entry.target.dataset.uid;
+        if (_badgeIo) _badgeIo.unobserve(entry.target);
+        enqueueUid(uid);
+      }
+    }, { root: msgsEl, rootMargin: "120px 0px" });
+
+    for (const node of pendingNodes) {
+      _badgeIo.observe(node);
     }
   }
 
@@ -1344,7 +1479,7 @@
     avBtn.type = "button";
     avBtn.className = "nsc-avatar-btn";
     avBtn.title = `查看 ${obj.author} 的名片与签名`;
-    avBtn.innerHTML = `<img src="${obj.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" alt="${obj.author}" />`;
+    avBtn.innerHTML = `<img src="${obj.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" alt="${obj.author}" />`;
     avBtn.addEventListener("click", () => openUserProfileModal(obj));
     avatarCol.appendChild(avBtn);
 
@@ -1412,7 +1547,7 @@
         ti.dataset.author = ch.author;
         ti.dataset.uid = ch.uid || "";
         ti.innerHTML = `
-          <img class="nsc-t-avatar" src="${ch.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" alt="${ch.author}" />
+          <img class="nsc-t-avatar" src="${ch.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" alt="${ch.author}" />
           <div class="nsc-thread-body">
             <div class="nsc-thread-meta">
               <button type="button" class="nsc-msg-author"></button>

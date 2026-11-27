@@ -1,6 +1,6 @@
   async function fetchUserProfile(uid, nameFallback) {
     const cached = uid ? state.userCache[uid] : null;
-    if (cached && cached.v >= 2 && Date.now() - cached.ts < 3600000) {
+    if (cached && cached.v >= 2 && Date.now() - cached.ts < 12 * 3600000) {
       return cached;
     }
     const info = {
@@ -491,7 +491,7 @@
       row.className = "nsc-qq-item";
       row.innerHTML = `
         <div class="nsc-qq-main">
-          <img class="nsc-qq-avatar" src="${u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" />
+          <img class="nsc-qq-avatar" src="${u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" loading="lazy" decoding="async" />
           <div class="nsc-qq-info">
             <div class="nsc-qq-name"></div>
             <div class="nsc-qq-sub">${cachedSpeak ? `最后发言: ${cachedSpeak.timeStr}` : "点右侧眼睛查最后发言"}</div>
@@ -581,7 +581,7 @@
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
       refBtn.textContent = state.hotLoading ? "刷新中" : "刷新";
-      refBtn.addEventListener("click", () => fetchHotPosts(state.hotTab));
+      refBtn.addEventListener("click", () => fetchHotPosts(state.hotTab, true));
       toolbar.appendChild(seg);
       toolbar.appendChild(refBtn);
       container.appendChild(toolbar);
@@ -722,7 +722,7 @@
       row.className = "nsc-qq-item";
       row.innerHTML = `
         <div class="nsc-qq-main">
-          <img class="nsc-qq-avatar" src="${b.avatar || (b.uid ? `/avatar/${b.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" />
+          <img class="nsc-qq-avatar" src="${b.avatar || (b.uid ? `/avatar/${b.uid}.png` : "/static/image/favicon/android-chrome-192x192.png")}" loading="lazy" decoding="async" />
           <div class="nsc-qq-info">
             <div class="nsc-qq-name"></div>
             <div class="nsc-qq-sub">${b.uid ? `UID: ${b.uid} · 已屏蔽` : "已屏蔽"}</div>
@@ -827,6 +827,8 @@
             if (!seen.has(pid)) { st.items.push(r); seen.add(pid); }
           }
         }
+        state.collectionsLoaded = true;
+        saveJson(LS.COLLECTIONS, Array.from(state.collectedSet).slice(0, 300));
       },
       reset,
       false
@@ -1357,7 +1359,7 @@
           const row = document.createElement("div");
           row.className = "nsc-hub-row" + (it.viewed ? " is-read" : "");
           row.innerHTML = `
-            <img src="${it.avatar || "/static/image/favicon/android-chrome-192x192.png"}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
+            <img src="${it.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
             <div class="nsc-hub-row-main">
               <div class="nsc-hub-row-title">${escHtml(it.title)}</div>
               <div class="nsc-hub-row-sub">
@@ -1397,7 +1399,7 @@
           const row = document.createElement("div");
           row.className = "nsc-hub-row" + (!it.unread ? " is-read" : "");
           row.innerHTML = `
-            <img src="${it.avatar}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
+            <img src="${it.avatar}" loading="lazy" decoding="async" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
             <div class="nsc-hub-row-main">
               <div class="nsc-hub-row-title">${escHtml(it.name)}</div>
               <div class="nsc-hub-row-sub"><span>${escHtml(it.content || "(无正文)")}</span><span>${escHtml(it.timeText || "")}</span></div>
@@ -1866,7 +1868,7 @@
         const avatarSrc = u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png");
         card.innerHTML = `
           <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-            <img src="${escHtml(avatarSrc)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
+            <img src="${escHtml(avatarSrc)}" loading="lazy" decoding="async" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
             <div class="nsc-hub-row-main">
               <div class="nsc-hub-row-title">${escHtml(u.name)}</div>
               <div class="nsc-hub-row-sub">${cachedSpeak ? `发言: ${escHtml(cachedSpeak.timeStr)}` : `UID: ${escHtml(u.uid)}`}</div>
@@ -1992,7 +1994,7 @@
         row.className = "nsc-hub-row";
         row.innerHTML = `
           <span class="nsc-hot-rank ${rankCls}" style="margin-top:0;">${rank}</span>
-          <img src="${uidStr ? `/avatar/${uidStr}.png` : "/static/image/favicon/android-chrome-192x192.png"}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex:0 0 30px;" />
+          <img src="${uidStr ? `/avatar/${uidStr}.png` : "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex:0 0 30px;" />
           <div class="nsc-hub-row-main">
             <div class="nsc-hub-row-title">${escHtml(it.member_name || `用户 #${uidStr}`)}</div>
             <div class="nsc-hub-row-sub">${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}</div>

@@ -180,14 +180,17 @@
 
     const rightScroll = document.getElementById("nsc-right-scroll");
     const rightHasContent = Boolean(rightScroll && rightScroll.children.length > 0);
-    if (state.rightTab === "hot" && !state.hotCache[state.hotTab]) {
-      fetchHotPosts(state.hotTab);
+    if (state.rightTab === "hot") {
+      const hc = state.hotCache[state.hotTab];
+      const hotFresh = Boolean(hc && hc.fetchedAt && Date.now() - hc.fetchedAt < 5 * 60 * 1000);
+      if (hc && hc.items && !rightHasContent) renderRightBody();
+      if (!hotFresh) fetchHotPosts(state.hotTab, false);
     } else if (state.rightTab === "friends" && !state.followData.loaded) {
       fetchFansOrFollow("follow");
     } else if (state.rightTab === "fans" && !state.fansData.loaded) {
       fetchFansOrFollow("fans");
     } else if (state.rightTab === "blacklist" && !state.blockListState.loaded) {
-      fetchServerBlockList(false);
+      fetchServerBlockList(false, true);
     } else if (!rightHasContent) {
       renderRightBody();
     }
@@ -231,12 +234,13 @@
       detectCurrentUser();
       mountNativeWidgetsIntoApp();
       if (firstInit || !wasActive) {
-        switchChannel(state.activeChannel, false);
-        fetchUnreadCounts();
-        setTimeout(() => fetchSysNotices(true), 600);
-        setTimeout(() => fetchServerBlockList(true), 800);
-        setTimeout(() => prefetchCollectionsSet(), 950);
-        setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
+        switchChannel("home", false);
+        fetchUnreadCounts().then(() => {
+          if (state.totalMessageUnread > 0 && !state.sysNoticeList.loaded) {
+            setTimeout(() => fetchSysNotices(true), 400);
+          }
+        });
+        setTimeout(() => fetchServerBlockList(true, false), 900);
         setTimeout(() => {
           if (typeof maybeRunAutoCheckin === "function") maybeRunAutoCheckin();
         }, 1600);
@@ -261,11 +265,23 @@
     }
   }
 
-  async function prefetchUnreadBadges(channelIds) {
-    for (const cid of channelIds) {
-      if (state.channelData[cid]) continue;
-      await fetchChannelData(cid, 1, true, true);
-    }
+  const HOME_SWR_KEY = "nsc_v7_home_swr";
+  function saveHomeSwrSnapshot(items) {
+    if (!Array.isArray(items) || items.length === 0 || state.sortMode !== "reply") return;
+    try {
+      sessionStorage.setItem(HOME_SWR_KEY, JSON.stringify({ ts: Date.now(), items: items.slice(0, 30) }));
+    } catch (_) {}
+  }
+
+  function loadHomeSwrSnapshot() {
+    if (state.sortMode !== "reply") return null;
+    try {
+      const raw = sessionStorage.getItem(HOME_SWR_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (obj && Array.isArray(obj.items) && obj.items.length > 0) return obj;
+    } catch (_) {}
+    return null;
   }
 
   function switchChannel(channelId, forceRefresh = false) {
@@ -332,15 +348,35 @@
     }
 
     if (channelId === "home" && !forceRefresh && !state.channelData.home && !isPostPath(location.pathname) && document.querySelector(".post-list-item")) {
+      const parsed = parsePostListFromDoc(document);
       state.channelData.home = {
-        items: parsePostListFromDoc(document),
+        items: parsed,
         page: 1,
         loading: false,
         error: null,
       };
+      saveHomeSwrSnapshot(parsed);
       renderLeftNav();
       renderTopicList();
       return;
+    }
+
+    if (channelId === "home" && !forceRefresh && !state.channelData.home) {
+      const snap = loadHomeSwrSnapshot();
+      if (snap) {
+        state.channelData.home = {
+          items: snap.items,
+          page: 1,
+          loading: false,
+          error: null,
+        };
+        renderLeftNav();
+        renderTopicList();
+        if (Date.now() - snap.ts >= 60 * 1000) {
+          fetchChannelData("home", 1, true, true);
+        }
+        return;
+      }
     }
 
     if (forceRefresh || !state.channelData[channelId]) {
@@ -795,7 +831,7 @@
     const tm = formatChineseTime("", m.created_at, "");
     wrap.innerHTML = `
       <div class="nsc-avatar-col">
-        <button type="button" class="nsc-avatar-btn"><img src="${av}" loading="lazy" alt="" /></button>
+        <button type="button" class="nsc-avatar-btn"><img src="${av}" loading="lazy" decoding="async" alt="" /></button>
       </div>
       <div class="nsc-msg-main">
         <div class="nsc-msg-meta">
@@ -1384,6 +1420,7 @@
       if (parsed.length === 0) cur.noMore = true;
       if (reset || page === 1) {
         cur.items = parsed;
+        if (channelId === "home") saveHomeSwrSnapshot(parsed);
       } else {
         const seen = new Set(cur.items.map((x) => x.postId));
         let added = 0;
@@ -1419,11 +1456,16 @@
     fetchChannelData(chId, nextPage, false, false);
   }
 
-  async function fetchHotPosts(tabType = state.hotTab) {
+  async function fetchHotPosts(tabType = state.hotTab, force = false) {
+    const cached = state.hotCache[tabType];
+    if (!force && cached && cached.fetchedAt && Date.now() - cached.fetchedAt < 5 * 60 * 1000) {
+      if (state.rightTab === "hot") renderRightBody();
+      return;
+    }
     if (state.hotLoading) return;
     state.hotLoading = true;
     state.hotError = null;
-    if (state.rightTab === "hot") renderRightBody();
+    if (state.rightTab === "hot" && !(cached && cached.items && cached.items.length > 0)) renderRightBody();
 
     const apiMap = {
       realtime: "https://api.bimg.eu.org/hot.json",
@@ -1454,7 +1496,8 @@
             score: Math.floor(Number(item.score) || 0),
           };
         });
-        state.hotCache[tabType] = { items, updatedAt: json.updated_at || Math.floor(Date.now() / 1000) };
+        state.hotCache[tabType] = { items, updatedAt: json.updated_at || Math.floor(Date.now() / 1000), fetchedAt: Date.now() };
+        scheduleSaveJson(LS.HOT_CACHE, state.hotCache);
       } else {
         throw new Error("Invalid hot json");
       }
@@ -1473,7 +1516,8 @@
           }
         }
         const items = Array.from(map.values()).sort((a, b) => b.score - a.score);
-        state.hotCache[tabType] = { items, updatedAt: Math.floor(Date.now() / 1000) };
+        state.hotCache[tabType] = { items, updatedAt: Math.floor(Date.now() / 1000), fetchedAt: Date.now() };
+        scheduleSaveJson(LS.HOT_CACHE, state.hotCache);
       } catch (_) {
         state.hotError = err.message;
       }
@@ -1536,7 +1580,7 @@
         const row = document.createElement("div");
         row.className = "nsc-topic-item" + (it.viewed ? " is-read" : "") + (state.selectedNotifKey === rowKey ? " is-selected" : "");
         row.innerHTML = `
-          ${it.avatar ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />` : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`}
+          ${it.avatar ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" decoding="async" alt="" />` : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`}
           <div class="nsc-topic-body">
             <div class="nsc-topic-top">
               <div class="nsc-topic-title"></div>
@@ -1596,7 +1640,7 @@
         const isSel = state.activePmPeer && state.activePmPeer.uid === it.uid;
         row.className = "nsc-topic-item" + (isSel ? " is-selected" : "");
         row.innerHTML = `
-          <img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />
+          <img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" decoding="async" alt="" />
           <div class="nsc-topic-body">
             <div class="nsc-topic-top">
               <div class="nsc-topic-title" style="-webkit-line-clamp:1;"></div>
@@ -1799,7 +1843,7 @@
         (state.currentPostId === it.postId ? " is-selected" : "");
 
       const avatarHtml = it.avatar
-        ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" alt="" />`
+        ? `<img class="nsc-topic-avatar" src="${it.avatar}" loading="lazy" decoding="async" alt="" />`
         : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`;
 
       let badgeHtml = "";

@@ -330,8 +330,14 @@
     renderRightBody();
   }
 
-  async function fetchServerBlockList(silent = false) {
+  async function fetchServerBlockList(silent = false, force = false) {
     if (state.blockListState.loading) return state.blacklist;
+    const lastSyncTs = Number(localStorage.getItem(LS.BLACKLIST_TS)) || 0;
+    if (silent && !force && lastSyncTs > 0 && Date.now() - lastSyncTs < 30 * 60 * 1000) {
+      state.blockListState.items = state.blacklist;
+      state.blockListState.loaded = true;
+      return state.blacklist;
+    }
     state.blockListState.loading = true;
     state.blockListState.error = null;
     if (!silent && state.rightTab === "blacklist") renderRightBody();
@@ -367,6 +373,7 @@
       state.blacklist = mapped;
       rebuildBlacklistSet();
       saveJson(LS.BLACKLIST, state.blacklist);
+      localStorage.setItem(LS.BLACKLIST_TS, String(Date.now()));
       renderTopicList();
       applyMessageFilters();
     } catch (err) {
@@ -390,7 +397,7 @@
         if (hit && hit.uid) targetUid = hit.uid;
       }
       if (!targetUid) {
-        await fetchServerBlockList(true);
+        await fetchServerBlockList(true, true);
         const hit = state.blacklist.find((b) => b.name === name);
         if (hit && hit.uid) targetUid = hit.uid;
       }
@@ -443,7 +450,7 @@
       rebuildBlacklistSet();
       saveJson(LS.BLACKLIST, state.blacklist);
     }
-    await fetchServerBlockList(true);
+    await fetchServerBlockList(true, true);
     renderRightBody();
     renderTopicList();
     applyMessageFilters();
@@ -495,43 +502,57 @@
     }
   }
 
-  async function prefetchCollectionsSet() {
-    if (state.collectionsLoaded) return;
-    state.collectionsLoaded = true;
-    try {
-      for (let page = 1; page <= 3; page++) {
-        const resp = await fetch(`/api/statistics/list-collection?page=${page}`, {
-          headers: { Accept: "application/json, text/plain, */*" },
-          credentials: "include",
-        });
-        if (!resp.ok) break;
-        const json = await resp.json().catch(() => null);
-        const rows = (json && (json.collections || json.data || json.list)) || [];
-        if (!Array.isArray(rows) || rows.length === 0) break;
-        for (const it of rows) {
-          const pid = String(it.post_id || it.postId || it.id || "").trim();
-          if (pid) state.collectedSet.add(pid);
+  let _collectionsPromise = null;
+  async function ensureCollectionsLoaded(force = false) {
+    if (state.collectionsLoaded && !force) return;
+    if (_collectionsPromise) return _collectionsPromise;
+    _collectionsPromise = (async () => {
+      try {
+        const nextSet = new Set();
+        for (let page = 1; page <= 3; page++) {
+          const resp = await fetch(`/api/statistics/list-collection?page=${page}`, {
+            headers: { Accept: "application/json, text/plain, */*" },
+            credentials: "include",
+          });
+          if (!resp.ok) break;
+          const json = await resp.json().catch(() => null);
+          const rows = (json && (json.collections || json.data || json.list)) || [];
+          if (!Array.isArray(rows) || rows.length === 0) break;
+          for (const it of rows) {
+            const pid = String(it.post_id || it.postId || it.id || "").trim();
+            if (pid) nextSet.add(pid);
+          }
+          if (rows.length < 15) break;
         }
-        if (rows.length < 15) break;
-      }
-      if (state.currentRoom && state.currentPostId) {
-        const colBtn = document.getElementById("nsc-collect-post-btn");
-        if (colBtn) {
-          const on = state.collectedSet.has(String(state.currentPostId));
-          colBtn.classList.toggle("is-active", on);
-          colBtn.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+        state.collectedSet = nextSet;
+        state.collectionsLoaded = true;
+        saveJson(LS.COLLECTIONS, Array.from(nextSet).slice(0, 300));
+        if (state.currentRoom && state.currentPostId) {
+          const colBtn = document.getElementById("nsc-collect-post-btn");
+          if (colBtn) {
+            const on = state.collectedSet.has(String(state.currentPostId));
+            colBtn.classList.toggle("is-active", on);
+            colBtn.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+          }
         }
+      } catch (_) {
+      } finally {
+        _collectionsPromise = null;
       }
-    } catch (_) {}
+    })();
+    return _collectionsPromise;
   }
 
   async function togglePostCollection(postId, btnEl = null) {
     const pid = String(postId || "").trim();
     if (!pid) return { ok: false };
-    const isCollected = state.collectedSet.has(pid);
-    const action = isCollected ? "remove" : "add";
     if (btnEl) btnEl.disabled = true;
     try {
+      if (!state.collectionsLoaded) {
+        await ensureCollectionsLoaded(false);
+      }
+      const isCollected = state.collectedSet.has(pid);
+      const action = isCollected ? "remove" : "add";
       const resp = await fetch("/api/statistics/collection", {
         method: "POST",
         credentials: "include",
@@ -544,6 +565,7 @@
       }
       if (action === "add") state.collectedSet.add(pid);
       else state.collectedSet.delete(pid);
+      saveJson(LS.COLLECTIONS, Array.from(state.collectedSet).slice(0, 300));
       state.hubData.collections = { items: [], page: 0, loading: false, noMore: false, error: null };
 
       if (btnEl) {
