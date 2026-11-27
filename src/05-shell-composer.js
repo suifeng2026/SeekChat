@@ -1014,28 +1014,52 @@
       });
     }
 
-    // 仅将普通段落内的多张帖子图片组合为朋友圈宫格，不破坏测评 Tab / 折叠 / 表格等原有容器结构
-    if (gridImgs.length >= 2) {
-      const grid = document.createElement("div");
-      grid.className = "nsc-img-grid" + (gridImgs.length === 2 || gridImgs.length === 4 ? " cols-2" : "");
-      const anchor = gridImgs[0].closest("p, figure, div") || gridImgs[0];
-      if (anchor && anchor.parentNode === containerEl) {
-        containerEl.insertBefore(grid, anchor);
-      } else {
-        containerEl.appendChild(grid);
+    // 仅合并「连续相邻的无文字纯图块」为朋友圈宫格，绝不跨文字段落抽图，完整保留图文混排原始顺序
+    const isPureImgBlock = (el) => {
+      if (!el || el.nodeType !== 1) return false;
+      if (el.matches('blockquote, pre, code, table, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"], .nsc-img-grid')) {
+        return false;
       }
-      const parentsToCheck = new Set();
-      for (const im of gridImgs) {
-        const p = im.closest("p, figure, a");
-        if (p && p !== containerEl) parentsToCheck.add(p);
-        grid.appendChild(im);
+      if (el.tagName === "IMG") return el.classList.contains("nsc-zoomable-img");
+      if (el.tagName !== "P" && el.tagName !== "FIGURE" && el.tagName !== "A" && el.tagName !== "DIV") return false;
+      const imgs = Array.from(el.querySelectorAll("img.nsc-zoomable-img")).filter(
+        (im) => !im.closest("blockquote, pre, code")
+      );
+      return imgs.length > 0 && (el.textContent || "").trim() === "" && !el.querySelector("video, iframe");
+    };
+
+    let run = [];
+    const flushRun = () => {
+      if (run.length === 0) return;
+      const imgsInRun = [];
+      for (const el of run) {
+        if (el.tagName === "IMG") imgsInRun.push(el);
+        else imgsInRun.push(...el.querySelectorAll("img.nsc-zoomable-img"));
       }
-      for (const p of parentsToCheck) {
-        const txt = (p.textContent || "").trim();
-        if (!txt && !p.querySelector("img, video, iframe")) {
-          p.remove();
+      if (imgsInRun.length >= 2) {
+        const grid = document.createElement("div");
+        grid.className = "nsc-img-grid" + (imgsInRun.length === 2 || imgsInRun.length === 4 ? " cols-2" : "");
+        containerEl.insertBefore(grid, run[0]);
+        for (const el of run) {
+          if (el.tagName === "IMG") {
+            grid.appendChild(el);
+          } else {
+            for (const im of el.querySelectorAll("img.nsc-zoomable-img")) grid.appendChild(im);
+            el.remove();
+          }
         }
       }
+      run = [];
+    };
+
+    for (const node of Array.from(containerEl.childNodes)) {
+      if (node.nodeType === 3 && !node.nodeValue.trim()) continue;
+      if (isPureImgBlock(node)) {
+        run.push(node);
+      } else {
+        flushRun();
+      }
     }
+    flushRun();
   }
 
