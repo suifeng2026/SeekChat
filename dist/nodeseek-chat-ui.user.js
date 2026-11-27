@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.19.0
+// @version      7.19.1
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -809,27 +809,27 @@
     const u = state.updateInfo;
     btn.classList.toggle("has-update", Boolean(u.hasUpdate));
     if (u.checking) {
-      btn.title = "正在检查 GitHub 最新版本...";
-      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检查中...</span></span>`;
+      btn.title = `正在检查更新（当前 v${u.current}）...`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检测中...</span></span>`;
       return;
     }
     if (u.hasUpdate && u.latest) {
-      btn.title = `发现新版本 v${u.latest}（当前 v${u.current}），点击一键跳转 Tampermonkey 更新`;
-      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>更新 v${escHtml(u.latest)}</span></span><span class="nsc-nav-badge">NEW</span>`;
+      btn.title = `发现新版本 v${u.latest}（当前 v${u.current}），点击一键更新`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>更新 v${escHtml(u.latest)}</span></span><span class="nsc-nav-badge">新</span>`;
       return;
     }
     if (u.error) {
-      btn.title = `检查更新失败 (${u.error})，点击重试`;
-      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>v${escHtml(u.current)} 重试</span></span>`;
+      btn.title = `检测失败 (${u.error})，点击重试`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检测失败</span></span>`;
       return;
     }
     if (u.justChecked) {
-      btn.title = `当前已是最新版本 v${u.current}，点击重新检测`;
+      btn.title = `当前已是最新版本 v${u.current}`;
       btn.innerHTML = `<span class="nsc-nav-left">${ICONS.check}<span>已是最新</span></span>`;
       return;
     }
-    btn.title = `当前版本 v${u.current}，点击立即检查更新`;
-    btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>v${escHtml(u.current)} 更新</span></span>`;
+    btn.title = `当前 v${u.current} · 每小时自动检测一次，点击立即检查更新`;
+    btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>`;
   }
 
   function openSeekChatUpdateInstall() {
@@ -866,12 +866,14 @@
     });
   }
 
+  const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
   async function checkSeekChatUpdate(manual = false) {
     const u = state.updateInfo;
     if (u.checking) return;
     if (!manual) {
       const cached = loadJson(LS.UPDATE_CHECK, null);
-      if (cached && cached.ts && Date.now() - cached.ts < 5 * 60 * 1000 && cached.latest) {
+      if (cached && cached.ts && Date.now() - cached.ts < UPDATE_CHECK_INTERVAL_MS && cached.latest) {
         u.latest = cached.latest;
         u.hasUpdate = compareSemver(cached.latest, u.current) > 0;
         renderUpdateButton();
@@ -883,7 +885,8 @@
     u.justChecked = false;
     renderUpdateButton();
     try {
-      const text = await fetchRemoteMetaText(`${SEEKCHAT_META_URL}?_t=${Date.now()}`);
+      const url = manual ? `${SEEKCHAT_META_URL}?_t=${Date.now()}` : SEEKCHAT_META_URL;
+      const text = await fetchRemoteMetaText(url);
       const m = text.match(/\/\/\s*@version\s+([^\s]+)/i);
       const latest = m ? m[1].trim() : "";
       if (!latest) throw new Error("未解析到版本号");
@@ -895,7 +898,7 @@
         setTimeout(() => {
           u.justChecked = false;
           renderUpdateButton();
-        }, 2400);
+        }, 2000);
       }
     } catch (err) {
       u.error = err.message || "检测失败";
@@ -4115,9 +4118,11 @@
         setTimeout(() => {
           if (typeof maybeRunAutoCheckin === "function") maybeRunAutoCheckin();
         }, 1600);
-        setTimeout(() => {
-          if (typeof checkSeekChatUpdate === "function") checkSeekChatUpdate(false);
-        }, 2200);
+        if (firstInit) {
+          setTimeout(() => {
+            if (typeof checkSeekChatUpdate === "function") checkSeekChatUpdate(false);
+          }, 5000);
+        }
       }
 
       if (isPostPath(location.pathname)) {

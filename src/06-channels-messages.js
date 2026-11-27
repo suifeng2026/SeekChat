@@ -215,9 +215,11 @@
         setTimeout(() => {
           if (typeof maybeRunAutoCheckin === "function") maybeRunAutoCheckin();
         }, 1600);
-        setTimeout(() => {
-          if (typeof checkSeekChatUpdate === "function") checkSeekChatUpdate(false);
-        }, 2200);
+        if (firstInit) {
+          setTimeout(() => {
+            if (typeof checkSeekChatUpdate === "function") checkSeekChatUpdate(false);
+          }, 5000);
+        }
       }
 
       if (isPostPath(location.pathname)) {
