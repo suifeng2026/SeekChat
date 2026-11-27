@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.11.0
+// @version      7.12.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -27,6 +27,7 @@
   // ==========================================================================
   const LS = {
     ENABLED: "nsc_v7_enabled",
+    THEME: "nsc_v7_theme",
     ACTIVE_CHANNEL: "nsc_v7_channel",
     SORT: "nsc_v7_sort",
     HOT_TAB: "nsc_v7_hot_tab",
@@ -87,7 +88,14 @@
     atMe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>`,
     replyMe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
     pm: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
-    quote: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>`,
+    quote: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v6c0 2.5-1.5 4.2-4 5"/><path d="M19 11h-4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v6c0 2.5-1.5 4.2-4 5"/></svg>`,
+    like: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v10"/><path d="M14 9V5.5a2.5 2.5 0 0 0-2.5-2.5l-4 7v10h9.4a2 2 0 0 0 2-1.6l1.3-6.5A2 2 0 0 0 18.2 9H14z"/></svg>`,
+    leg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 14.5c2.7-2.7 3.9-6.6 1.6-8.9-2.3-2.3-6.2-1.1-8.9 1.6-1.9 1.9-2.4 4.5-1.5 6.3l-2.9 2.9a1.8 1.8 0 0 0-.4 2.1 1.8 1.8 0 0 0 2.1.4l2.9-2.9c1.8.9 4.4.4 7.1-1.5z"/><circle cx="3.8" cy="18.2" r="1.1"/><circle cx="5.8" cy="20.2" r="1.1"/></svg>`,
+    pin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`,
+    reply: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+    sun: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`,
+    dusk: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10a4 4 0 0 0-4 4h8a4 4 0 0 0-4-4Z"/><path d="M2 18h20"/><path d="M5 21h14"/><path d="M12 3v3"/><path d="m5.6 7.6 2.1 2.1"/><path d="m18.4 7.6-2.1 2.1"/></svg>`,
+    moon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
     ruling: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
     partner: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
     links: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
@@ -95,7 +103,7 @@
     trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
     theme: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>`,
     smile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
-    edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+    edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -157,6 +165,7 @@
 
   const state = {
     enabled: localStorage.getItem(LS.ENABLED) !== "0",
+    themeMode: localStorage.getItem(LS.THEME) || "auto",
     activeChannel: localStorage.getItem(LS.ACTIVE_CHANNEL) || "home",
     sortMode: localStorage.getItem(LS.SORT) || "reply",
     hotTab: localStorage.getItem(LS.HOT_TAB) || "realtime",
@@ -230,6 +239,42 @@
     let out = "";
     for (let i = 0; i < len; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
     return out;
+  }
+
+  function parseTempScriptConfig(doc) {
+    const el = doc && doc.getElementById("temp-script");
+    if (!el || !el.textContent) return null;
+    const raw = el.textContent.trim();
+    if (!raw) return null;
+    try {
+      if (raw.startsWith("{")) return JSON.parse(raw);
+      const bin = atob(raw);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return JSON.parse(new TextDecoder("utf-8").decode(bytes));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function extractPostMetaFromTempScript(doc) {
+    const map = new Map();
+    const cfg = parseTempScriptConfig(doc);
+    const comments = cfg && cfg.postData && Array.isArray(cfg.postData.comments) ? cfg.postData.comments : [];
+    for (const c of comments) {
+      const floorNum = c.floorIndex !== undefined && c.floorIndex !== null ? Number(c.floorIndex) : NaN;
+      const floorKey = Number.isFinite(floorNum) ? String(floorNum) : "";
+      if (!floorKey) continue;
+      map.set(floorKey, {
+        commentId: String(c.commentId || c.id || ""),
+        likes: Number(c.upvoteCount) || 0,
+        legs: Number(c.likeCount) || 0,
+        pinned: Boolean(c.pined === true || c.pined === 1 || c.pinned === true || c.pinned === 1),
+        upvoted: Boolean(c.upvoted),
+        liked: Boolean(c.liked),
+      });
+    }
+    return map;
   }
 
   function getNodeSeekPostHeaders() {
@@ -562,28 +607,77 @@
         --nsc-shadow: 0 20px 60px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
       }
 
-      body.dark-layout {
-        --nsc-bg-nav: rgba(30, 31, 34, 0.84);
-        --nsc-bg-list: rgba(36, 37, 41, 0.88);
-        --nsc-bg-chat: rgba(24, 25, 28, 0.86);
-        --nsc-bg-right: rgba(36, 37, 41, 0.88);
-        --nsc-bg-card: rgba(44, 45, 50, 0.94);
-        --nsc-bubble-other: #2c2d32;
+      body.nsc-app-active.dark-layout {
+        --nsc-bg-nav: rgba(42, 45, 53, 0.88);
+        --nsc-bg-list: rgba(33, 36, 42, 0.94);
+        --nsc-bg-chat: rgba(27, 29, 35, 0.96);
+        --nsc-bg-right: rgba(36, 39, 46, 0.94);
+        --nsc-bg-card: #2f333d;
+        --nsc-bubble-other: #2f333d;
         --nsc-bubble-self: #0a84ff;
         --nsc-bubble-self-text: #ffffff;
-        --nsc-bubble-op: #2f2a20;
-        --nsc-thread-bg: rgba(40, 41, 46, 0.88);
-        --nsc-quote-bg: rgba(255, 255, 255, 0.07);
-        --nsc-border: rgba(255, 255, 255, 0.10);
-        --nsc-text: #f5f5f7;
-        --nsc-muted: #98989d;
+        --nsc-bubble-op: #362f23;
+        --nsc-thread-bg: rgba(38, 41, 49, 0.92);
+        --nsc-quote-bg: rgba(255, 255, 255, 0.075);
+        --nsc-border: rgba(255, 255, 255, 0.105);
+        --nsc-text: #f2f2f7;
+        --nsc-muted: #a8abb4;
         --nsc-accent: #0a84ff;
-        --nsc-accent-soft: rgba(10, 132, 255, 0.18);
+        --nsc-accent-soft: rgba(10, 132, 255, 0.20);
         --nsc-green: #30d158;
-        --nsc-hover: rgba(255, 255, 255, 0.07);
-        --nsc-active-item: rgba(10, 132, 255, 0.22);
-        --nsc-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+        --nsc-hover: rgba(255, 255, 255, 0.075);
+        --nsc-active-item: rgba(10, 132, 255, 0.24);
+        --nsc-shadow: 0 26px 74px rgba(0, 0, 0, 0.60), 0 0 0 1px rgba(255, 255, 255, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        background:
+          radial-gradient(ellipse at 18% 0%, rgba(56, 132, 255, 0.10), transparent 52%),
+          radial-gradient(ellipse at 86% 92%, rgba(120, 118, 255, 0.08), transparent 52%),
+          #13151a !important;
       }
+      body.nsc-app-active.dark-layout header {
+        background: rgba(30, 32, 38, 0.86) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+      }
+
+      body.nsc-app-active.nsc-theme-dusk {
+        --nsc-bg-nav: rgba(231, 219, 199, 0.90);
+        --nsc-bg-list: rgba(244, 236, 222, 0.95);
+        --nsc-bg-chat: rgba(238, 229, 212, 0.95);
+        --nsc-bg-right: rgba(244, 236, 222, 0.95);
+        --nsc-bg-card: #fbf6ec;
+        --nsc-bubble-other: #fbf6ec;
+        --nsc-bubble-self: #3568c4;
+        --nsc-bubble-self-text: #ffffff;
+        --nsc-bubble-op: #fdf0d5;
+        --nsc-thread-bg: rgba(227, 216, 197, 0.88);
+        --nsc-quote-bg: rgba(120, 88, 52, 0.08);
+        --nsc-border: rgba(115, 86, 52, 0.14);
+        --nsc-text: #382f25;
+        --nsc-muted: #786958;
+        --nsc-accent: #c86d1f;
+        --nsc-accent-soft: rgba(200, 109, 31, 0.14);
+        --nsc-green: #2f9e44;
+        --nsc-hover: rgba(120, 88, 52, 0.075);
+        --nsc-active-item: rgba(200, 109, 31, 0.15);
+        --nsc-shadow: 0 22px 60px rgba(72, 48, 24, 0.16), 0 0 0 1px rgba(115, 86, 52, 0.12);
+        background:
+          radial-gradient(ellipse at 20% 0%, rgba(245, 158, 11, 0.11), transparent 55%),
+          radial-gradient(ellipse at 85% 92%, rgba(217, 119, 6, 0.08), transparent 55%),
+          #ddd0ba !important;
+        color: #382f25 !important;
+      }
+      body.nsc-app-active.nsc-theme-dusk header {
+        background: rgba(236, 225, 206, 0.90) !important;
+        border-bottom: 1px solid rgba(115, 86, 52, 0.14) !important;
+        color: #382f25 !important;
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-msg.is-self .nsc-bubble,
+      body.nsc-app-active.nsc-theme-dusk .nsc-thread-item.is-self-thread .nsc-thread-content {
+        background: linear-gradient(180deg, #4378d6 0%, #2f62bf 100%);
+        box-shadow: 0 2px 8px rgba(47, 98, 191, 0.22);
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse { color: #b45309; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse.is-active { background: #c86d1f; color: #fff; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(200, 109, 31, 0.14); color: #b45309; }
 
       #nsc-mode-switch-btn {
         font-family: var(--mac-font);
@@ -639,12 +733,29 @@
         padding: 8px 7px 6px; gap: 2px; overflow-y: auto;
       }
       .nsc-mac-traffic {
-        display: flex; align-items: center; gap: 6px; padding: 1px 6px 6px; flex: 0 0 auto;
+        display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 1px 4px 6px 6px; flex: 0 0 auto;
       }
+      .nsc-mac-dots { display: inline-flex; align-items: center; gap: 6px; }
       .nsc-mac-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15); }
       .nsc-mac-dot.red { background: #ff5f56; }
       .nsc-mac-dot.yellow { background: #ffbd2e; }
       .nsc-mac-dot.green { background: #27c93f; }
+      .nsc-theme-seg {
+        display: inline-flex; align-items: center; gap: 1px; padding: 2px;
+        border-radius: 7px; background: var(--nsc-hover); border: 1px solid var(--nsc-border);
+      }
+      .nsc-theme-btn {
+        width: 19px; height: 17px; border: none; border-radius: 5px; padding: 0;
+        background: transparent; color: var(--nsc-muted); cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all 0.12s ease;
+      }
+      .nsc-theme-btn svg { width: 11px; height: 11px; }
+      .nsc-theme-btn:hover { color: var(--nsc-text); }
+      .nsc-theme-btn.is-active {
+        background: var(--nsc-bg-card); color: var(--nsc-accent);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+      }
 
       .nsc-nav-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
       .nsc-nav-item {
@@ -867,6 +978,12 @@
       .nsc-msg-author:hover { color: var(--nsc-accent); text-decoration: underline; }
       .nsc-lv-pill { font-size: 10px; padding: 1px 6px; border-radius: 5px; background: rgba(0, 122, 255, 0.09); color: var(--nsc-accent); font-weight: 600; }
       .nsc-op-pill { font-size: 10px; padding: 1px 6px; border-radius: 5px; background: rgba(245, 158, 11, 0.14); color: #d97706; font-weight: 700; }
+      .nsc-pin-pill {
+        font-size: 10px; padding: 1px 6px; border-radius: 5px;
+        background: rgba(255, 59, 48, 0.13); color: #ff3b30; font-weight: 700;
+        display: inline-flex; align-items: center; gap: 3px;
+      }
+      .nsc-pin-pill svg { width: 10px; height: 10px; }
       .nsc-floor-tag { font-size: 10px; padding: 1px 6px; border-radius: 5px; background: var(--nsc-hover); color: var(--nsc-muted); font-weight: 600; cursor: pointer; }
       .nsc-floor-tag:hover { color: var(--nsc-accent); }
       .nsc-floor-tag.is-op-floor { background: rgba(245, 158, 11, 0.12); color: #d97706; }
@@ -882,7 +999,7 @@
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px rgba(0, 0, 0, 0.025);
         width: fit-content; max-width: 100%;
       }
-      body.dark-layout .nsc-bubble { border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22); }
+      body.nsc-app-active.dark-layout .nsc-bubble { border-color: rgba(255, 255, 255, 0.10); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22); }
       .nsc-bubble p { margin: 4px 0; }
       .nsc-bubble > p:first-child { margin-top: 0; }
       .nsc-bubble > p:last-child { margin-bottom: 0; }
@@ -987,21 +1104,27 @@
       .nsc-reactions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
       .nsc-reactions:empty { display: none; }
       .nsc-react-pill {
-        display: inline-flex; align-items: center; gap: 3px;
-        padding: 1px 7px; border-radius: 999px;
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 8px; border-radius: 999px;
         border: 1px solid var(--nsc-border); background: var(--nsc-bg-card);
         color: var(--nsc-muted); font-size: 11px; font-weight: 600; cursor: pointer;
         transition: all 0.14s ease;
       }
+      .nsc-react-pill svg { width: 11.5px; height: 11.5px; flex: 0 0 11.5px; }
+      .nsc-react-pill.is-like { color: var(--nsc-accent); }
+      .nsc-react-pill.is-leg { color: #d97706; }
+      .nsc-react-pill.is-voted { background: var(--nsc-accent-soft); border-color: var(--nsc-accent); }
+      .nsc-react-pill.is-leg.is-voted { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.45); }
       .nsc-react-pill:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
 
-      /* 悬停操作条内嵌在元信息行尾，不再飘出或重复数字 */
+      /* macOS SF Symbols 悬停操作胶囊，内嵌在元信息行尾 */
       .nsc-hover-bar {
-        display: inline-flex; align-items: center; gap: 1px; padding: 1px 4px; margin-left: 4px;
+        display: inline-flex; align-items: center; gap: 2px; padding: 2px 5px; margin-left: 4px;
         border-radius: 999px; border: 1px solid var(--nsc-border);
-        background: var(--nsc-bg-card);
+        background: var(--nsc-bg-card); backdrop-filter: blur(12px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         opacity: 0; pointer-events: none;
-        transition: opacity 0.1s linear;
+        transition: opacity 0.12s ease;
         white-space: nowrap; flex: 0 0 auto;
       }
       .nsc-msg:hover > .nsc-msg-main > .nsc-msg-meta > .nsc-hover-bar,
@@ -1012,12 +1135,16 @@
       }
       .nsc-hb-btn {
         border: none; background: transparent; color: var(--nsc-muted);
-        height: 20px; min-width: 22px; padding: 0 4px; border-radius: 999px;
-        font-size: 11.5px; display: inline-flex; align-items: center; justify-content: center;
-        cursor: pointer; line-height: 1;
+        height: 21px; width: 22px; padding: 0; border-radius: 999px;
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; line-height: 1; transition: all 0.12s ease;
       }
-      .nsc-hb-btn svg { width: 12px; height: 12px; }
+      .nsc-hb-btn svg { width: 12.5px; height: 12.5px; }
       .nsc-hb-btn:hover { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
+      .nsc-hb-btn.is-leg:hover { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+      .nsc-hb-btn.is-pin:hover,
+      .nsc-hb-btn.is-pin.is-active { background: rgba(255, 59, 48, 0.13); color: #ff3b30; }
+      .nsc-hb-btn.is-active { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
 
       .nsc-msg.has-thread .nsc-msg-main { flex: 1 1 auto; max-width: calc(100% - 54px); }
       .nsc-thread-toggle {
@@ -1251,6 +1378,9 @@
       }
       .nsc-right-user .user-card .user-head .menu > div {
         display: flex !important; align-items: center !important; gap: 5px !important;
+      }
+      .nsc-right-user .user-card .user-head .menu > div > a[title="切换主题模式"] {
+        display: none !important;
       }
       .nsc-right-user .user-card .user-head .menu > div > a,
       .nsc-right-user .user-card .user-head .menu > div > span {
@@ -2046,6 +2176,55 @@
     }
   }
 
+  function getEffectiveThemeMode() {
+    if (state.themeMode === "dusk") return "dusk";
+    return document.body.classList.contains("dark-layout") ? "dark" : "light";
+  }
+
+  function syncThemeButtons() {
+    const cur = getEffectiveThemeMode();
+    document.querySelectorAll("#nsc-theme-seg .nsc-theme-btn").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.theme === cur);
+    });
+  }
+
+  function applyThemeMode(mode) {
+    state.themeMode = mode;
+    localStorage.setItem(LS.THEME, mode);
+    const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
+    const isDark = document.body.classList.contains("dark-layout");
+
+    if (mode === "dusk") {
+      document.body.classList.add("nsc-theme-dusk");
+      if (isDark) {
+        if (headThemeBtn) headThemeBtn.click();
+        else {
+          document.body.classList.remove("dark-layout");
+          document.body.classList.add("light-layout");
+        }
+      }
+    } else if (mode === "dark") {
+      document.body.classList.remove("nsc-theme-dusk");
+      if (!isDark) {
+        if (headThemeBtn) headThemeBtn.click();
+        else {
+          document.body.classList.remove("light-layout");
+          document.body.classList.add("dark-layout");
+        }
+      }
+    } else {
+      document.body.classList.remove("nsc-theme-dusk");
+      if (isDark) {
+        if (headThemeBtn) headThemeBtn.click();
+        else {
+          document.body.classList.remove("dark-layout");
+          document.body.classList.add("light-layout");
+        }
+      }
+    }
+    syncThemeButtons();
+  }
+
   function buildShellIfNeeded() {
     if (state.shellBuilt) return;
     state.shellBuilt = true;
@@ -2054,10 +2233,17 @@
     shell.id = "nsc-app-shell";
     shell.innerHTML = `
       <nav class="nsc-pane-nav">
-        <div class="nsc-mac-traffic" aria-hidden="true">
-          <span class="nsc-mac-dot red"></span>
-          <span class="nsc-mac-dot yellow"></span>
-          <span class="nsc-mac-dot green"></span>
+        <div class="nsc-mac-traffic">
+          <div class="nsc-mac-dots" aria-hidden="true">
+            <span class="nsc-mac-dot red"></span>
+            <span class="nsc-mac-dot yellow"></span>
+            <span class="nsc-mac-dot green"></span>
+          </div>
+          <div class="nsc-theme-seg" id="nsc-theme-seg" title="切换外观模式">
+            <button type="button" class="nsc-theme-btn" data-theme="light" title="浅色模式">${ICONS.sun}</button>
+            <button type="button" class="nsc-theme-btn" data-theme="dusk" title="黄昏护眼模式">${ICONS.dusk}</button>
+            <button type="button" class="nsc-theme-btn" data-theme="dark" title="macOS 暗黑模式">${ICONS.moon}</button>
+          </div>
         </div>
         <div id="nsc-pane-nav" class="nsc-nav-main"></div>
         <div class="nsc-nav-bottom" id="nsc-nav-footer">
@@ -2488,6 +2674,15 @@
       }
     }, { passive: true });
 
+    shell.querySelectorAll("#nsc-theme-seg .nsc-theme-btn").forEach((b) => {
+      b.addEventListener("click", () => applyThemeMode(b.dataset.theme));
+    });
+    if (state.themeMode === "dusk") {
+      applyThemeMode("dusk");
+    } else {
+      syncThemeButtons();
+    }
+
     renderLeftNav();
   }
 
@@ -2617,9 +2812,10 @@
           const pResp = await fetch(targetUrl, { credentials: "include" });
           if (pResp.ok) {
             const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
+            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
             const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
             for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
-              const obj = extractCommentObject(el, false, lastPage);
+              const obj = extractCommentObject(el, false, lastPage, tempMetaMap);
               if (obj.floorId && !seen.has(obj.floorId)) {
                 seen.add(obj.floorId);
                 if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -2863,10 +3059,11 @@
             const resp = await fetch(`/post-${pid}-${lastPage}`, { credentials: "include" });
             if (!resp.ok || !state.currentRoom || state.currentPostId !== pid) return;
             const pDoc = new DOMParser().parseFromString(await resp.text(), "text/html");
+            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
             const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
             let added = 0;
             for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
-              const obj = extractCommentObject(el, false, lastPage);
+              const obj = extractCommentObject(el, false, lastPage, tempMetaMap);
               if (obj.floorId && !seen.has(obj.floorId)) {
                 seen.add(obj.floorId);
                 if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -3141,20 +3338,24 @@
       rightUserHost.appendChild(nativeUserCard);
     }
 
-    const themeBtn = document.querySelector('#nsc-right-user .user-card a[title="切换主题模式"]');
-    if (themeBtn && themeBtn.dataset.nscThemeFixed !== "1") {
-      themeBtn.dataset.nscThemeFixed = "1";
-      if (!themeBtn.querySelector("svg")) {
-        themeBtn.innerHTML = ICONS.theme;
-      }
-      themeBtn.addEventListener("click", (e) => {
-        const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
-        if (headThemeBtn && e.isTrusted) {
-          e.preventDefault();
-          headThemeBtn.click();
-        }
+    const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
+    if (headThemeBtn && headThemeBtn.dataset.nscThemeObs !== "1") {
+      headThemeBtn.dataset.nscThemeObs = "1";
+      headThemeBtn.addEventListener("click", () => {
+        setTimeout(() => {
+          document.body.classList.remove("nsc-theme-dusk");
+          const nextMode = document.body.classList.contains("dark-layout") ? "dark" : "light";
+          state.themeMode = nextMode;
+          localStorage.setItem(LS.THEME, nextMode);
+          syncThemeButtons();
+        }, 40);
       });
     }
+
+    if (state.themeMode === "dusk") {
+      document.body.classList.add("nsc-theme-dusk");
+    }
+    syncThemeButtons();
 
     const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
       const src = document.querySelector(panelSelector);
@@ -3180,6 +3381,9 @@
     } else {
       syncComposerMode(isPostPath(location.pathname) && (!state.currentPostId || state.currentPostId === state.nativePostId));
     }
+    if (typeof refreshNativeFloorCountsIfNeeded === "function") {
+      refreshNativeFloorCountsIfNeeded();
+    }
 
     if (state.rightTab === "hot" && !state.hotCache[state.hotTab]) {
       fetchHotPosts(state.hotTab);
@@ -3195,9 +3399,15 @@
   }
 
   function restoreNativeWidgets() {
+    document.body.classList.remove("nsc-theme-dusk");
     const rightPanel = document.getElementById("nsk-right-panel-container");
     const userCard = document.querySelector("#nsc-right-user .user-card");
     if (rightPanel && userCard) {
+      const legacyThemeBtn = userCard.querySelector('a[title="切换主题模式"][data-nsc-theme-fixed="1"]');
+      if (legacyThemeBtn) {
+        legacyThemeBtn.removeAttribute("data-nsc-theme-fixed");
+        legacyThemeBtn.innerHTML = "";
+      }
       rightPanel.insertBefore(userCard, rightPanel.firstChild);
     }
     const commentContainer = document.querySelector("#nsk-frame .comment-container");
@@ -3232,6 +3442,8 @@
         state.nativePostId = pid;
         if (!state.activePmPeer && (!state.currentPostId || (firstInit && state.currentPostId === pid))) {
           renderPostDocument(document, location.pathname, true);
+        } else if (state.currentPostId === pid && typeof refreshNativeFloorCountsIfNeeded === "function") {
+          refreshNativeFloorCountsIfNeeded();
         }
       }
     } else {
@@ -3328,7 +3540,7 @@
         const floorId = Number(it.floor_id) || 0;
         const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
         return {
-          id: Number(it.id) || 0,
+          id: Number(it.id || it.notification_id || it.comment_id) || 0,
           postId,
           floorId,
           url: `/post-${postId}-${pageIndex}`,
@@ -3351,20 +3563,59 @@
 
   async function markNotificationViewed(kind, id, all = false) {
     const api = kind === "at-me" ? "/api/notification/at-me/markViewed" : "/api/notification/reply-to-me/markViewed";
-    try {
-      const url = all ? `${api}?all=true` : api;
-      const body = all ? {} : kind === "at-me" ? { atMe: [Number(id)] } : { replyToMe: [Number(id)] };
-      await fetch(url, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify(body) });
-      const store = state.notifData[kind];
-      if (store) {
-        if (all) store.items.forEach((x) => { x.viewed = true; });
-        else {
-          const hit = store.items.find((x) => x.id === Number(id));
-          if (hit) hit.viewed = true;
+    const countKey = kind === "at-me" ? "atMe" : "reply";
+    const store = state.notifData[kind];
+    const numId = Number(id) || 0;
+
+    if (store) {
+      if (all) {
+        store.items.forEach((x) => { x.viewed = true; });
+        state.unreadCounts[countKey] = 0;
+      } else {
+        const hit = numId > 0 ? store.items.find((x) => x.id === numId) : null;
+        if (hit && !hit.viewed) {
+          hit.viewed = true;
+          state.unreadCounts[countKey] = Math.max(0, (Number(state.unreadCounts[countKey]) || 0) - 1);
         }
       }
-      fetchUnreadCounts();
+      renderLeftNav();
       if (state.activeChannel === kind) renderTopicList();
+    }
+
+    try {
+      const url = all ? `${api}?all=true` : api;
+      const payloads = all
+        ? [{}]
+        : kind === "at-me"
+          ? [{ atMe: [numId] }, { ids: [numId] }]
+          : [{ replyToMe: [numId] }, { reply: [numId] }, { ids: [numId] }];
+
+      if (!all && !numId) return;
+
+      let ok = false;
+      for (const body of payloads) {
+        const resp = await fetch(url, {
+          method: "POST",
+          credentials: "include",
+          headers: getNodeSeekPostHeaders(),
+          body: JSON.stringify(body),
+        });
+        const resJson = await resp.json().catch(() => null);
+        if (resp.ok && (!resJson || resJson.success !== false)) {
+          ok = true;
+          break;
+        }
+      }
+
+      if (ok) {
+        setTimeout(async () => {
+          await fetchUnreadCounts();
+          if (all) {
+            state.unreadCounts[countKey] = 0;
+            renderLeftNav();
+          }
+        }, 350);
+      }
     } catch (_) {}
   }
 
@@ -4221,7 +4472,17 @@
         row.querySelector(".nsc-topic-meta span:first-child").textContent = `${it.author} ${kind === "at-me" ? "@了你" : "回复了你"}`;
         row.addEventListener("click", () => {
           state.selectedNotifKey = rowKey;
-          if (!it.viewed && it.id) markNotificationViewed(kind, it.id, false);
+          if (!it.viewed) {
+            if (it.id) {
+              markNotificationViewed(kind, it.id, false);
+            } else {
+              it.viewed = true;
+              const countKey = kind === "at-me" ? "atMe" : "reply";
+              state.unreadCounts[countKey] = Math.max(0, (Number(state.unreadCounts[countKey]) || 0) - 1);
+              renderLeftNav();
+              renderTopicList();
+            }
+          }
           openPostInChat({
             postId: it.postId,
             url: it.url,
@@ -4521,9 +4782,10 @@
     }
   }
 
-  function extractCommentObject(el, isOpFloor = false, pageNum = 1) {
+  function extractCommentObject(el, isOpFloor = false, pageNum = 1, tempMetaMap = null) {
     const floorId = isOpFloor ? "0" : String(el.id || "").trim();
-    const commentId = String(el.getAttribute("data-comment-id") || "").trim();
+    const tempMeta = tempMetaMap ? tempMetaMap.get(floorId) : null;
+    const commentId = String(el.getAttribute("data-comment-id") || (tempMeta && tempMeta.commentId) || "").trim();
     const meta = el.querySelector(".nsk-content-meta-info");
     const authorEl = meta ? meta.querySelector(".author-name") : null;
     const author = authorEl ? authorEl.textContent.trim() : "匿名";
@@ -4558,14 +4820,33 @@
     }
 
     const menu = el.querySelector(":scope > .comment-menu, .comment-menu");
-    let likes = 0;
-    let legs = 0;
+    let domLikes = 0;
+    let domLegs = 0;
+    let domUpvoted = false;
+    let domLiked = false;
+    let domPinned = Boolean(
+      meta && meta.querySelector('.pined-comment-badge, .floor-link-wrapper use[href="#pin"]')
+    );
     if (menu) {
-      const likeItem = menu.querySelector('.menu-item[title="点赞"] span');
-      const legItem = menu.querySelector('.menu-item[title="加鸡腿"] span');
-      if (likeItem) likes = Number(likeItem.textContent.trim()) || 0;
-      if (legItem) legs = Number(legItem.textContent.trim()) || 0;
+      const likeMenu = menu.querySelector('.menu-item[title="点赞"]');
+      const legMenu = menu.querySelector('.menu-item[title="加鸡腿"]');
+      const likeItem = likeMenu && likeMenu.querySelector("span");
+      const legItem = legMenu && legMenu.querySelector("span");
+      if (likeItem) domLikes = Number(likeItem.textContent.trim()) || 0;
+      if (legItem) domLegs = Number(legItem.textContent.trim()) || 0;
+      if (likeMenu && likeMenu.classList.contains("clicked")) domUpvoted = true;
+      if (legMenu && legMenu.classList.contains("clicked")) domLiked = true;
+      if (!domPinned) {
+        domPinned = Array.from(menu.querySelectorAll(".menu-item")).some(
+          (m) => (m.textContent || "").trim() === "取消置顶"
+        );
+      }
     }
+    const likes = Math.max(domLikes, (tempMeta && tempMeta.likes) || 0);
+    const legs = Math.max(domLegs, (tempMeta && tempMeta.legs) || 0);
+    const upvoted = domUpvoted || Boolean(tempMeta && tempMeta.upvoted);
+    const liked = domLiked || Boolean(tempMeta && tempMeta.liked);
+    const pinned = domPinned || Boolean(tempMeta && tempMeta.pinned);
 
     let replyToFloor = null;
     if (!isOpFloor && article) {
@@ -4600,6 +4881,9 @@
       signatureHtml,
       likes,
       legs,
+      upvoted,
+      liked,
+      pinned,
       replyToFloor,
       children: [],
     };
@@ -4641,9 +4925,10 @@
     const catName = catEl ? catEl.textContent.trim() : (itemHint && itemHint.category) || "";
 
     const pages = parsePagesFromDoc(doc, pid);
+    const tempMetaMap = extractPostMetaFromTempScript(doc);
 
     const opNode = doc.querySelector(".nsk-post .content-item");
-    const opObj = opNode ? extractCommentObject(opNode, true, 1) : null;
+    const opObj = opNode ? extractCommentObject(opNode, true, 1, tempMetaMap) : null;
     if (opObj) state.opAuthor = opObj.author;
     else if (itemHint && itemHint.author) state.opAuthor = itemHint.author;
 
@@ -4651,7 +4936,7 @@
     const flatComments = [];
     const seenFloors = new Set();
     for (const el of allCommentEls) {
-      const obj = extractCommentObject(el, false, pageNum);
+      const obj = extractCommentObject(el, false, pageNum, tempMetaMap);
       if (obj.floorId && seenFloors.has(obj.floorId)) continue;
       if (obj.floorId) seenFloors.add(obj.floorId);
       if (!state.opAuthor && obj.isOp) state.opAuthor = obj.author;
@@ -4699,10 +4984,11 @@
       const resp = await fetch(nextPageObj.href, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+      const tempMetaMap = extractPostMetaFromTempScript(doc);
       const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
       let added = 0;
       for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-        const obj = extractCommentObject(el, false, nextPageObj.num);
+        const obj = extractCommentObject(el, false, nextPageObj.num, tempMetaMap);
         if (obj.floorId && seenFloors.has(obj.floorId)) continue;
         if (obj.floorId) seenFloors.add(obj.floorId);
         if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -4748,17 +5034,18 @@
       const resp = await fetch(prevPageObj.href, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+      const tempMetaMap = extractPostMetaFromTempScript(doc);
       if (prevPageObj.num === 1 && !room.opObj) {
         const opNode = doc.querySelector(".nsk-post .content-item");
         if (opNode) {
-          room.opObj = extractCommentObject(opNode, true, 1);
+          room.opObj = extractCommentObject(opNode, true, 1, tempMetaMap);
           state.opAuthor = room.opObj.author;
         }
       }
       const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
       let added = 0;
       for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-        const obj = extractCommentObject(el, false, prevPageObj.num);
+        const obj = extractCommentObject(el, false, prevPageObj.num, tempMetaMap);
         if (obj.floorId && seenFloors.has(obj.floorId)) continue;
         if (obj.floorId) seenFloors.add(obj.floorId);
         if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -4807,9 +5094,10 @@
           const resp = await fetch(p.href, { credentials: "include" });
           if (!resp.ok) continue;
           const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+          const tempMetaMap = extractPostMetaFromTempScript(doc);
           const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
           for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-            const obj = extractCommentObject(el, false, p.num);
+            const obj = extractCommentObject(el, false, p.num, tempMetaMap);
             if (obj.floorId && !seenFloors.has(obj.floorId)) {
               seenFloors.add(obj.floorId);
               if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -4970,9 +5258,10 @@
         try {
           const resp = await fetch(room.pages[0].href, { credentials: "include" });
           const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+          const tempMetaMap = extractPostMetaFromTempScript(doc);
           const opNode = doc.querySelector(".nsk-post .content-item");
           if (opNode) {
-            room.opObj = extractCommentObject(opNode, true, 1);
+            room.opObj = extractCommentObject(opNode, true, 1, tempMetaMap);
             state.opAuthor = room.opObj.author;
             renderChatRoom(room, true);
           }
@@ -5176,9 +5465,9 @@
     if (obj.likes > 0) {
       const p = document.createElement("button");
       p.type = "button";
-      p.className = "nsc-react-pill";
+      p.className = "nsc-react-pill is-like" + (obj.upvoted ? " is-voted" : "");
       p.title = "点击点赞";
-      p.textContent = `👍 ${obj.likes}`;
+      p.innerHTML = `${ICONS.like}<span>${obj.likes}</span>`;
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         triggerReplyOrVote(obj, "点赞", isNativePage, reactionsEl);
@@ -5188,9 +5477,9 @@
     if (obj.legs > 0) {
       const p = document.createElement("button");
       p.type = "button";
-      p.className = "nsc-react-pill";
+      p.className = "nsc-react-pill is-leg" + (obj.liked ? " is-voted" : "");
       p.title = "点击加鸡腿";
-      p.textContent = `🍗 ${obj.legs}`;
+      p.innerHTML = `${ICONS.leg}<span>${obj.legs}</span>`;
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl);
@@ -5377,18 +5666,19 @@
           const pResp = await fetch(`/post-${curPid}-${targetPage}`, { credentials: "include" });
           if (pResp.ok && state.currentRoom && state.currentRoom.pid === curPid) {
             const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
+            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
             if (curIsTopic) {
               state.currentRoom.title = newTitle;
               const opEl = pDoc.querySelector(".nsk-post .content-item");
               if (opEl) {
-                const updatedOp = extractCommentObject(opEl, true, 1);
+                const updatedOp = extractCommentObject(opEl, true, 1, tempMetaMap);
                 state.currentRoom.opObj = updatedOp;
               }
             } else {
               const updatedEl = pDoc.querySelector(`ul.comments li.content-item[id="${curObj.floorId}"]`) ||
                 pDoc.querySelector(`ul.comments li.content-item[data-comment-id="${curObj.commentId}"]`);
               if (updatedEl) {
-                const updatedObj = extractCommentObject(updatedEl, false, targetPage);
+                const updatedObj = extractCommentObject(updatedEl, false, targetPage, tempMetaMap);
                 const idx = state.currentRoom.flatComments.findIndex((c) => c.floorId === curObj.floorId);
                 if (idx >= 0) {
                   updatedObj.isOp = state.currentRoom.flatComments[idx].isOp;
@@ -5434,15 +5724,120 @@
     setTimeout(() => bd.querySelector(isTopic ? "#nsc-edit-title" : "#nsc-edit-content").focus(), 40);
   }
 
+  function findNativePinMenuItem(nativeLi) {
+    if (!nativeLi) return null;
+    return Array.from(nativeLi.querySelectorAll(".comment-menu .menu-item")).find((m) => {
+      const txt = (m.textContent || "").trim();
+      const ttl = (m.getAttribute("title") || "").trim();
+      const hasPushpin = Boolean(m.querySelector('use[href*="pushpin"], use[xlink\\:href*="pushpin"], use[href="#pin"], use[xlink\\:href="#pin"]'));
+      return hasPushpin || txt === "置顶" || txt === "取消置顶" || ttl.includes("置顶");
+    }) || null;
+  }
+
+  function syncPinBadgeInDom(floorId, isPinned) {
+    const node = document.getElementById(`nsc-floor-${floorId}`);
+    if (!node) return;
+    const meta = node.querySelector(".nsc-msg-meta, .nsc-thread-meta");
+    if (meta) {
+      let pill = meta.querySelector(".nsc-pin-pill");
+      if (isPinned && !pill) {
+        pill = document.createElement("span");
+        pill.className = "nsc-pin-pill";
+        pill.innerHTML = `${ICONS.pin}<span>置顶</span>`;
+        const floorTag = meta.querySelector(".nsc-floor-tag");
+        if (floorTag && floorTag.nextSibling) meta.insertBefore(pill, floorTag.nextSibling);
+        else meta.appendChild(pill);
+      } else if (!isPinned && pill) {
+        pill.remove();
+      }
+    }
+    const barBtn = node.querySelector(".nsc-hover-bar .nsc-hb-btn.is-pin");
+    if (barBtn) {
+      barBtn.classList.toggle("is-active", isPinned);
+      barBtn.title = isPinned ? `取消置顶 #${floorId}楼` : `置顶 #${floorId}楼`;
+    }
+  }
+
+  function triggerPinViaHiddenIframe(postId, pageNum, floorId) {
+    return new Promise((resolve) => {
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:900px;height:600px;opacity:0;pointer-events:none;border:0;";
+      iframe.src = `/post-${postId}-${pageNum || 1}`;
+      let done = false;
+      const finish = (ok, nextPinned) => {
+        if (done) return;
+        done = true;
+        try { iframe.remove(); } catch (_) {}
+        resolve({ ok, nextPinned });
+      };
+      const timer = setTimeout(() => finish(false, null), 7000);
+      iframe.addEventListener("load", () => {
+        let attempts = 0;
+        const poll = setInterval(() => {
+          attempts++;
+          try {
+            const idoc = iframe.contentDocument;
+            const li = idoc && idoc.querySelector(`[id="${floorId}"].content-item`);
+            const pinItem = findNativePinMenuItem(li);
+            if (pinItem) {
+              clearInterval(poll);
+              clearTimeout(timer);
+              const wasPinned = (pinItem.textContent || "").trim() === "取消置顶";
+              pinItem.click();
+              setTimeout(() => finish(true, !wasPinned), 750);
+            } else if (attempts > 16) {
+              clearInterval(poll);
+              clearTimeout(timer);
+              finish(false, null);
+            }
+          } catch (_) {}
+        }, 220);
+      });
+      document.body.appendChild(iframe);
+    });
+  }
+
+  async function togglePinComment(obj, isNativePage, pinBtn) {
+    if (!obj || !obj.floorId || obj.floorId === "0") return;
+    if (isNativePage) {
+      const nativeLi = document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
+      const pinItem = findNativePinMenuItem(nativeLi);
+      if (pinItem) {
+        const wasPinned = (pinItem.textContent || "").trim() === "取消置顶" || obj.pinned;
+        pinItem.click();
+        setTimeout(() => {
+          const afterItem = findNativePinMenuItem(nativeLi);
+          const nowPinned = afterItem ? (afterItem.textContent || "").trim() === "取消置顶" : !wasPinned;
+          obj.pinned = nowPinned;
+          syncPinBadgeInDom(obj.floorId, obj.pinned);
+        }, 450);
+        return;
+      }
+    }
+    if (state.currentPostId && pinBtn) {
+      pinBtn.disabled = true;
+      pinBtn.style.opacity = "0.5";
+      const res = await triggerPinViaHiddenIframe(state.currentPostId, obj.pageNum || 1, obj.floorId);
+      pinBtn.disabled = false;
+      pinBtn.style.opacity = "";
+      if (res.ok && res.nextPinned !== null) {
+        obj.pinned = res.nextPinned;
+        syncPinBadgeInDom(obj.floorId, obj.pinned);
+      } else if (state.currentPostUrl) {
+        location.href = `/post-${state.currentPostId}-${obj.pageNum || 1}#${obj.floorId}`;
+      }
+    }
+  }
+
   function buildHoverBar(obj, isNativePage, reactionsEl, isThread = false, isOpCard = false) {
     const bar = document.createElement("div");
     bar.className = "nsc-hover-bar" + (isThread ? " is-thread-bar" : "");
 
     const btnLike = document.createElement("button");
     btnLike.type = "button";
-    btnLike.className = "nsc-hb-btn";
+    btnLike.className = "nsc-hb-btn" + (obj.upvoted ? " is-active" : "");
     btnLike.title = "点赞";
-    btnLike.textContent = "👍";
+    btnLike.innerHTML = ICONS.like;
     btnLike.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "点赞", isNativePage, reactionsEl, bar);
@@ -5450,13 +5845,20 @@
 
     const btnLeg = document.createElement("button");
     btnLeg.type = "button";
-    btnLeg.className = "nsc-hb-btn";
+    btnLeg.className = "nsc-hb-btn is-leg" + (obj.liked ? " is-active" : "");
     btnLeg.title = "加鸡腿";
-    btnLeg.textContent = "🍗";
+    btnLeg.innerHTML = ICONS.leg;
     btnLeg.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl, bar);
     });
+
+    const isMyPost = Boolean(state.currentUser && state.opAuthor && state.currentUser === state.opAuthor && !isOpCard && obj.floorId !== "0");
+    let hasNativePin = false;
+    if (isNativePage && !isOpCard && obj.floorId !== "0") {
+      const nativeLi = document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
+      hasNativePin = Boolean(findNativePinMenuItem(nativeLi));
+    }
 
     const btnQuote = document.createElement("button");
     btnQuote.type = "button";
@@ -5472,7 +5874,7 @@
     btnReply.type = "button";
     btnReply.className = "nsc-hb-btn";
     btnReply.title = `回复 #${obj.floorId}楼`;
-    btnReply.textContent = "💬";
+    btnReply.innerHTML = ICONS.reply;
     btnReply.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "回复", isNativePage, reactionsEl, bar);
@@ -5480,6 +5882,18 @@
 
     bar.appendChild(btnLike);
     bar.appendChild(btnLeg);
+    if (hasNativePin || isMyPost) {
+      const btnPin = document.createElement("button");
+      btnPin.type = "button";
+      btnPin.className = "nsc-hb-btn is-pin" + (obj.pinned ? " is-active" : "");
+      btnPin.title = obj.pinned ? `取消置顶 #${obj.floorId}楼` : `置顶 #${obj.floorId}楼`;
+      btnPin.innerHTML = ICONS.pin;
+      btnPin.addEventListener("click", (e) => {
+        e.stopPropagation();
+        togglePinComment(obj, isNativePage, btnPin);
+      });
+      bar.appendChild(btnPin);
+    }
     bar.appendChild(btnQuote);
     bar.appendChild(btnReply);
 
@@ -5536,6 +5950,7 @@
       ${obj.level ? `<span class="nsc-lv-pill">${obj.level}</span>` : ""}
       ${obj.isOp ? `<span class="nsc-op-pill">楼主</span>` : ""}
       <span class="nsc-floor-tag ${obj.isOp ? "is-op-floor" : ""}">#${obj.floorId}楼</span>
+      ${obj.pinned ? `<span class="nsc-pin-pill">${ICONS.pin}<span>置顶</span></span>` : ""}
       ${obj.timeText ? `<span title="${obj.timeTitle}">${obj.timeText}</span>` : ""}
     `;
     const authorBtn = meta.querySelector(".nsc-msg-author");
@@ -5613,6 +6028,7 @@
               ${ch.level ? `<span class="nsc-lv-pill">${ch.level}</span>` : ""}
               ${ch.isOp ? `<span class="nsc-op-pill">楼主</span>` : ""}
               <span class="nsc-floor-tag">#${ch.floorId}楼</span>
+              ${ch.pinned ? `<span class="nsc-pin-pill">${ICONS.pin}<span>置顶</span></span>` : ""}
               <span>${ch.timeText || ""}</span>
             </div>
             <div class="nsc-thread-content">${ch.bodyHtml}</div>
@@ -5644,6 +6060,44 @@
     return wrap;
   }
 
+  function refreshNativeFloorCountsIfNeeded() {
+    if (!state.currentRoom || state.currentPostId !== state.nativePostId) return;
+    const room = state.currentRoom;
+    const syncObjFromEl = (obj, el) => {
+      if (!obj || !el) return;
+      const menu = el.querySelector(":scope > .comment-menu, .comment-menu");
+      if (!menu) return;
+      const likeMenu = menu.querySelector('.menu-item[title="点赞"]');
+      const legMenu = menu.querySelector('.menu-item[title="加鸡腿"]');
+      const nextLikes = likeMenu && likeMenu.querySelector("span") ? Number(likeMenu.querySelector("span").textContent.trim()) || 0 : obj.likes;
+      const nextLegs = legMenu && legMenu.querySelector("span") ? Number(legMenu.querySelector("span").textContent.trim()) || 0 : obj.legs;
+      const nextUpvoted = Boolean(likeMenu && likeMenu.classList.contains("clicked"));
+      const nextLiked = Boolean(legMenu && legMenu.classList.contains("clicked"));
+      const pinItem = findNativePinMenuItem(el);
+      const nextPinned = Boolean(
+        el.querySelector('.pined-comment-badge, .floor-link-wrapper use[href="#pin"]') ||
+        (pinItem && (pinItem.textContent || "").trim() === "取消置顶")
+      );
+      if (nextLikes !== obj.likes || nextLegs !== obj.legs || nextUpvoted !== obj.upvoted || nextLiked !== obj.liked) {
+        obj.likes = Math.max(obj.likes, nextLikes);
+        obj.legs = Math.max(obj.legs, nextLegs);
+        obj.upvoted = obj.upvoted || nextUpvoted;
+        obj.liked = obj.liked || nextLiked;
+        const floorNode = document.getElementById(`nsc-floor-${obj.floorId}`);
+        const reactEl = floorNode && floorNode.querySelector(":scope > .nsc-msg-main > .nsc-reactions, :scope > .nsc-thread-body > .nsc-reactions");
+        if (reactEl) renderReactionPills(reactEl, obj, room.isNativePage);
+      }
+      if (nextPinned !== obj.pinned) {
+        obj.pinned = nextPinned;
+        syncPinBadgeInDom(obj.floorId, obj.pinned);
+      }
+    };
+    if (room.opObj) syncObjFromEl(room.opObj, document.querySelector("#nsk-frame .nsk-post .content-item"));
+    for (const c of room.flatComments) {
+      syncObjFromEl(c, document.querySelector(`#nsk-frame ul.comments li.content-item[id="${c.floorId}"]`));
+    }
+  }
+
   async function triggerReplyOrVote(obj, actionTitle, isNativePage, reactionsEl, hoverBar) {
     const syncBarCnt = () => {
       if (reactionsEl) renderReactionPills(reactionsEl, obj, isNativePage);
@@ -5660,10 +6114,14 @@
           target.click();
           if (actionTitle === "点赞" || actionTitle === "加鸡腿") {
             setTimeout(() => {
-              const likeSpan = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"] span');
-              const legSpan = nativeLi.querySelector('.comment-menu .menu-item[title="加鸡腿"] span');
+              const likeMenu = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"]');
+              const legMenu = nativeLi.querySelector('.comment-menu .menu-item[title="加鸡腿"]');
+              const likeSpan = likeMenu && likeMenu.querySelector("span");
+              const legSpan = legMenu && legMenu.querySelector("span");
               if (likeSpan) obj.likes = Number(likeSpan.textContent.trim()) || obj.likes;
               if (legSpan) obj.legs = Number(legSpan.textContent.trim()) || obj.legs;
+              if (likeMenu && likeMenu.classList.contains("clicked")) obj.upvoted = true;
+              if (legMenu && legMenu.classList.contains("clicked")) obj.liked = true;
               syncBarCnt();
             }, 350);
           } else if (actionTitle === "引用" || actionTitle === "回复") {
@@ -5697,7 +6155,7 @@
     }
 
     if ((actionTitle === "点赞" || actionTitle === "加鸡腿") && obj.commentId) {
-      const apiPath = actionTitle === "点赞" ? "/api/statistics/like" : "/api/statistics/upvote";
+      const apiPath = actionTitle === "点赞" ? "/api/statistics/upvote" : "/api/statistics/like";
       try {
         const resp = await fetch(apiPath, {
           method: "POST",
@@ -5707,8 +6165,13 @@
         });
         const resJson = await resp.json().catch(() => ({}));
         if (resp.ok && resJson.success !== false) {
-          if (actionTitle === "点赞") obj.likes += 1;
-          else obj.legs += 1;
+          if (actionTitle === "点赞") {
+            obj.upvoted = true;
+            obj.likes = Number.isFinite(Number(resJson.current)) ? Number(resJson.current) : obj.likes + 1;
+          } else {
+            obj.liked = true;
+            obj.legs = Number.isFinite(Number(resJson.current)) ? Number(resJson.current) : obj.legs + 1;
+          }
           syncBarCnt();
         }
       } catch (_) {}
@@ -5818,14 +6281,9 @@
   function extractUsersFromTempScript(doc) {
     const out = [];
     const seen = new Set();
-    const el = doc.getElementById("temp-script");
-    if (!el || !el.textContent) return out;
+    const cfg = parseTempScriptConfig(doc);
+    if (!cfg) return out;
     try {
-      const bin = atob(el.textContent.trim());
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const jsonStr = new TextDecoder("utf-8").decode(bytes);
-      const cfg = JSON.parse(jsonStr);
 
       const walk = (node) => {
         if (!node || typeof node !== "object") return;

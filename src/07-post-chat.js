@@ -34,9 +34,10 @@
     }
   }
 
-  function extractCommentObject(el, isOpFloor = false, pageNum = 1) {
+  function extractCommentObject(el, isOpFloor = false, pageNum = 1, tempMetaMap = null) {
     const floorId = isOpFloor ? "0" : String(el.id || "").trim();
-    const commentId = String(el.getAttribute("data-comment-id") || "").trim();
+    const tempMeta = tempMetaMap ? tempMetaMap.get(floorId) : null;
+    const commentId = String(el.getAttribute("data-comment-id") || (tempMeta && tempMeta.commentId) || "").trim();
     const meta = el.querySelector(".nsk-content-meta-info");
     const authorEl = meta ? meta.querySelector(".author-name") : null;
     const author = authorEl ? authorEl.textContent.trim() : "匿名";
@@ -71,14 +72,33 @@
     }
 
     const menu = el.querySelector(":scope > .comment-menu, .comment-menu");
-    let likes = 0;
-    let legs = 0;
+    let domLikes = 0;
+    let domLegs = 0;
+    let domUpvoted = false;
+    let domLiked = false;
+    let domPinned = Boolean(
+      meta && meta.querySelector('.pined-comment-badge, .floor-link-wrapper use[href="#pin"]')
+    );
     if (menu) {
-      const likeItem = menu.querySelector('.menu-item[title="点赞"] span');
-      const legItem = menu.querySelector('.menu-item[title="加鸡腿"] span');
-      if (likeItem) likes = Number(likeItem.textContent.trim()) || 0;
-      if (legItem) legs = Number(legItem.textContent.trim()) || 0;
+      const likeMenu = menu.querySelector('.menu-item[title="点赞"]');
+      const legMenu = menu.querySelector('.menu-item[title="加鸡腿"]');
+      const likeItem = likeMenu && likeMenu.querySelector("span");
+      const legItem = legMenu && legMenu.querySelector("span");
+      if (likeItem) domLikes = Number(likeItem.textContent.trim()) || 0;
+      if (legItem) domLegs = Number(legItem.textContent.trim()) || 0;
+      if (likeMenu && likeMenu.classList.contains("clicked")) domUpvoted = true;
+      if (legMenu && legMenu.classList.contains("clicked")) domLiked = true;
+      if (!domPinned) {
+        domPinned = Array.from(menu.querySelectorAll(".menu-item")).some(
+          (m) => (m.textContent || "").trim() === "取消置顶"
+        );
+      }
     }
+    const likes = Math.max(domLikes, (tempMeta && tempMeta.likes) || 0);
+    const legs = Math.max(domLegs, (tempMeta && tempMeta.legs) || 0);
+    const upvoted = domUpvoted || Boolean(tempMeta && tempMeta.upvoted);
+    const liked = domLiked || Boolean(tempMeta && tempMeta.liked);
+    const pinned = domPinned || Boolean(tempMeta && tempMeta.pinned);
 
     let replyToFloor = null;
     if (!isOpFloor && article) {
@@ -113,6 +133,9 @@
       signatureHtml,
       likes,
       legs,
+      upvoted,
+      liked,
+      pinned,
       replyToFloor,
       children: [],
     };
@@ -154,9 +177,10 @@
     const catName = catEl ? catEl.textContent.trim() : (itemHint && itemHint.category) || "";
 
     const pages = parsePagesFromDoc(doc, pid);
+    const tempMetaMap = extractPostMetaFromTempScript(doc);
 
     const opNode = doc.querySelector(".nsk-post .content-item");
-    const opObj = opNode ? extractCommentObject(opNode, true, 1) : null;
+    const opObj = opNode ? extractCommentObject(opNode, true, 1, tempMetaMap) : null;
     if (opObj) state.opAuthor = opObj.author;
     else if (itemHint && itemHint.author) state.opAuthor = itemHint.author;
 
@@ -164,7 +188,7 @@
     const flatComments = [];
     const seenFloors = new Set();
     for (const el of allCommentEls) {
-      const obj = extractCommentObject(el, false, pageNum);
+      const obj = extractCommentObject(el, false, pageNum, tempMetaMap);
       if (obj.floorId && seenFloors.has(obj.floorId)) continue;
       if (obj.floorId) seenFloors.add(obj.floorId);
       if (!state.opAuthor && obj.isOp) state.opAuthor = obj.author;
@@ -212,10 +236,11 @@
       const resp = await fetch(nextPageObj.href, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+      const tempMetaMap = extractPostMetaFromTempScript(doc);
       const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
       let added = 0;
       for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-        const obj = extractCommentObject(el, false, nextPageObj.num);
+        const obj = extractCommentObject(el, false, nextPageObj.num, tempMetaMap);
         if (obj.floorId && seenFloors.has(obj.floorId)) continue;
         if (obj.floorId) seenFloors.add(obj.floorId);
         if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -261,17 +286,18 @@
       const resp = await fetch(prevPageObj.href, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+      const tempMetaMap = extractPostMetaFromTempScript(doc);
       if (prevPageObj.num === 1 && !room.opObj) {
         const opNode = doc.querySelector(".nsk-post .content-item");
         if (opNode) {
-          room.opObj = extractCommentObject(opNode, true, 1);
+          room.opObj = extractCommentObject(opNode, true, 1, tempMetaMap);
           state.opAuthor = room.opObj.author;
         }
       }
       const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
       let added = 0;
       for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-        const obj = extractCommentObject(el, false, prevPageObj.num);
+        const obj = extractCommentObject(el, false, prevPageObj.num, tempMetaMap);
         if (obj.floorId && seenFloors.has(obj.floorId)) continue;
         if (obj.floorId) seenFloors.add(obj.floorId);
         if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -320,9 +346,10 @@
           const resp = await fetch(p.href, { credentials: "include" });
           if (!resp.ok) continue;
           const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+          const tempMetaMap = extractPostMetaFromTempScript(doc);
           const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
           for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-            const obj = extractCommentObject(el, false, p.num);
+            const obj = extractCommentObject(el, false, p.num, tempMetaMap);
             if (obj.floorId && !seenFloors.has(obj.floorId)) {
               seenFloors.add(obj.floorId);
               if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -483,9 +510,10 @@
         try {
           const resp = await fetch(room.pages[0].href, { credentials: "include" });
           const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+          const tempMetaMap = extractPostMetaFromTempScript(doc);
           const opNode = doc.querySelector(".nsk-post .content-item");
           if (opNode) {
-            room.opObj = extractCommentObject(opNode, true, 1);
+            room.opObj = extractCommentObject(opNode, true, 1, tempMetaMap);
             state.opAuthor = room.opObj.author;
             renderChatRoom(room, true);
           }
@@ -689,9 +717,9 @@
     if (obj.likes > 0) {
       const p = document.createElement("button");
       p.type = "button";
-      p.className = "nsc-react-pill";
+      p.className = "nsc-react-pill is-like" + (obj.upvoted ? " is-voted" : "");
       p.title = "点击点赞";
-      p.textContent = `👍 ${obj.likes}`;
+      p.innerHTML = `${ICONS.like}<span>${obj.likes}</span>`;
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         triggerReplyOrVote(obj, "点赞", isNativePage, reactionsEl);
@@ -701,9 +729,9 @@
     if (obj.legs > 0) {
       const p = document.createElement("button");
       p.type = "button";
-      p.className = "nsc-react-pill";
+      p.className = "nsc-react-pill is-leg" + (obj.liked ? " is-voted" : "");
       p.title = "点击加鸡腿";
-      p.textContent = `🍗 ${obj.legs}`;
+      p.innerHTML = `${ICONS.leg}<span>${obj.legs}</span>`;
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl);
@@ -890,18 +918,19 @@
           const pResp = await fetch(`/post-${curPid}-${targetPage}`, { credentials: "include" });
           if (pResp.ok && state.currentRoom && state.currentRoom.pid === curPid) {
             const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
+            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
             if (curIsTopic) {
               state.currentRoom.title = newTitle;
               const opEl = pDoc.querySelector(".nsk-post .content-item");
               if (opEl) {
-                const updatedOp = extractCommentObject(opEl, true, 1);
+                const updatedOp = extractCommentObject(opEl, true, 1, tempMetaMap);
                 state.currentRoom.opObj = updatedOp;
               }
             } else {
               const updatedEl = pDoc.querySelector(`ul.comments li.content-item[id="${curObj.floorId}"]`) ||
                 pDoc.querySelector(`ul.comments li.content-item[data-comment-id="${curObj.commentId}"]`);
               if (updatedEl) {
-                const updatedObj = extractCommentObject(updatedEl, false, targetPage);
+                const updatedObj = extractCommentObject(updatedEl, false, targetPage, tempMetaMap);
                 const idx = state.currentRoom.flatComments.findIndex((c) => c.floorId === curObj.floorId);
                 if (idx >= 0) {
                   updatedObj.isOp = state.currentRoom.flatComments[idx].isOp;
@@ -947,15 +976,120 @@
     setTimeout(() => bd.querySelector(isTopic ? "#nsc-edit-title" : "#nsc-edit-content").focus(), 40);
   }
 
+  function findNativePinMenuItem(nativeLi) {
+    if (!nativeLi) return null;
+    return Array.from(nativeLi.querySelectorAll(".comment-menu .menu-item")).find((m) => {
+      const txt = (m.textContent || "").trim();
+      const ttl = (m.getAttribute("title") || "").trim();
+      const hasPushpin = Boolean(m.querySelector('use[href*="pushpin"], use[xlink\\:href*="pushpin"], use[href="#pin"], use[xlink\\:href="#pin"]'));
+      return hasPushpin || txt === "置顶" || txt === "取消置顶" || ttl.includes("置顶");
+    }) || null;
+  }
+
+  function syncPinBadgeInDom(floorId, isPinned) {
+    const node = document.getElementById(`nsc-floor-${floorId}`);
+    if (!node) return;
+    const meta = node.querySelector(".nsc-msg-meta, .nsc-thread-meta");
+    if (meta) {
+      let pill = meta.querySelector(".nsc-pin-pill");
+      if (isPinned && !pill) {
+        pill = document.createElement("span");
+        pill.className = "nsc-pin-pill";
+        pill.innerHTML = `${ICONS.pin}<span>置顶</span>`;
+        const floorTag = meta.querySelector(".nsc-floor-tag");
+        if (floorTag && floorTag.nextSibling) meta.insertBefore(pill, floorTag.nextSibling);
+        else meta.appendChild(pill);
+      } else if (!isPinned && pill) {
+        pill.remove();
+      }
+    }
+    const barBtn = node.querySelector(".nsc-hover-bar .nsc-hb-btn.is-pin");
+    if (barBtn) {
+      barBtn.classList.toggle("is-active", isPinned);
+      barBtn.title = isPinned ? `取消置顶 #${floorId}楼` : `置顶 #${floorId}楼`;
+    }
+  }
+
+  function triggerPinViaHiddenIframe(postId, pageNum, floorId) {
+    return new Promise((resolve) => {
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:900px;height:600px;opacity:0;pointer-events:none;border:0;";
+      iframe.src = `/post-${postId}-${pageNum || 1}`;
+      let done = false;
+      const finish = (ok, nextPinned) => {
+        if (done) return;
+        done = true;
+        try { iframe.remove(); } catch (_) {}
+        resolve({ ok, nextPinned });
+      };
+      const timer = setTimeout(() => finish(false, null), 7000);
+      iframe.addEventListener("load", () => {
+        let attempts = 0;
+        const poll = setInterval(() => {
+          attempts++;
+          try {
+            const idoc = iframe.contentDocument;
+            const li = idoc && idoc.querySelector(`[id="${floorId}"].content-item`);
+            const pinItem = findNativePinMenuItem(li);
+            if (pinItem) {
+              clearInterval(poll);
+              clearTimeout(timer);
+              const wasPinned = (pinItem.textContent || "").trim() === "取消置顶";
+              pinItem.click();
+              setTimeout(() => finish(true, !wasPinned), 750);
+            } else if (attempts > 16) {
+              clearInterval(poll);
+              clearTimeout(timer);
+              finish(false, null);
+            }
+          } catch (_) {}
+        }, 220);
+      });
+      document.body.appendChild(iframe);
+    });
+  }
+
+  async function togglePinComment(obj, isNativePage, pinBtn) {
+    if (!obj || !obj.floorId || obj.floorId === "0") return;
+    if (isNativePage) {
+      const nativeLi = document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
+      const pinItem = findNativePinMenuItem(nativeLi);
+      if (pinItem) {
+        const wasPinned = (pinItem.textContent || "").trim() === "取消置顶" || obj.pinned;
+        pinItem.click();
+        setTimeout(() => {
+          const afterItem = findNativePinMenuItem(nativeLi);
+          const nowPinned = afterItem ? (afterItem.textContent || "").trim() === "取消置顶" : !wasPinned;
+          obj.pinned = nowPinned;
+          syncPinBadgeInDom(obj.floorId, obj.pinned);
+        }, 450);
+        return;
+      }
+    }
+    if (state.currentPostId && pinBtn) {
+      pinBtn.disabled = true;
+      pinBtn.style.opacity = "0.5";
+      const res = await triggerPinViaHiddenIframe(state.currentPostId, obj.pageNum || 1, obj.floorId);
+      pinBtn.disabled = false;
+      pinBtn.style.opacity = "";
+      if (res.ok && res.nextPinned !== null) {
+        obj.pinned = res.nextPinned;
+        syncPinBadgeInDom(obj.floorId, obj.pinned);
+      } else if (state.currentPostUrl) {
+        location.href = `/post-${state.currentPostId}-${obj.pageNum || 1}#${obj.floorId}`;
+      }
+    }
+  }
+
   function buildHoverBar(obj, isNativePage, reactionsEl, isThread = false, isOpCard = false) {
     const bar = document.createElement("div");
     bar.className = "nsc-hover-bar" + (isThread ? " is-thread-bar" : "");
 
     const btnLike = document.createElement("button");
     btnLike.type = "button";
-    btnLike.className = "nsc-hb-btn";
+    btnLike.className = "nsc-hb-btn" + (obj.upvoted ? " is-active" : "");
     btnLike.title = "点赞";
-    btnLike.textContent = "👍";
+    btnLike.innerHTML = ICONS.like;
     btnLike.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "点赞", isNativePage, reactionsEl, bar);
@@ -963,13 +1097,20 @@
 
     const btnLeg = document.createElement("button");
     btnLeg.type = "button";
-    btnLeg.className = "nsc-hb-btn";
+    btnLeg.className = "nsc-hb-btn is-leg" + (obj.liked ? " is-active" : "");
     btnLeg.title = "加鸡腿";
-    btnLeg.textContent = "🍗";
+    btnLeg.innerHTML = ICONS.leg;
     btnLeg.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl, bar);
     });
+
+    const isMyPost = Boolean(state.currentUser && state.opAuthor && state.currentUser === state.opAuthor && !isOpCard && obj.floorId !== "0");
+    let hasNativePin = false;
+    if (isNativePage && !isOpCard && obj.floorId !== "0") {
+      const nativeLi = document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
+      hasNativePin = Boolean(findNativePinMenuItem(nativeLi));
+    }
 
     const btnQuote = document.createElement("button");
     btnQuote.type = "button";
@@ -985,7 +1126,7 @@
     btnReply.type = "button";
     btnReply.className = "nsc-hb-btn";
     btnReply.title = `回复 #${obj.floorId}楼`;
-    btnReply.textContent = "💬";
+    btnReply.innerHTML = ICONS.reply;
     btnReply.addEventListener("click", (e) => {
       e.stopPropagation();
       triggerReplyOrVote(obj, "回复", isNativePage, reactionsEl, bar);
@@ -993,6 +1134,18 @@
 
     bar.appendChild(btnLike);
     bar.appendChild(btnLeg);
+    if (hasNativePin || isMyPost) {
+      const btnPin = document.createElement("button");
+      btnPin.type = "button";
+      btnPin.className = "nsc-hb-btn is-pin" + (obj.pinned ? " is-active" : "");
+      btnPin.title = obj.pinned ? `取消置顶 #${obj.floorId}楼` : `置顶 #${obj.floorId}楼`;
+      btnPin.innerHTML = ICONS.pin;
+      btnPin.addEventListener("click", (e) => {
+        e.stopPropagation();
+        togglePinComment(obj, isNativePage, btnPin);
+      });
+      bar.appendChild(btnPin);
+    }
     bar.appendChild(btnQuote);
     bar.appendChild(btnReply);
 
@@ -1049,6 +1202,7 @@
       ${obj.level ? `<span class="nsc-lv-pill">${obj.level}</span>` : ""}
       ${obj.isOp ? `<span class="nsc-op-pill">楼主</span>` : ""}
       <span class="nsc-floor-tag ${obj.isOp ? "is-op-floor" : ""}">#${obj.floorId}楼</span>
+      ${obj.pinned ? `<span class="nsc-pin-pill">${ICONS.pin}<span>置顶</span></span>` : ""}
       ${obj.timeText ? `<span title="${obj.timeTitle}">${obj.timeText}</span>` : ""}
     `;
     const authorBtn = meta.querySelector(".nsc-msg-author");
@@ -1126,6 +1280,7 @@
               ${ch.level ? `<span class="nsc-lv-pill">${ch.level}</span>` : ""}
               ${ch.isOp ? `<span class="nsc-op-pill">楼主</span>` : ""}
               <span class="nsc-floor-tag">#${ch.floorId}楼</span>
+              ${ch.pinned ? `<span class="nsc-pin-pill">${ICONS.pin}<span>置顶</span></span>` : ""}
               <span>${ch.timeText || ""}</span>
             </div>
             <div class="nsc-thread-content">${ch.bodyHtml}</div>
@@ -1157,6 +1312,44 @@
     return wrap;
   }
 
+  function refreshNativeFloorCountsIfNeeded() {
+    if (!state.currentRoom || state.currentPostId !== state.nativePostId) return;
+    const room = state.currentRoom;
+    const syncObjFromEl = (obj, el) => {
+      if (!obj || !el) return;
+      const menu = el.querySelector(":scope > .comment-menu, .comment-menu");
+      if (!menu) return;
+      const likeMenu = menu.querySelector('.menu-item[title="点赞"]');
+      const legMenu = menu.querySelector('.menu-item[title="加鸡腿"]');
+      const nextLikes = likeMenu && likeMenu.querySelector("span") ? Number(likeMenu.querySelector("span").textContent.trim()) || 0 : obj.likes;
+      const nextLegs = legMenu && legMenu.querySelector("span") ? Number(legMenu.querySelector("span").textContent.trim()) || 0 : obj.legs;
+      const nextUpvoted = Boolean(likeMenu && likeMenu.classList.contains("clicked"));
+      const nextLiked = Boolean(legMenu && legMenu.classList.contains("clicked"));
+      const pinItem = findNativePinMenuItem(el);
+      const nextPinned = Boolean(
+        el.querySelector('.pined-comment-badge, .floor-link-wrapper use[href="#pin"]') ||
+        (pinItem && (pinItem.textContent || "").trim() === "取消置顶")
+      );
+      if (nextLikes !== obj.likes || nextLegs !== obj.legs || nextUpvoted !== obj.upvoted || nextLiked !== obj.liked) {
+        obj.likes = Math.max(obj.likes, nextLikes);
+        obj.legs = Math.max(obj.legs, nextLegs);
+        obj.upvoted = obj.upvoted || nextUpvoted;
+        obj.liked = obj.liked || nextLiked;
+        const floorNode = document.getElementById(`nsc-floor-${obj.floorId}`);
+        const reactEl = floorNode && floorNode.querySelector(":scope > .nsc-msg-main > .nsc-reactions, :scope > .nsc-thread-body > .nsc-reactions");
+        if (reactEl) renderReactionPills(reactEl, obj, room.isNativePage);
+      }
+      if (nextPinned !== obj.pinned) {
+        obj.pinned = nextPinned;
+        syncPinBadgeInDom(obj.floorId, obj.pinned);
+      }
+    };
+    if (room.opObj) syncObjFromEl(room.opObj, document.querySelector("#nsk-frame .nsk-post .content-item"));
+    for (const c of room.flatComments) {
+      syncObjFromEl(c, document.querySelector(`#nsk-frame ul.comments li.content-item[id="${c.floorId}"]`));
+    }
+  }
+
   async function triggerReplyOrVote(obj, actionTitle, isNativePage, reactionsEl, hoverBar) {
     const syncBarCnt = () => {
       if (reactionsEl) renderReactionPills(reactionsEl, obj, isNativePage);
@@ -1173,10 +1366,14 @@
           target.click();
           if (actionTitle === "点赞" || actionTitle === "加鸡腿") {
             setTimeout(() => {
-              const likeSpan = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"] span');
-              const legSpan = nativeLi.querySelector('.comment-menu .menu-item[title="加鸡腿"] span');
+              const likeMenu = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"]');
+              const legMenu = nativeLi.querySelector('.comment-menu .menu-item[title="加鸡腿"]');
+              const likeSpan = likeMenu && likeMenu.querySelector("span");
+              const legSpan = legMenu && legMenu.querySelector("span");
               if (likeSpan) obj.likes = Number(likeSpan.textContent.trim()) || obj.likes;
               if (legSpan) obj.legs = Number(legSpan.textContent.trim()) || obj.legs;
+              if (likeMenu && likeMenu.classList.contains("clicked")) obj.upvoted = true;
+              if (legMenu && legMenu.classList.contains("clicked")) obj.liked = true;
               syncBarCnt();
             }, 350);
           } else if (actionTitle === "引用" || actionTitle === "回复") {
@@ -1210,7 +1407,7 @@
     }
 
     if ((actionTitle === "点赞" || actionTitle === "加鸡腿") && obj.commentId) {
-      const apiPath = actionTitle === "点赞" ? "/api/statistics/like" : "/api/statistics/upvote";
+      const apiPath = actionTitle === "点赞" ? "/api/statistics/upvote" : "/api/statistics/like";
       try {
         const resp = await fetch(apiPath, {
           method: "POST",
@@ -1220,8 +1417,13 @@
         });
         const resJson = await resp.json().catch(() => ({}));
         if (resp.ok && resJson.success !== false) {
-          if (actionTitle === "点赞") obj.likes += 1;
-          else obj.legs += 1;
+          if (actionTitle === "点赞") {
+            obj.upvoted = true;
+            obj.likes = Number.isFinite(Number(resJson.current)) ? Number(resJson.current) : obj.likes + 1;
+          } else {
+            obj.liked = true;
+            obj.legs = Number.isFinite(Number(resJson.current)) ? Number(resJson.current) : obj.legs + 1;
+          }
           syncBarCnt();
         }
       } catch (_) {}

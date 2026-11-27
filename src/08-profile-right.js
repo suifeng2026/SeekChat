@@ -55,14 +55,9 @@
   function extractUsersFromTempScript(doc) {
     const out = [];
     const seen = new Set();
-    const el = doc.getElementById("temp-script");
-    if (!el || !el.textContent) return out;
+    const cfg = parseTempScriptConfig(doc);
+    if (!cfg) return out;
     try {
-      const bin = atob(el.textContent.trim());
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const jsonStr = new TextDecoder("utf-8").decode(bytes);
-      const cfg = JSON.parse(jsonStr);
 
       const walk = (node) => {
         if (!node || typeof node !== "object") return;

@@ -27,28 +27,77 @@
         --nsc-shadow: 0 20px 60px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
       }
 
-      body.dark-layout {
-        --nsc-bg-nav: rgba(30, 31, 34, 0.84);
-        --nsc-bg-list: rgba(36, 37, 41, 0.88);
-        --nsc-bg-chat: rgba(24, 25, 28, 0.86);
-        --nsc-bg-right: rgba(36, 37, 41, 0.88);
-        --nsc-bg-card: rgba(44, 45, 50, 0.94);
-        --nsc-bubble-other: #2c2d32;
+      body.nsc-app-active.dark-layout {
+        --nsc-bg-nav: rgba(42, 45, 53, 0.88);
+        --nsc-bg-list: rgba(33, 36, 42, 0.94);
+        --nsc-bg-chat: rgba(27, 29, 35, 0.96);
+        --nsc-bg-right: rgba(36, 39, 46, 0.94);
+        --nsc-bg-card: #2f333d;
+        --nsc-bubble-other: #2f333d;
         --nsc-bubble-self: #0a84ff;
         --nsc-bubble-self-text: #ffffff;
-        --nsc-bubble-op: #2f2a20;
-        --nsc-thread-bg: rgba(40, 41, 46, 0.88);
-        --nsc-quote-bg: rgba(255, 255, 255, 0.07);
-        --nsc-border: rgba(255, 255, 255, 0.10);
-        --nsc-text: #f5f5f7;
-        --nsc-muted: #98989d;
+        --nsc-bubble-op: #362f23;
+        --nsc-thread-bg: rgba(38, 41, 49, 0.92);
+        --nsc-quote-bg: rgba(255, 255, 255, 0.075);
+        --nsc-border: rgba(255, 255, 255, 0.105);
+        --nsc-text: #f2f2f7;
+        --nsc-muted: #a8abb4;
         --nsc-accent: #0a84ff;
-        --nsc-accent-soft: rgba(10, 132, 255, 0.18);
+        --nsc-accent-soft: rgba(10, 132, 255, 0.20);
         --nsc-green: #30d158;
-        --nsc-hover: rgba(255, 255, 255, 0.07);
-        --nsc-active-item: rgba(10, 132, 255, 0.22);
-        --nsc-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+        --nsc-hover: rgba(255, 255, 255, 0.075);
+        --nsc-active-item: rgba(10, 132, 255, 0.24);
+        --nsc-shadow: 0 26px 74px rgba(0, 0, 0, 0.60), 0 0 0 1px rgba(255, 255, 255, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        background:
+          radial-gradient(ellipse at 18% 0%, rgba(56, 132, 255, 0.10), transparent 52%),
+          radial-gradient(ellipse at 86% 92%, rgba(120, 118, 255, 0.08), transparent 52%),
+          #13151a !important;
       }
+      body.nsc-app-active.dark-layout header {
+        background: rgba(30, 32, 38, 0.86) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+      }
+
+      body.nsc-app-active.nsc-theme-dusk {
+        --nsc-bg-nav: rgba(231, 219, 199, 0.90);
+        --nsc-bg-list: rgba(244, 236, 222, 0.95);
+        --nsc-bg-chat: rgba(238, 229, 212, 0.95);
+        --nsc-bg-right: rgba(244, 236, 222, 0.95);
+        --nsc-bg-card: #fbf6ec;
+        --nsc-bubble-other: #fbf6ec;
+        --nsc-bubble-self: #3568c4;
+        --nsc-bubble-self-text: #ffffff;
+        --nsc-bubble-op: #fdf0d5;
+        --nsc-thread-bg: rgba(227, 216, 197, 0.88);
+        --nsc-quote-bg: rgba(120, 88, 52, 0.08);
+        --nsc-border: rgba(115, 86, 52, 0.14);
+        --nsc-text: #382f25;
+        --nsc-muted: #786958;
+        --nsc-accent: #c86d1f;
+        --nsc-accent-soft: rgba(200, 109, 31, 0.14);
+        --nsc-green: #2f9e44;
+        --nsc-hover: rgba(120, 88, 52, 0.075);
+        --nsc-active-item: rgba(200, 109, 31, 0.15);
+        --nsc-shadow: 0 22px 60px rgba(72, 48, 24, 0.16), 0 0 0 1px rgba(115, 86, 52, 0.12);
+        background:
+          radial-gradient(ellipse at 20% 0%, rgba(245, 158, 11, 0.11), transparent 55%),
+          radial-gradient(ellipse at 85% 92%, rgba(217, 119, 6, 0.08), transparent 55%),
+          #ddd0ba !important;
+        color: #382f25 !important;
+      }
+      body.nsc-app-active.nsc-theme-dusk header {
+        background: rgba(236, 225, 206, 0.90) !important;
+        border-bottom: 1px solid rgba(115, 86, 52, 0.14) !important;
+        color: #382f25 !important;
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-msg.is-self .nsc-bubble,
+      body.nsc-app-active.nsc-theme-dusk .nsc-thread-item.is-self-thread .nsc-thread-content {
+        background: linear-gradient(180deg, #4378d6 0%, #2f62bf 100%);
+        box-shadow: 0 2px 8px rgba(47, 98, 191, 0.22);
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse { color: #b45309; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse.is-active { background: #c86d1f; color: #fff; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(200, 109, 31, 0.14); color: #b45309; }
 
       #nsc-mode-switch-btn {
         font-family: var(--mac-font);
@@ -104,12 +153,29 @@
         padding: 8px 7px 6px; gap: 2px; overflow-y: auto;
       }
       .nsc-mac-traffic {
-        display: flex; align-items: center; gap: 6px; padding: 1px 6px 6px; flex: 0 0 auto;
+        display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 1px 4px 6px 6px; flex: 0 0 auto;
       }
+      .nsc-mac-dots { display: inline-flex; align-items: center; gap: 6px; }
       .nsc-mac-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.15); }
       .nsc-mac-dot.red { background: #ff5f56; }
       .nsc-mac-dot.yellow { background: #ffbd2e; }
       .nsc-mac-dot.green { background: #27c93f; }
+      .nsc-theme-seg {
+        display: inline-flex; align-items: center; gap: 1px; padding: 2px;
+        border-radius: 7px; background: var(--nsc-hover); border: 1px solid var(--nsc-border);
+      }
+      .nsc-theme-btn {
+        width: 19px; height: 17px; border: none; border-radius: 5px; padding: 0;
+        background: transparent; color: var(--nsc-muted); cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all 0.12s ease;
+      }
+      .nsc-theme-btn svg { width: 11px; height: 11px; }
+      .nsc-theme-btn:hover { color: var(--nsc-text); }
+      .nsc-theme-btn.is-active {
+        background: var(--nsc-bg-card); color: var(--nsc-accent);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+      }
 
       .nsc-nav-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
       .nsc-nav-item {
@@ -332,6 +398,12 @@
       .nsc-msg-author:hover { color: var(--nsc-accent); text-decoration: underline; }
       .nsc-lv-pill { font-size: 10px; padding: 1px 6px; border-radius: 5px; background: rgba(0, 122, 255, 0.09); color: var(--nsc-accent); font-weight: 600; }
       .nsc-op-pill { font-size: 10px; padding: 1px 6px; border-radius: 5px; background: rgba(245, 158, 11, 0.14); color: #d97706; font-weight: 700; }
+      .nsc-pin-pill {
+        font-size: 10px; padding: 1px 6px; border-radius: 5px;
+        background: rgba(255, 59, 48, 0.13); color: #ff3b30; font-weight: 700;
+        display: inline-flex; align-items: center; gap: 3px;
+      }
+      .nsc-pin-pill svg { width: 10px; height: 10px; }
       .nsc-floor-tag { font-size: 10px; padding: 1px 6px; border-radius: 5px; background: var(--nsc-hover); color: var(--nsc-muted); font-weight: 600; cursor: pointer; }
       .nsc-floor-tag:hover { color: var(--nsc-accent); }
       .nsc-floor-tag.is-op-floor { background: rgba(245, 158, 11, 0.12); color: #d97706; }
@@ -347,7 +419,7 @@
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px rgba(0, 0, 0, 0.025);
         width: fit-content; max-width: 100%;
       }
-      body.dark-layout .nsc-bubble { border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22); }
+      body.nsc-app-active.dark-layout .nsc-bubble { border-color: rgba(255, 255, 255, 0.10); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22); }
       .nsc-bubble p { margin: 4px 0; }
       .nsc-bubble > p:first-child { margin-top: 0; }
       .nsc-bubble > p:last-child { margin-bottom: 0; }
@@ -452,21 +524,27 @@
       .nsc-reactions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
       .nsc-reactions:empty { display: none; }
       .nsc-react-pill {
-        display: inline-flex; align-items: center; gap: 3px;
-        padding: 1px 7px; border-radius: 999px;
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 8px; border-radius: 999px;
         border: 1px solid var(--nsc-border); background: var(--nsc-bg-card);
         color: var(--nsc-muted); font-size: 11px; font-weight: 600; cursor: pointer;
         transition: all 0.14s ease;
       }
+      .nsc-react-pill svg { width: 11.5px; height: 11.5px; flex: 0 0 11.5px; }
+      .nsc-react-pill.is-like { color: var(--nsc-accent); }
+      .nsc-react-pill.is-leg { color: #d97706; }
+      .nsc-react-pill.is-voted { background: var(--nsc-accent-soft); border-color: var(--nsc-accent); }
+      .nsc-react-pill.is-leg.is-voted { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.45); }
       .nsc-react-pill:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
 
-      /* 悬停操作条内嵌在元信息行尾，不再飘出或重复数字 */
+      /* macOS SF Symbols 悬停操作胶囊，内嵌在元信息行尾 */
       .nsc-hover-bar {
-        display: inline-flex; align-items: center; gap: 1px; padding: 1px 4px; margin-left: 4px;
+        display: inline-flex; align-items: center; gap: 2px; padding: 2px 5px; margin-left: 4px;
         border-radius: 999px; border: 1px solid var(--nsc-border);
-        background: var(--nsc-bg-card);
+        background: var(--nsc-bg-card); backdrop-filter: blur(12px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         opacity: 0; pointer-events: none;
-        transition: opacity 0.1s linear;
+        transition: opacity 0.12s ease;
         white-space: nowrap; flex: 0 0 auto;
       }
       .nsc-msg:hover > .nsc-msg-main > .nsc-msg-meta > .nsc-hover-bar,
@@ -477,12 +555,16 @@
       }
       .nsc-hb-btn {
         border: none; background: transparent; color: var(--nsc-muted);
-        height: 20px; min-width: 22px; padding: 0 4px; border-radius: 999px;
-        font-size: 11.5px; display: inline-flex; align-items: center; justify-content: center;
-        cursor: pointer; line-height: 1;
+        height: 21px; width: 22px; padding: 0; border-radius: 999px;
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; line-height: 1; transition: all 0.12s ease;
       }
-      .nsc-hb-btn svg { width: 12px; height: 12px; }
+      .nsc-hb-btn svg { width: 12.5px; height: 12.5px; }
       .nsc-hb-btn:hover { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
+      .nsc-hb-btn.is-leg:hover { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+      .nsc-hb-btn.is-pin:hover,
+      .nsc-hb-btn.is-pin.is-active { background: rgba(255, 59, 48, 0.13); color: #ff3b30; }
+      .nsc-hb-btn.is-active { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
 
       .nsc-msg.has-thread .nsc-msg-main { flex: 1 1 auto; max-width: calc(100% - 54px); }
       .nsc-thread-toggle {
@@ -716,6 +798,9 @@
       }
       .nsc-right-user .user-card .user-head .menu > div {
         display: flex !important; align-items: center !important; gap: 5px !important;
+      }
+      .nsc-right-user .user-card .user-head .menu > div > a[title="切换主题模式"] {
+        display: none !important;
       }
       .nsc-right-user .user-card .user-head .menu > div > a,
       .nsc-right-user .user-card .user-head .menu > div > span {

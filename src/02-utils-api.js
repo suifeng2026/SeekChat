@@ -20,6 +20,42 @@
     return out;
   }
 
+  function parseTempScriptConfig(doc) {
+    const el = doc && doc.getElementById("temp-script");
+    if (!el || !el.textContent) return null;
+    const raw = el.textContent.trim();
+    if (!raw) return null;
+    try {
+      if (raw.startsWith("{")) return JSON.parse(raw);
+      const bin = atob(raw);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return JSON.parse(new TextDecoder("utf-8").decode(bytes));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function extractPostMetaFromTempScript(doc) {
+    const map = new Map();
+    const cfg = parseTempScriptConfig(doc);
+    const comments = cfg && cfg.postData && Array.isArray(cfg.postData.comments) ? cfg.postData.comments : [];
+    for (const c of comments) {
+      const floorNum = c.floorIndex !== undefined && c.floorIndex !== null ? Number(c.floorIndex) : NaN;
+      const floorKey = Number.isFinite(floorNum) ? String(floorNum) : "";
+      if (!floorKey) continue;
+      map.set(floorKey, {
+        commentId: String(c.commentId || c.id || ""),
+        likes: Number(c.upvoteCount) || 0,
+        legs: Number(c.likeCount) || 0,
+        pinned: Boolean(c.pined === true || c.pined === 1 || c.pinned === true || c.pinned === 1),
+        upvoted: Boolean(c.upvoted),
+        liked: Boolean(c.liked),
+      });
+    }
+    return map;
+  }
+
   function getNodeSeekPostHeaders() {
     const meta = document.querySelector('meta[name="csrf-token"]');
     const cookieMatch = document.cookie.match(/(?:^|;\s*)(?:csrf_token|csrfToken)=([^;]+)/i);

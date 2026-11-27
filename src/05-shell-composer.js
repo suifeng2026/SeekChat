@@ -35,6 +35,55 @@
     }
   }
 
+  function getEffectiveThemeMode() {
+    if (state.themeMode === "dusk") return "dusk";
+    return document.body.classList.contains("dark-layout") ? "dark" : "light";
+  }
+
+  function syncThemeButtons() {
+    const cur = getEffectiveThemeMode();
+    document.querySelectorAll("#nsc-theme-seg .nsc-theme-btn").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.theme === cur);
+    });
+  }
+
+  function applyThemeMode(mode) {
+    state.themeMode = mode;
+    localStorage.setItem(LS.THEME, mode);
+    const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
+    const isDark = document.body.classList.contains("dark-layout");
+
+    if (mode === "dusk") {
+      document.body.classList.add("nsc-theme-dusk");
+      if (isDark) {
+        if (headThemeBtn) headThemeBtn.click();
+        else {
+          document.body.classList.remove("dark-layout");
+          document.body.classList.add("light-layout");
+        }
+      }
+    } else if (mode === "dark") {
+      document.body.classList.remove("nsc-theme-dusk");
+      if (!isDark) {
+        if (headThemeBtn) headThemeBtn.click();
+        else {
+          document.body.classList.remove("light-layout");
+          document.body.classList.add("dark-layout");
+        }
+      }
+    } else {
+      document.body.classList.remove("nsc-theme-dusk");
+      if (isDark) {
+        if (headThemeBtn) headThemeBtn.click();
+        else {
+          document.body.classList.remove("dark-layout");
+          document.body.classList.add("light-layout");
+        }
+      }
+    }
+    syncThemeButtons();
+  }
+
   function buildShellIfNeeded() {
     if (state.shellBuilt) return;
     state.shellBuilt = true;
@@ -43,10 +92,17 @@
     shell.id = "nsc-app-shell";
     shell.innerHTML = `
       <nav class="nsc-pane-nav">
-        <div class="nsc-mac-traffic" aria-hidden="true">
-          <span class="nsc-mac-dot red"></span>
-          <span class="nsc-mac-dot yellow"></span>
-          <span class="nsc-mac-dot green"></span>
+        <div class="nsc-mac-traffic">
+          <div class="nsc-mac-dots" aria-hidden="true">
+            <span class="nsc-mac-dot red"></span>
+            <span class="nsc-mac-dot yellow"></span>
+            <span class="nsc-mac-dot green"></span>
+          </div>
+          <div class="nsc-theme-seg" id="nsc-theme-seg" title="切换外观模式">
+            <button type="button" class="nsc-theme-btn" data-theme="light" title="浅色模式">${ICONS.sun}</button>
+            <button type="button" class="nsc-theme-btn" data-theme="dusk" title="黄昏护眼模式">${ICONS.dusk}</button>
+            <button type="button" class="nsc-theme-btn" data-theme="dark" title="macOS 暗黑模式">${ICONS.moon}</button>
+          </div>
         </div>
         <div id="nsc-pane-nav" class="nsc-nav-main"></div>
         <div class="nsc-nav-bottom" id="nsc-nav-footer">
@@ -477,6 +533,15 @@
       }
     }, { passive: true });
 
+    shell.querySelectorAll("#nsc-theme-seg .nsc-theme-btn").forEach((b) => {
+      b.addEventListener("click", () => applyThemeMode(b.dataset.theme));
+    });
+    if (state.themeMode === "dusk") {
+      applyThemeMode("dusk");
+    } else {
+      syncThemeButtons();
+    }
+
     renderLeftNav();
   }
 
@@ -606,9 +671,10 @@
           const pResp = await fetch(targetUrl, { credentials: "include" });
           if (pResp.ok) {
             const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
+            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
             const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
             for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
-              const obj = extractCommentObject(el, false, lastPage);
+              const obj = extractCommentObject(el, false, lastPage, tempMetaMap);
               if (obj.floorId && !seen.has(obj.floorId)) {
                 seen.add(obj.floorId);
                 if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
@@ -852,10 +918,11 @@
             const resp = await fetch(`/post-${pid}-${lastPage}`, { credentials: "include" });
             if (!resp.ok || !state.currentRoom || state.currentPostId !== pid) return;
             const pDoc = new DOMParser().parseFromString(await resp.text(), "text/html");
+            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
             const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
             let added = 0;
             for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
-              const obj = extractCommentObject(el, false, lastPage);
+              const obj = extractCommentObject(el, false, lastPage, tempMetaMap);
               if (obj.floorId && !seen.has(obj.floorId)) {
                 seen.add(obj.floorId);
                 if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;

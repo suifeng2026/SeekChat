@@ -52,20 +52,24 @@
       rightUserHost.appendChild(nativeUserCard);
     }
 
-    const themeBtn = document.querySelector('#nsc-right-user .user-card a[title="切换主题模式"]');
-    if (themeBtn && themeBtn.dataset.nscThemeFixed !== "1") {
-      themeBtn.dataset.nscThemeFixed = "1";
-      if (!themeBtn.querySelector("svg")) {
-        themeBtn.innerHTML = ICONS.theme;
-      }
-      themeBtn.addEventListener("click", (e) => {
-        const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
-        if (headThemeBtn && e.isTrusted) {
-          e.preventDefault();
-          headThemeBtn.click();
-        }
+    const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
+    if (headThemeBtn && headThemeBtn.dataset.nscThemeObs !== "1") {
+      headThemeBtn.dataset.nscThemeObs = "1";
+      headThemeBtn.addEventListener("click", () => {
+        setTimeout(() => {
+          document.body.classList.remove("nsc-theme-dusk");
+          const nextMode = document.body.classList.contains("dark-layout") ? "dark" : "light";
+          state.themeMode = nextMode;
+          localStorage.setItem(LS.THEME, nextMode);
+          syncThemeButtons();
+        }, 40);
       });
     }
+
+    if (state.themeMode === "dusk") {
+      document.body.classList.add("nsc-theme-dusk");
+    }
+    syncThemeButtons();
 
     const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
       const src = document.querySelector(panelSelector);
@@ -91,6 +95,9 @@
     } else {
       syncComposerMode(isPostPath(location.pathname) && (!state.currentPostId || state.currentPostId === state.nativePostId));
     }
+    if (typeof refreshNativeFloorCountsIfNeeded === "function") {
+      refreshNativeFloorCountsIfNeeded();
+    }
 
     if (state.rightTab === "hot" && !state.hotCache[state.hotTab]) {
       fetchHotPosts(state.hotTab);
@@ -106,9 +113,15 @@
   }
 
   function restoreNativeWidgets() {
+    document.body.classList.remove("nsc-theme-dusk");
     const rightPanel = document.getElementById("nsk-right-panel-container");
     const userCard = document.querySelector("#nsc-right-user .user-card");
     if (rightPanel && userCard) {
+      const legacyThemeBtn = userCard.querySelector('a[title="切换主题模式"][data-nsc-theme-fixed="1"]');
+      if (legacyThemeBtn) {
+        legacyThemeBtn.removeAttribute("data-nsc-theme-fixed");
+        legacyThemeBtn.innerHTML = "";
+      }
       rightPanel.insertBefore(userCard, rightPanel.firstChild);
     }
     const commentContainer = document.querySelector("#nsk-frame .comment-container");
@@ -143,6 +156,8 @@
         state.nativePostId = pid;
         if (!state.activePmPeer && (!state.currentPostId || (firstInit && state.currentPostId === pid))) {
           renderPostDocument(document, location.pathname, true);
+        } else if (state.currentPostId === pid && typeof refreshNativeFloorCountsIfNeeded === "function") {
+          refreshNativeFloorCountsIfNeeded();
         }
       }
     } else {
@@ -239,7 +254,7 @@
         const floorId = Number(it.floor_id) || 0;
         const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
         return {
-          id: Number(it.id) || 0,
+          id: Number(it.id || it.notification_id || it.comment_id) || 0,
           postId,
           floorId,
           url: `/post-${postId}-${pageIndex}`,
@@ -262,20 +277,59 @@
 
   async function markNotificationViewed(kind, id, all = false) {
     const api = kind === "at-me" ? "/api/notification/at-me/markViewed" : "/api/notification/reply-to-me/markViewed";
-    try {
-      const url = all ? `${api}?all=true` : api;
-      const body = all ? {} : kind === "at-me" ? { atMe: [Number(id)] } : { replyToMe: [Number(id)] };
-      await fetch(url, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify(body) });
-      const store = state.notifData[kind];
-      if (store) {
-        if (all) store.items.forEach((x) => { x.viewed = true; });
-        else {
-          const hit = store.items.find((x) => x.id === Number(id));
-          if (hit) hit.viewed = true;
+    const countKey = kind === "at-me" ? "atMe" : "reply";
+    const store = state.notifData[kind];
+    const numId = Number(id) || 0;
+
+    if (store) {
+      if (all) {
+        store.items.forEach((x) => { x.viewed = true; });
+        state.unreadCounts[countKey] = 0;
+      } else {
+        const hit = numId > 0 ? store.items.find((x) => x.id === numId) : null;
+        if (hit && !hit.viewed) {
+          hit.viewed = true;
+          state.unreadCounts[countKey] = Math.max(0, (Number(state.unreadCounts[countKey]) || 0) - 1);
         }
       }
-      fetchUnreadCounts();
+      renderLeftNav();
       if (state.activeChannel === kind) renderTopicList();
+    }
+
+    try {
+      const url = all ? `${api}?all=true` : api;
+      const payloads = all
+        ? [{}]
+        : kind === "at-me"
+          ? [{ atMe: [numId] }, { ids: [numId] }]
+          : [{ replyToMe: [numId] }, { reply: [numId] }, { ids: [numId] }];
+
+      if (!all && !numId) return;
+
+      let ok = false;
+      for (const body of payloads) {
+        const resp = await fetch(url, {
+          method: "POST",
+          credentials: "include",
+          headers: getNodeSeekPostHeaders(),
+          body: JSON.stringify(body),
+        });
+        const resJson = await resp.json().catch(() => null);
+        if (resp.ok && (!resJson || resJson.success !== false)) {
+          ok = true;
+          break;
+        }
+      }
+
+      if (ok) {
+        setTimeout(async () => {
+          await fetchUnreadCounts();
+          if (all) {
+            state.unreadCounts[countKey] = 0;
+            renderLeftNav();
+          }
+        }, 350);
+      }
     } catch (_) {}
   }
 
@@ -1132,7 +1186,17 @@
         row.querySelector(".nsc-topic-meta span:first-child").textContent = `${it.author} ${kind === "at-me" ? "@了你" : "回复了你"}`;
         row.addEventListener("click", () => {
           state.selectedNotifKey = rowKey;
-          if (!it.viewed && it.id) markNotificationViewed(kind, it.id, false);
+          if (!it.viewed) {
+            if (it.id) {
+              markNotificationViewed(kind, it.id, false);
+            } else {
+              it.viewed = true;
+              const countKey = kind === "at-me" ? "atMe" : "reply";
+              state.unreadCounts[countKey] = Math.max(0, (Number(state.unreadCounts[countKey]) || 0) - 1);
+              renderLeftNav();
+              renderTopicList();
+            }
+          }
           openPostInChat({
             postId: it.postId,
             url: it.url,
