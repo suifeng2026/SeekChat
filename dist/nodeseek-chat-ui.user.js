@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.18.0
+// @version      7.19.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -11,10 +11,13 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
+// @grant        GM_info
+// @grant        GM_openInTab
 // @grant        unsafeWindow
 // @connect      api.nodeimage.com
 // @connect      nodeimage.com
 // @connect      www.nodeimage.com
+// @connect      raw.githubusercontent.com
 // @updateURL    https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js
 // @downloadURL  https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.user.js
 // ==/UserScript==
@@ -43,6 +46,7 @@
     AUTO_CHECKIN: "nsc_v7_auto_checkin",
     AUTO_CHECKIN_MODE: "nsc_v7_auto_checkin_mode",
     AUTO_CHECKIN_DATE: "nsc_v7_auto_checkin_date",
+    UPDATE_CHECK: "nsc_v7_update_check",
   };
 
   function isBrowsePath(pathname) {
@@ -114,6 +118,7 @@
     layers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
     copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
     check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -240,6 +245,14 @@
     autoCheckinMode: localStorage.getItem(LS.AUTO_CHECKIN_MODE) || "fixed",
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
+    updateInfo: {
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.19.0",
+      latest: "",
+      hasUpdate: false,
+      checking: false,
+      error: "",
+      justChecked: false,
+    },
     hubData: {
       posts: { items: [], page: 0, loading: false, noMore: false, error: null },
       comments: { items: [], page: 0, loading: false, noMore: false, error: null },
@@ -774,6 +787,124 @@
     }
   }
 
+  const SEEKCHAT_META_URL = "https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js";
+  const SEEKCHAT_USERJS_URL = "https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.user.js";
+
+  function compareSemver(a, b) {
+    const pa = String(a || "0").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = String(b || "0").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+      const va = pa[i] || 0;
+      const vb = pb[i] || 0;
+      if (va > vb) return 1;
+      if (va < vb) return -1;
+    }
+    return 0;
+  }
+
+  function renderUpdateButton() {
+    const btn = document.getElementById("nsc-update-btn");
+    if (!btn) return;
+    const u = state.updateInfo;
+    btn.classList.toggle("has-update", Boolean(u.hasUpdate));
+    if (u.checking) {
+      btn.title = "正在检查 GitHub 最新版本...";
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检查中...</span></span>`;
+      return;
+    }
+    if (u.hasUpdate && u.latest) {
+      btn.title = `发现新版本 v${u.latest}（当前 v${u.current}），点击一键跳转 Tampermonkey 更新`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>更新 v${escHtml(u.latest)}</span></span><span class="nsc-nav-badge">NEW</span>`;
+      return;
+    }
+    if (u.error) {
+      btn.title = `检查更新失败 (${u.error})，点击重试`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>v${escHtml(u.current)} 重试</span></span>`;
+      return;
+    }
+    if (u.justChecked) {
+      btn.title = `当前已是最新版本 v${u.current}，点击重新检测`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.check}<span>已是最新</span></span>`;
+      return;
+    }
+    btn.title = `当前版本 v${u.current}，点击立即检查更新`;
+    btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>v${escHtml(u.current)} 更新</span></span>`;
+  }
+
+  function openSeekChatUpdateInstall() {
+    const url = `${SEEKCHAT_USERJS_URL}?t=${Date.now()}`;
+    try {
+      if (typeof GM_openInTab === "function") {
+        GM_openInTab(url, { active: true, insert: true, setParent: true });
+        return;
+      }
+    } catch (_) {}
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function fetchRemoteMetaText(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest === "function") {
+        GM_xmlhttpRequest({
+          method: "GET",
+          url,
+          headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+          timeout: 10000,
+          onload: (res) => {
+            if (res.status >= 200 && res.status < 300) resolve(res.responseText || "");
+            else reject(new Error(`HTTP ${res.status}`));
+          },
+          onerror: () => reject(new Error("网络请求失败")),
+          ontimeout: () => reject(new Error("请求超时")),
+        });
+        return;
+      }
+      fetch(url, { cache: "no-store" })
+        .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then(resolve, reject);
+    });
+  }
+
+  async function checkSeekChatUpdate(manual = false) {
+    const u = state.updateInfo;
+    if (u.checking) return;
+    if (!manual) {
+      const cached = loadJson(LS.UPDATE_CHECK, null);
+      if (cached && cached.ts && Date.now() - cached.ts < 5 * 60 * 1000 && cached.latest) {
+        u.latest = cached.latest;
+        u.hasUpdate = compareSemver(cached.latest, u.current) > 0;
+        renderUpdateButton();
+        return;
+      }
+    }
+    u.checking = true;
+    u.error = "";
+    u.justChecked = false;
+    renderUpdateButton();
+    try {
+      const text = await fetchRemoteMetaText(`${SEEKCHAT_META_URL}?_t=${Date.now()}`);
+      const m = text.match(/\/\/\s*@version\s+([^\s]+)/i);
+      const latest = m ? m[1].trim() : "";
+      if (!latest) throw new Error("未解析到版本号");
+      u.latest = latest;
+      u.hasUpdate = compareSemver(latest, u.current) > 0;
+      u.justChecked = manual && !u.hasUpdate;
+      saveJson(LS.UPDATE_CHECK, { latest, ts: Date.now() });
+      if (u.justChecked) {
+        setTimeout(() => {
+          u.justChecked = false;
+          renderUpdateButton();
+        }, 2400);
+      }
+    } catch (err) {
+      u.error = err.message || "检测失败";
+    } finally {
+      u.checking = false;
+      renderUpdateButton();
+    }
+  }
+
   function getChannelUnreadCount(channelId) {
     if (channelId === "history") return 0;
     if (channelId === "at-me") return Number(state.unreadCounts.atMe) || 0;
@@ -1121,6 +1252,13 @@
       .nsc-nav-divider { width: 100%; height: 1px; background: var(--nsc-border); margin: 4px 0; flex: 0 0 1px; }
       .nsc-nav-bottom { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
       .nsc-nav-bottom .nsc-nav-item { flex: 0 0 auto; height: clamp(26px, 3.2vh, 34px); }
+      .nsc-update-btn { color: var(--nsc-muted); font-size: 11.5px; }
+      .nsc-update-btn.has-update {
+        background: var(--nsc-accent-soft); color: var(--nsc-accent); font-weight: 600;
+      }
+      .nsc-update-btn.has-update .nsc-nav-badge {
+        background: var(--nsc-accent); color: #fff; font-size: 9px; padding: 0 4px;
+      }
 
       .nsc-pane-list {
         width: 294px; flex: 0 0 294px; background: var(--nsc-bg-list); backdrop-filter: blur(22px);
@@ -2720,6 +2858,9 @@
           <a class="nsc-nav-item group-admin" id="nsc-nf-links" href="/award" target="_blank" rel="noopener noreferrer" title="友站链接">
             <span class="nsc-nav-left">${ICONS.links}<span>友链</span></span>
           </a>
+          <button type="button" class="nsc-nav-item nsc-update-btn" id="nsc-update-btn" title="检查脚本更新">
+            <span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>
+          </button>
         </div>
       </nav>
 
@@ -3166,6 +3307,18 @@
       applyThemeMode("dusk");
     } else {
       syncThemeButtons();
+    }
+
+    const updBtn = shell.querySelector("#nsc-update-btn");
+    if (updBtn) {
+      updBtn.addEventListener("click", () => {
+        if (state.updateInfo.hasUpdate) {
+          openSeekChatUpdateInstall();
+        } else {
+          checkSeekChatUpdate(true);
+        }
+      });
+      renderUpdateButton();
     }
 
     renderLeftNav();
@@ -3962,6 +4115,9 @@
         setTimeout(() => {
           if (typeof maybeRunAutoCheckin === "function") maybeRunAutoCheckin();
         }, 1600);
+        setTimeout(() => {
+          if (typeof checkSeekChatUpdate === "function") checkSeekChatUpdate(false);
+        }, 2200);
       }
 
       if (isPostPath(location.pathname)) {

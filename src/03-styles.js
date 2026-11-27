@@ -325,6 +325,13 @@
       .nsc-nav-divider { width: 100%; height: 1px; background: var(--nsc-border); margin: 4px 0; flex: 0 0 1px; }
       .nsc-nav-bottom { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
       .nsc-nav-bottom .nsc-nav-item { flex: 0 0 auto; height: clamp(26px, 3.2vh, 34px); }
+      .nsc-update-btn { color: var(--nsc-muted); font-size: 11.5px; }
+      .nsc-update-btn.has-update {
+        background: var(--nsc-accent-soft); color: var(--nsc-accent); font-weight: 600;
+      }
+      .nsc-update-btn.has-update .nsc-nav-badge {
+        background: var(--nsc-accent); color: #fff; font-size: 9px; padding: 0 4px;
+      }
 
       .nsc-pane-list {
         width: 294px; flex: 0 0 294px; background: var(--nsc-bg-list); backdrop-filter: blur(22px);

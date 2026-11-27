@@ -516,6 +516,124 @@
     }
   }
 
+  const SEEKCHAT_META_URL = "https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js";
+  const SEEKCHAT_USERJS_URL = "https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.user.js";
+
+  function compareSemver(a, b) {
+    const pa = String(a || "0").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = String(b || "0").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+      const va = pa[i] || 0;
+      const vb = pb[i] || 0;
+      if (va > vb) return 1;
+      if (va < vb) return -1;
+    }
+    return 0;
+  }
+
+  function renderUpdateButton() {
+    const btn = document.getElementById("nsc-update-btn");
+    if (!btn) return;
+    const u = state.updateInfo;
+    btn.classList.toggle("has-update", Boolean(u.hasUpdate));
+    if (u.checking) {
+      btn.title = "正在检查 GitHub 最新版本...";
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检查中...</span></span>`;
+      return;
+    }
+    if (u.hasUpdate && u.latest) {
+      btn.title = `发现新版本 v${u.latest}（当前 v${u.current}），点击一键跳转 Tampermonkey 更新`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>更新 v${escHtml(u.latest)}</span></span><span class="nsc-nav-badge">NEW</span>`;
+      return;
+    }
+    if (u.error) {
+      btn.title = `检查更新失败 (${u.error})，点击重试`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>v${escHtml(u.current)} 重试</span></span>`;
+      return;
+    }
+    if (u.justChecked) {
+      btn.title = `当前已是最新版本 v${u.current}，点击重新检测`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.check}<span>已是最新</span></span>`;
+      return;
+    }
+    btn.title = `当前版本 v${u.current}，点击立即检查更新`;
+    btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>v${escHtml(u.current)} 更新</span></span>`;
+  }
+
+  function openSeekChatUpdateInstall() {
+    const url = `${SEEKCHAT_USERJS_URL}?t=${Date.now()}`;
+    try {
+      if (typeof GM_openInTab === "function") {
+        GM_openInTab(url, { active: true, insert: true, setParent: true });
+        return;
+      }
+    } catch (_) {}
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function fetchRemoteMetaText(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest === "function") {
+        GM_xmlhttpRequest({
+          method: "GET",
+          url,
+          headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+          timeout: 10000,
+          onload: (res) => {
+            if (res.status >= 200 && res.status < 300) resolve(res.responseText || "");
+            else reject(new Error(`HTTP ${res.status}`));
+          },
+          onerror: () => reject(new Error("网络请求失败")),
+          ontimeout: () => reject(new Error("请求超时")),
+        });
+        return;
+      }
+      fetch(url, { cache: "no-store" })
+        .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then(resolve, reject);
+    });
+  }
+
+  async function checkSeekChatUpdate(manual = false) {
+    const u = state.updateInfo;
+    if (u.checking) return;
+    if (!manual) {
+      const cached = loadJson(LS.UPDATE_CHECK, null);
+      if (cached && cached.ts && Date.now() - cached.ts < 5 * 60 * 1000 && cached.latest) {
+        u.latest = cached.latest;
+        u.hasUpdate = compareSemver(cached.latest, u.current) > 0;
+        renderUpdateButton();
+        return;
+      }
+    }
+    u.checking = true;
+    u.error = "";
+    u.justChecked = false;
+    renderUpdateButton();
+    try {
+      const text = await fetchRemoteMetaText(`${SEEKCHAT_META_URL}?_t=${Date.now()}`);
+      const m = text.match(/\/\/\s*@version\s+([^\s]+)/i);
+      const latest = m ? m[1].trim() : "";
+      if (!latest) throw new Error("未解析到版本号");
+      u.latest = latest;
+      u.hasUpdate = compareSemver(latest, u.current) > 0;
+      u.justChecked = manual && !u.hasUpdate;
+      saveJson(LS.UPDATE_CHECK, { latest, ts: Date.now() });
+      if (u.justChecked) {
+        setTimeout(() => {
+          u.justChecked = false;
+          renderUpdateButton();
+        }, 2400);
+      }
+    } catch (err) {
+      u.error = err.message || "检测失败";
+    } finally {
+      u.checking = false;
+      renderUpdateButton();
+    }
+  }
+
   function getChannelUnreadCount(channelId) {
     if (channelId === "history") return 0;
     if (channelId === "at-me") return Number(state.unreadCounts.atMe) || 0;

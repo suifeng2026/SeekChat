@@ -152,6 +152,9 @@
           <a class="nsc-nav-item group-admin" id="nsc-nf-links" href="/award" target="_blank" rel="noopener noreferrer" title="友站链接">
             <span class="nsc-nav-left">${ICONS.links}<span>友链</span></span>
           </a>
+          <button type="button" class="nsc-nav-item nsc-update-btn" id="nsc-update-btn" title="检查脚本更新">
+            <span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>
+          </button>
         </div>
       </nav>
 
@@ -598,6 +601,18 @@
       applyThemeMode("dusk");
     } else {
       syncThemeButtons();
+    }
+
+    const updBtn = shell.querySelector("#nsc-update-btn");
+    if (updBtn) {
+      updBtn.addEventListener("click", () => {
+        if (state.updateInfo.hasUpdate) {
+          openSeekChatUpdateInstall();
+        } else {
+          checkSeekChatUpdate(true);
+        }
+      });
+      renderUpdateButton();
     }
 
     renderLeftNav();

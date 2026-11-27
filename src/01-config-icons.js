@@ -16,6 +16,7 @@
     AUTO_CHECKIN: "nsc_v7_auto_checkin",
     AUTO_CHECKIN_MODE: "nsc_v7_auto_checkin_mode",
     AUTO_CHECKIN_DATE: "nsc_v7_auto_checkin_date",
+    UPDATE_CHECK: "nsc_v7_update_check",
   };
 
   function isBrowsePath(pathname) {
@@ -87,6 +88,7 @@
     layers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
     copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
     check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -213,6 +215,14 @@
     autoCheckinMode: localStorage.getItem(LS.AUTO_CHECKIN_MODE) || "fixed",
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
+    updateInfo: {
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.19.0",
+      latest: "",
+      hasUpdate: false,
+      checking: false,
+      error: "",
+      justChecked: false,
+    },
     hubData: {
       posts: { items: [], page: 0, loading: false, noMore: false, error: null },
       comments: { items: [], page: 0, loading: false, noMore: false, error: null },
