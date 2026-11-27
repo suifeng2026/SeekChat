@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.9
+// @version      7.22.10
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -18,6 +18,7 @@
 // @connect      nodeimage.com
 // @connect      www.nodeimage.com
 // @connect      raw.githubusercontent.com
+// @connect      api.github.com
 // @updateURL    https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js
 // @downloadURL  https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.user.js
 // ==/UserScript==
@@ -304,8 +305,9 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.9",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.10",
       latest: "",
+      installUrl: "",
       hasUpdate: false,
       checking: false,
       error: "",
@@ -967,11 +969,51 @@
     btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>`;
   }
 
-  function openSeekChatUpdateInstall() {
+  async function resolveFreshGithubInstallUrl(downloadUrl, latestVersion) {
+    const rawUrl = String(downloadUrl || "").trim();
+    if (!rawUrl) return "";
+    const m = rawUrl.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
+    if (!m) return rawUrl;
+    const owner = m[1];
+    const repo = m[2];
+    const branch = m[3];
+    const restPath = m[4].replace(/[?#].*$/, "");
+    const cleanVer = String(latestVersion || "").replace(/^v/i, "").trim();
+
+    if (cleanVer) {
+      for (const tagRef of [`v${cleanVer}`, cleanVer]) {
+        const tagUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${tagRef}/${restPath}`;
+        try {
+          const text = await fetchRemoteMetaText(tagUrl);
+          const vm = text.match(/\/\/\s*@version\s+([^\s]+)/i);
+          if (vm && compareSemver(vm[1].trim(), cleanVer) >= 0) {
+            return tagUrl;
+          }
+        } catch (_) {}
+      }
+    }
+
+    try {
+      const apiText = await fetchRemoteMetaText(`https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`);
+      const json = JSON.parse(apiText);
+      if (json && json.sha) {
+        return `https://raw.githubusercontent.com/${owner}/${repo}/${json.sha}/${restPath}`;
+      }
+    } catch (_) {}
+
+    return rawUrl;
+  }
+
+  async function openSeekChatUpdateInstall() {
     const targets = getScriptUpdateTargets();
     if (!targets.downloadUrl) return;
-    const sep = targets.downloadUrl.includes("?") ? "&" : "?";
-    const url = `${targets.downloadUrl}${sep}t=${Date.now()}`;
+    const u = state.updateInfo;
+    let url = u.installUrl || "";
+    if (!url || url === targets.downloadUrl) {
+      url = await resolveFreshGithubInstallUrl(targets.downloadUrl, u.latest);
+      u.installUrl = url;
+    }
+    if (!url) url = targets.downloadUrl;
     try {
       if (typeof GM_openInTab === "function") {
         GM_openInTab(url, { active: true, insert: true, setParent: true });
@@ -1026,6 +1068,7 @@
         cached.latest
       ) {
         u.latest = cached.latest;
+        u.installUrl = cached.installUrl || "";
         u.hasUpdate = compareSemver(cached.latest, u.current) > 0;
         renderUpdateButton();
         return;
@@ -1044,8 +1087,11 @@
       if (!latest) throw new Error("未解析到版本号");
       u.latest = latest;
       u.hasUpdate = compareSemver(latest, u.current) > 0;
+      u.installUrl = u.hasUpdate
+        ? await resolveFreshGithubInstallUrl(targets.downloadUrl, latest)
+        : targets.downloadUrl;
       u.justChecked = manual && !u.hasUpdate;
-      saveJson(LS.UPDATE_CHECK, { latest, metaUrl: targets.metaUrl, ts: Date.now() });
+      saveJson(LS.UPDATE_CHECK, { latest, metaUrl: targets.metaUrl, installUrl: u.installUrl, ts: Date.now() });
       if (u.justChecked) {
         setTimeout(() => {
           u.justChecked = false;
