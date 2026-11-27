@@ -494,7 +494,7 @@
       .nsc-composer-dock {
         border-top: 1px solid var(--nsc-border);
         background: var(--nsc-bg-right);
-        padding: 4px 10px 6px;
+        padding: 4px 6px 5px;
         flex: 0 0 auto;
         position: relative;
       }
@@ -506,8 +506,16 @@
         overflow: visible !important;
         box-shadow: 0 1px 3px rgba(0,0,0,0.03);
         transition: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
       }
-      .nsc-composer-dock #editor-body { background: transparent !important; position: static !important; }
+      .nsc-composer-dock #editor-body { background: transparent !important; position: static !important; margin: 0 !important; padding: 0 !important; }
+      .nsc-composer-dock .content-area,
+      .nsc-composer-dock .split-view-container {
+        min-height: 0 !important; height: auto !important; margin: 0 !important; padding: 0 !important;
+      }
 
       .nsc-composer-header,
       .nsc-composer-dock .tab-select.window_header {
@@ -570,18 +578,22 @@
       }
       .nsc-composer-dock .mde-toolbar .toolbar-item svg { width: 13px !important; height: 13px !important; }
       .nsc-composer-dock .CodeMirror {
-        height: 88px !important; min-height: 84px !important; max-height: 150px !important;
-        font-size: 13px !important; line-height: 1.5 !important;
+        height: 68px !important; min-height: 64px !important; max-height: 130px !important;
+        font-size: 13px !important; line-height: 1.45 !important;
         background: transparent !important; color: var(--nsc-text) !important;
       }
-      .nsc-composer-dock .CodeMirror-scroll { min-height: 84px !important; max-height: 150px !important; padding-bottom: 0 !important; }
-      .nsc-composer-dock .CodeMirror-lines { padding: 5px 0 !important; }
+      .nsc-composer-dock .CodeMirror-scroll { min-height: 64px !important; max-height: 130px !important; padding-bottom: 0 !important; }
+      .nsc-composer-dock .CodeMirror-lines { padding: 4px 0 !important; }
       .nsc-fallback-textarea {
-        width: 100%; box-sizing: border-box; height: 90px; border: none; outline: none; resize: none;
-        padding: 8px 11px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
+        width: 100%; box-sizing: border-box; height: 70px; border: none; outline: none; resize: none;
+        padding: 7px 10px; font-size: 13px; line-height: 1.45; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板改为贴底悬浮层，缩小贴图网格，彻底消除点击表情时的布局跳动与闪烁 */
+      /* 表情面板改为贴底悬浮层，缩小贴图网格，未选分组时彻底隐藏 */
+      .nsc-composer-dock .exp-container.cur-sticker-group-null,
+      .nsc-composer-dock .exp-container:empty {
+        display: none !important;
+      }
       .nsc-composer-dock .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 10px !important; right: 10px !important;
         z-index: 260 !important; max-height: 205px !important; overflow-y: auto !important;
