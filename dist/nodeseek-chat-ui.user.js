@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.13
+// @version      7.22.14
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -311,7 +311,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.13",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.14",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -4254,6 +4254,25 @@
       const maxH = Math.max(200, (sr.height || window.innerHeight - 110) - 8);
       return Math.min(1, maxW / nw, maxH / nh);
     };
+    const updateLbNavPositions = (dispW) => {
+      const prevBtn = document.getElementById("nsc-lb-prev");
+      const nextBtn = document.getElementById("nsc-lb-next");
+      if (!prevBtn || !nextBtn) return;
+      const sr = lbStage.getBoundingClientRect();
+      const stageW = sr.width || window.innerWidth;
+      if (!dispW || dispW <= 0) {
+        prevBtn.style.left = "";
+        nextBtn.style.right = "";
+        return;
+      }
+      const btnW = 44;
+      const gap = 18;
+      const leftPos = Math.max(14, Math.round(stageW / 2 - dispW / 2 + _lbTx - gap - btnW));
+      const rightPos = Math.max(14, Math.round(stageW / 2 - dispW / 2 - _lbTx - gap - btnW));
+      const maxPos = Math.max(14, Math.round(stageW / 2 - btnW - gap));
+      prevBtn.style.left = `${Math.min(maxPos, leftPos)}px`;
+      nextBtn.style.right = `${Math.min(maxPos, rightPos)}px`;
+    };
     const applyLbTransform = () => {
       const nw = lbImg.naturalWidth || 0;
       const nh = lbImg.naturalHeight || 0;
@@ -4276,6 +4295,7 @@
           origBtn.classList.remove("is-active");
           origBtn.textContent = "原图 1:1";
         }
+        updateLbNavPositions(nw > 0 ? Math.round(nw * fitScale) : 0);
         return;
       }
 
@@ -4297,19 +4317,29 @@
         origBtn.classList.toggle("is-active", isOrig);
         origBtn.textContent = isOrig ? "适应窗口" : "原图 1:1";
       }
+      updateLbNavPositions(targetW);
     };
     _applyLbTransform = applyLbTransform;
     lbImg.addEventListener("load", () => {
       if (lightbox.classList.contains("is-open")) applyLbTransform();
     });
     window.addEventListener("resize", () => {
-      if (lightbox.classList.contains("is-open") && _lbZoomMode === "fit") applyLbTransform();
+      if (lightbox.classList.contains("is-open")) applyLbTransform();
     });
 
     lightbox.addEventListener("click", (e) => {
-      if (e.target === lightbox || e.target === lbStage || e.target.id === "nsc-lightbox-close") {
-        lightbox.classList.remove("is-open");
+      if (_lbMoved) {
+        _lbMoved = false;
+        return;
       }
+      if (e.target && e.target.id === "nsc-lightbox-close") {
+        lightbox.classList.remove("is-open");
+        return;
+      }
+      if (e.target === lbImg || (e.target && e.target.closest(".nsc-lightbox-btn, .nsc-lb-nav"))) {
+        return;
+      }
+      lightbox.classList.remove("is-open");
     });
     lbStage.addEventListener("wheel", (e) => {
       e.preventDefault();
@@ -4354,11 +4384,17 @@
       if (_lbDragging) {
         _lbDragging = false;
         applyLbTransform();
+        if (_lbMoved) {
+          setTimeout(() => { _lbMoved = false; }, 0);
+        }
       }
     });
     lbImg.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (_lbMoved) return;
+      if (_lbMoved) {
+        _lbMoved = false;
+        return;
+      }
       if (_lbZoomMode !== "fit") {
         _lbZoomMode = "fit";
         _lbTx = 0;

@@ -268,6 +268,25 @@
       const maxH = Math.max(200, (sr.height || window.innerHeight - 110) - 8);
       return Math.min(1, maxW / nw, maxH / nh);
     };
+    const updateLbNavPositions = (dispW) => {
+      const prevBtn = document.getElementById("nsc-lb-prev");
+      const nextBtn = document.getElementById("nsc-lb-next");
+      if (!prevBtn || !nextBtn) return;
+      const sr = lbStage.getBoundingClientRect();
+      const stageW = sr.width || window.innerWidth;
+      if (!dispW || dispW <= 0) {
+        prevBtn.style.left = "";
+        nextBtn.style.right = "";
+        return;
+      }
+      const btnW = 44;
+      const gap = 18;
+      const leftPos = Math.max(14, Math.round(stageW / 2 - dispW / 2 + _lbTx - gap - btnW));
+      const rightPos = Math.max(14, Math.round(stageW / 2 - dispW / 2 - _lbTx - gap - btnW));
+      const maxPos = Math.max(14, Math.round(stageW / 2 - btnW - gap));
+      prevBtn.style.left = `${Math.min(maxPos, leftPos)}px`;
+      nextBtn.style.right = `${Math.min(maxPos, rightPos)}px`;
+    };
     const applyLbTransform = () => {
       const nw = lbImg.naturalWidth || 0;
       const nh = lbImg.naturalHeight || 0;
@@ -290,6 +309,7 @@
           origBtn.classList.remove("is-active");
           origBtn.textContent = "原图 1:1";
         }
+        updateLbNavPositions(nw > 0 ? Math.round(nw * fitScale) : 0);
         return;
       }
 
@@ -311,19 +331,29 @@
         origBtn.classList.toggle("is-active", isOrig);
         origBtn.textContent = isOrig ? "适应窗口" : "原图 1:1";
       }
+      updateLbNavPositions(targetW);
     };
     _applyLbTransform = applyLbTransform;
     lbImg.addEventListener("load", () => {
       if (lightbox.classList.contains("is-open")) applyLbTransform();
     });
     window.addEventListener("resize", () => {
-      if (lightbox.classList.contains("is-open") && _lbZoomMode === "fit") applyLbTransform();
+      if (lightbox.classList.contains("is-open")) applyLbTransform();
     });
 
     lightbox.addEventListener("click", (e) => {
-      if (e.target === lightbox || e.target === lbStage || e.target.id === "nsc-lightbox-close") {
-        lightbox.classList.remove("is-open");
+      if (_lbMoved) {
+        _lbMoved = false;
+        return;
       }
+      if (e.target && e.target.id === "nsc-lightbox-close") {
+        lightbox.classList.remove("is-open");
+        return;
+      }
+      if (e.target === lbImg || (e.target && e.target.closest(".nsc-lightbox-btn, .nsc-lb-nav"))) {
+        return;
+      }
+      lightbox.classList.remove("is-open");
     });
     lbStage.addEventListener("wheel", (e) => {
       e.preventDefault();
@@ -368,11 +398,17 @@
       if (_lbDragging) {
         _lbDragging = false;
         applyLbTransform();
+        if (_lbMoved) {
+          setTimeout(() => { _lbMoved = false; }, 0);
+        }
       }
     });
     lbImg.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (_lbMoved) return;
+      if (_lbMoved) {
+        _lbMoved = false;
+        return;
+      }
       if (_lbZoomMode !== "fit") {
         _lbZoomMode = "fit";
         _lbTx = 0;
