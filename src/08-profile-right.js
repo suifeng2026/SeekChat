@@ -720,6 +720,7 @@
       status: "idle",
       targetName: "",
       rows: [],
+      source: "",
       error: "",
       retryAfter: 0,
       drawerOpen: false,
@@ -765,13 +766,13 @@
       }
 
       if (rulingState.status === "error" && rulingState.rows.length === 0) {
-        const msg =
-          rulingState.error === "rate_limited"
-            ? `查询冷却中 (${rulingState.retryAfter || 60}s)`
-            : "查询暂不可用";
+        const isLimited = rulingState.error === "rate_limited";
+        const msg = isLimited
+          ? `双源均限流中 (${rulingState.retryAfter || 60}s)`
+          : "双源均暂不可用";
         strip.innerHTML = `
           <div class="nsc-ruling-row">
-            <span class="nsc-ruling-status"><span class="nsc-ruling-prefix">管理记录</span>${escHtml(msg)}</span>
+            <span class="${isLimited ? "nsc-ruling-warn-text" : "nsc-ruling-status"}"><span class="nsc-ruling-prefix">管理记录</span>${escHtml(msg)}</span>
             <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-retry-btn">重试</button>
           </div>
         `;
@@ -785,7 +786,10 @@
       if (rows.length === 0) {
         strip.innerHTML = `
           <div class="nsc-ruling-row">
-            <span class="nsc-ruling-status"><span class="nsc-ruling-prefix">管理记录</span>无记录</span>
+            <div class="nsc-ruling-tags">
+              <span class="nsc-ruling-prefix">管理记录</span>
+              <span class="nsc-ruling-empty-ok">无管理记录</span>
+            </div>
             <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="重新请求最新记录">刷新</button>
           </div>
         `;
@@ -943,11 +947,13 @@
       if (res && res.ok) {
         rulingState.status = "ready";
         rulingState.rows = Array.isArray(res.rows) ? res.rows : [];
+        rulingState.source = res.source || "";
         rulingState.error = "";
       } else {
         rulingState.error = (res && res.error) || "query_failed";
         rulingState.retryAfter = (res && res.retryAfter) || 0;
         rulingState.rows = Array.isArray(res && res.rows) ? res.rows : [];
+        rulingState.source = (res && res.source) || "";
         rulingState.status = rulingState.rows.length > 0 ? "ready" : "error";
       }
       renderRulingStrip({ name: cleanName });

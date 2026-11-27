@@ -1451,33 +1451,270 @@
     };
   }
 
-  let _rulingCooldownUntil = 0;
+  const RULING_CAT_MAP = {
+    inside: "内板",
+    trade: "交易",
+    meaningless: "无意义",
+    promotion: "推广",
+    info: "情报",
+    tech: "技术",
+    dev: "Dev",
+    carpool: "拼车",
+    review: "测评",
+    daily: "日常",
+    expose: "曝光",
+    life: "生活",
+    sandbox: "沙盒",
+    "photo-share": "贴图",
+  };
+
+  function normalizeRulingsWebRecord(rec) {
+    const req = (rec && rec.request && typeof rec.request === "object") ? rec.request : {};
+    const actions = [];
+    const reasonParts = [];
+    let pointsDelta = null;
+    let muteDays = 0;
+    let moveTo = "";
+    let readLevel = null;
+
+    if (req.coin && typeof req.coin === "object") {
+      const diff = Number(req.coin.coin_diff);
+      if (Number.isFinite(diff)) {
+        pointsDelta = diff;
+        actions.push(`${diff > 0 ? "+" : ""}${diff}鸡腿`);
+      }
+      if (req.coin.reason) reasonParts.push(String(req.coin.reason).trim());
+    }
+    if (req.stardust && typeof req.stardust === "object") {
+      const sd = Number(req.stardust.stardust_diff);
+      if (Number.isFinite(sd)) actions.push(`${sd > 0 ? "+" : ""}${sd}星辰`);
+    }
+    if (req.postSummary && typeof req.postSummary === "object") {
+      if (req.postSummary.category) {
+        const rawCat = String(req.postSummary.category).trim();
+        moveTo = RULING_CAT_MAP[rawCat] || rawCat;
+        actions.push(`移动到 ${moveTo} 版块`);
+      }
+      if (req.postSummary.award === true) actions.push("设为推荐阅读");
+      if (req.postSummary.locked === true) actions.push("锁定修改");
+      else if (req.postSummary.locked === false) actions.push("解除锁定");
+      if (req.postSummary.rank !== undefined && req.postSummary.rank !== null) {
+        readLevel = req.postSummary.rank;
+        actions.push(`阅读等级 ${req.postSummary.rank}`);
+      }
+    }
+    if (req.suspend && typeof req.suspend === "object") {
+      const st = req.suspend.status;
+      const val = Number(req.suspend.value);
+      if (st === false) {
+        actions.push("解除禁言");
+      } else if (Number.isFinite(val) && val > 0) {
+        muteDays = val;
+        actions.push(`用户被禁言${val}天`);
+      } else if (st === true) {
+        actions.push("用户禁言");
+      }
+    }
+    if (req.hideComment && typeof req.hideComment === "object" && typeof req.hideComment.status === "boolean") {
+      actions.push(req.hideComment.status ? "隐藏内容" : "恢复内容");
+    }
+    if (req.pinComment !== undefined) {
+      const pinned = (req.pinComment && typeof req.pinComment === "object") ? req.pinComment.status : req.pinComment;
+      if (typeof pinned === "boolean") actions.push(pinned ? "置顶评论" : "取消置顶");
+    }
+    if (req.reason) reasonParts.push(String(req.reason).trim());
+    if (rec && rec.adminName) actions.push(String(rec.adminName).trim());
+
+    const utcMs = rec && rec.createdAt ? new Date(rec.createdAt).getTime() : 0;
+    const validMs = utcMs && !Number.isNaN(utcMs) ? utcMs : 0;
+    const pidNum = Number(rec && rec.postId);
+    const floorRaw = rec && rec.floorIndex;
+    const hasFloor = typeof floorRaw === "number" && floorRaw >= 0;
+    let postTarget = null;
+    if (Number.isFinite(pidNum) && pidNum > 0) {
+      const pidStr = String(pidNum);
+      const floorStr = hasFloor ? String(floorRaw) : "";
+      const pageNum = hasFloor && floorRaw > 0 ? String(Math.floor((floorRaw - 1) / 10) + 1) : "1";
+      postTarget = {
+        postId: pidStr,
+        page: pageNum,
+        floorId: floorStr,
+        href: `/post-${pidStr}-${pageNum}${floorStr !== "" ? `#${floorStr}` : ""}`,
+        label: floorStr !== "" ? `帖子 #${pidStr} · #${floorStr}` : `帖子 #${pidStr}`,
+      };
+    }
+
+    let kind = "other";
+    let kindLabel = "管理";
+    if ((pointsDelta !== null && pointsDelta < 0) || muteDays > 0 || (req.hideComment && req.hideComment.status === true)) {
+      kind = "punish";
+      kindLabel = "处罚";
+    } else if ((pointsDelta !== null && pointsDelta > 0) || (req.postSummary && req.postSummary.award === true)) {
+      kind = "reward";
+      kindLabel = "奖励";
+    }
+
+    return {
+      recordId: rec && rec.id ? String(rec.id) : "",
+      reasonText: reasonParts.filter(Boolean).join(" / ") || "-",
+      cleanActions: actions.join(" ") || "-",
+      pointsDelta,
+      muteDays,
+      moveTo,
+      readLevel,
+      postTarget,
+      utcMs: validMs,
+      beijingTime: formatUtcMsToBeijingStr(validMs),
+      relTime: formatRelativeFromMs(validMs),
+      kind,
+      kindLabel,
+    };
+  }
+
+  let _xxboxxCooldownUntil = 0;
+  let _rulingsWebCooldownUntil = 0;
+  let _rulingsWebSession = { csrfToken: "", cookiePair: "", ts: 0 };
   const _rulingInFlight = new Map();
   const RULING_CACHE_TTL_MS = 60 * 60 * 1000;
 
-  function gmFetchJson(url) {
+  function gmHttpRequest(opts) {
     return new Promise((resolve, reject) => {
       if (typeof GM_xmlhttpRequest !== "function") {
         reject(new Error("GM_xmlhttpRequest 不可用"));
         return;
       }
       GM_xmlhttpRequest({
-        method: "GET",
-        url,
-        timeout: 12000,
-        headers: { Accept: "application/json" },
-        onload: (res) => {
-          try {
-            const json = JSON.parse(res.responseText || "{}");
-            resolve(json);
-          } catch (err) {
-            reject(err);
-          }
-        },
+        method: opts.method || "GET",
+        url: opts.url,
+        headers: opts.headers || {},
+        data: opts.data,
+        timeout: opts.timeout || 12000,
+        anonymous: false,
+        onload: (res) => resolve(res),
         onerror: () => reject(new Error("网络请求失败")),
         ontimeout: () => reject(new Error("请求超时")),
       });
     });
+  }
+
+  function extractCookiePairFromHeaders(rawHeaders, cookieName) {
+    if (!rawHeaders) return "";
+    const lines = String(rawHeaders).split(/\r?\n/);
+    for (const ln of lines) {
+      const m = ln.match(new RegExp(`^set-cookie:\\s*(${cookieName}=[^;\\s]+)`, "i"));
+      if (m) return m[1];
+    }
+    return "";
+  }
+
+  async function ensureRulingsWebSession(forceRefresh = false) {
+    if (!forceRefresh && _rulingsWebSession.csrfToken && Date.now() - _rulingsWebSession.ts < 8 * 60 * 1000) {
+      return _rulingsWebSession;
+    }
+    const res = await gmHttpRequest({
+      method: "POST",
+      url: "https://nodeseek-rulings.898252.xyz/api/v1/search/session",
+      headers: {
+        Accept: "application/json",
+        "X-Requested-With": "NodeSeek-Rulings-Web",
+        Origin: "https://nodeseek-rulings.898252.xyz",
+        Referer: "https://nodeseek-rulings.898252.xyz/",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+      },
+    });
+    if (res.status === 429) {
+      throw Object.assign(new Error("rate_limited"), { retryAfter: 60 });
+    }
+    const json = JSON.parse(res.responseText || "{}");
+    if (res.status < 200 || res.status >= 300 || !json.success || !json.csrfToken) {
+      throw new Error(json.message || `HTTP ${res.status}`);
+    }
+    const cookiePair = extractCookiePairFromHeaders(res.responseHeaders, "ns_search_session");
+    _rulingsWebSession = {
+      csrfToken: String(json.csrfToken),
+      cookiePair,
+      ts: Date.now(),
+    };
+    return _rulingsWebSession;
+  }
+
+  async function fetchFromRulingsWeb(username) {
+    if (_rulingsWebCooldownUntil > Date.now()) {
+      return {
+        ok: false,
+        error: "rate_limited",
+        retryAfter: Math.max(1, Math.ceil((_rulingsWebCooldownUntil - Date.now()) / 1000)),
+      };
+    }
+    let sess = await ensureRulingsWebSession(false);
+    const doSearch = async (s) => {
+      const headers = {
+        Accept: "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+        "X-CSRF-Token": s.csrfToken,
+        "X-Requested-With": "NodeSeek-Rulings-Web",
+        Origin: "https://nodeseek-rulings.898252.xyz",
+        Referer: "https://nodeseek-rulings.898252.xyz/",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+      };
+      if (s.cookiePair) headers.Cookie = s.cookiePair;
+      return gmHttpRequest({
+        method: "POST",
+        url: "https://nodeseek-rulings.898252.xyz/api/v1/search",
+        headers,
+        data: JSON.stringify({ target: username }),
+      });
+    };
+
+    let res = await doSearch(sess);
+    if (res.status === 404 || res.status === 401 || res.status === 403) {
+      sess = await ensureRulingsWebSession(true);
+      res = await doSearch(sess);
+    }
+    if (res.status === 429) {
+      const retryAfter = 60;
+      _rulingsWebCooldownUntil = Date.now() + retryAfter * 1000;
+      return { ok: false, error: "rate_limited", retryAfter };
+    }
+    const json = JSON.parse(res.responseText || "{}");
+    if (res.status < 200 || res.status >= 300 || !json.success || !json.data) {
+      throw new Error(json.message || `HTTP ${res.status}`);
+    }
+    const list = Array.isArray(json.data.records) ? json.data.records : [];
+    return { ok: true, rows: list.map(normalizeRulingsWebRecord), source: "rulings-web" };
+  }
+
+  async function fetchFromXxboxxSeek(username) {
+    if (_xxboxxCooldownUntil > Date.now()) {
+      return {
+        ok: false,
+        error: "rate_limited",
+        retryAfter: Math.max(1, Math.ceil((_xxboxxCooldownUntil - Date.now()) / 1000)),
+      };
+    }
+    const viewer = getSeekViewerIdentity();
+    const url = `https://api.xxboxx.de/api/seek?username=${encodeURIComponent(username)}&limit=100000&viewer=${encodeURIComponent(viewer.username)}&viewer_uid=${encodeURIComponent(viewer.uid)}`;
+    let data = null;
+    try {
+      const resp = await fetch(url, { cache: "no-store" });
+      data = await resp.json();
+    } catch (_) {
+      const res = await gmHttpRequest({ method: "GET", url, headers: { Accept: "application/json" } });
+      data = JSON.parse(res.responseText || "{}");
+    }
+    if (!data || !data.ok) {
+      if (data && data.error === "rate_limited") {
+        const retryAfter = Math.max(5, Number(data.retry_after) || 60);
+        _xxboxxCooldownUntil = Date.now() + retryAfter * 1000;
+        return { ok: false, error: "rate_limited", retryAfter };
+      }
+      throw new Error((data && data.error) || "query_failed");
+    }
+    return { ok: true, rows: (Array.isArray(data.rows) ? data.rows : []).map(normalizeRulingRow), source: "xxboxx" };
   }
 
   async function fetchUserRulingRecords(username, force = false) {
@@ -1488,18 +1725,7 @@
     const cacheKey = cleanName.toLowerCase();
     const cached = state.rulingCache && state.rulingCache[cacheKey];
     if (!force && cached && Array.isArray(cached.rows) && Date.now() - (cached.ts || 0) < RULING_CACHE_TTL_MS) {
-      return { ok: true, rows: cached.rows, fromCache: true, ts: cached.ts };
-    }
-
-    if (_rulingCooldownUntil > Date.now()) {
-      const waitSec = Math.max(1, Math.ceil((_rulingCooldownUntil - Date.now()) / 1000));
-      return {
-        ok: false,
-        error: "rate_limited",
-        retryAfter: waitSec,
-        rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
-        fromCache: Boolean(cached && Array.isArray(cached.rows)),
-      };
+      return { ok: true, rows: cached.rows, fromCache: true, ts: cached.ts, source: cached.source || "cache" };
     }
 
     if (!force && _rulingInFlight.has(cacheKey)) {
@@ -1507,50 +1733,55 @@
     }
 
     const reqPromise = (async () => {
-      const viewer = getSeekViewerIdentity();
-      const url = `https://api.xxboxx.de/api/seek?username=${encodeURIComponent(cleanName)}&limit=100000&viewer=${encodeURIComponent(viewer.username)}&viewer_uid=${encodeURIComponent(viewer.uid)}`;
-      let data = null;
-      try {
-        const resp = await fetch(url, { cache: "no-store" });
-        data = await resp.json();
-      } catch (_) {
-        data = await gmFetchJson(url);
-      }
+      let lastErr = "query_failed";
+      let lastRetryAfter = 0;
 
-      if (!data || !data.ok) {
-        if (data && data.error === "rate_limited") {
-          const retryAfter = Math.max(5, Number(data.retry_after) || 60);
-          _rulingCooldownUntil = Date.now() + retryAfter * 1000;
-          return {
-            ok: false,
-            error: "rate_limited",
-            retryAfter,
-            rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
-            fromCache: Boolean(cached && Array.isArray(cached.rows)),
-          };
+      const trySource = async (fn) => {
+        try {
+          const res = await fn(cleanName);
+          if (res && res.ok) return res;
+          if (res && res.error === "rate_limited") {
+            lastErr = "rate_limited";
+            lastRetryAfter = Math.max(lastRetryAfter, Number(res.retryAfter) || 60);
+          } else if (res && res.error) {
+            lastErr = res.error;
+          }
+        } catch (err) {
+          if (err && err.message === "rate_limited") {
+            lastErr = "rate_limited";
+            lastRetryAfter = Math.max(lastRetryAfter, Number(err.retryAfter) || 60);
+          } else {
+            lastErr = (err && err.message) || "query_failed";
+          }
         }
-        throw new Error((data && data.error) || "query_failed");
+        return null;
+      };
+
+      const res = (await trySource(fetchFromXxboxxSeek)) || (await trySource(fetchFromRulingsWeb));
+      if (res && res.ok) {
+        state.rulingCache[cacheKey] = {
+          ts: Date.now(),
+          username: cleanName,
+          source: res.source || "xxboxx",
+          rows: res.rows,
+        };
+        pruneTimedCache(state.rulingCache, 180, 120);
+        scheduleSaveJson(LS.RULING_CACHE, state.rulingCache);
+        return { ok: true, rows: res.rows, fromCache: false, ts: Date.now(), source: res.source };
       }
 
-      const normalized = (Array.isArray(data.rows) ? data.rows : []).map(normalizeRulingRow);
-      state.rulingCache[cacheKey] = {
-        ts: Date.now(),
-        username: cleanName,
-        rows: normalized,
-      };
-      pruneTimedCache(state.rulingCache, 180, 120);
-      scheduleSaveJson(LS.RULING_CACHE, state.rulingCache);
-      return { ok: true, rows: normalized, fromCache: false, ts: Date.now() };
-    })()
-      .catch((err) => ({
+      const staleRows = cached && Array.isArray(cached.rows) ? cached.rows : [];
+      return {
         ok: false,
-        error: err && err.message ? err.message : "query_failed",
-        rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
-        fromCache: Boolean(cached && Array.isArray(cached.rows)),
-      }))
-      .finally(() => {
-        _rulingInFlight.delete(cacheKey);
-      });
+        error: lastErr,
+        retryAfter: lastRetryAfter,
+        rows: staleRows,
+        fromCache: staleRows.length > 0,
+        source: (cached && cached.source) || "",
+      };
+    })().finally(() => {
+      _rulingInFlight.delete(cacheKey);
+    });
 
     _rulingInFlight.set(cacheKey, reqPromise);
     return reqPromise;

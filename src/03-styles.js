@@ -2205,6 +2205,18 @@
       }
       .nsc-ruling-link-btn:hover { background: rgba(128, 128, 128, 0.12); color: var(--nsc-text); }
       .nsc-ruling-status { font-size: 11.5px; color: var(--nsc-muted); }
+      .nsc-ruling-empty-ok {
+        display: inline-block; padding: 1px 6px; border-radius: 4px;
+        font-size: 11.5px; font-weight: 600;
+        color: #15803d; background: rgba(21, 128, 61, 0.10);
+      }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-empty-ok {
+        color: #30d158; background: rgba(48, 209, 88, 0.14);
+      }
+      .nsc-ruling-warn-text {
+        font-size: 11.5px; font-weight: 600; color: #c25900;
+      }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-warn-text { color: #ff9f0a; }
       .nsc-ruling-hover-tip {
         position: absolute; left: 0; right: 0; top: calc(100% + 5px); z-index: 30;
         background: var(--nsc-bg-card); color: var(--nsc-text);
