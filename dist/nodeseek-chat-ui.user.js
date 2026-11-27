@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.7
+// @version      7.9.8
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -1396,25 +1396,29 @@
       #nsc-lightbox.is-open { display: flex; }
       .nsc-lightbox-stage {
         position: relative; display: flex; align-items: center; justify-content: center;
-        width: 92vw; height: 82vh; overflow: hidden;
+        width: 96vw; height: 82vh; overflow: hidden;
+      }
+      .nsc-lb-frame {
+        position: relative; display: inline-flex; align-items: center; justify-content: center;
+        max-width: calc(94vw - 128px); max-height: 82vh;
       }
       #nsc-lightbox img {
-        max-width: 100%; max-height: 100%; object-fit: contain;
+        max-width: calc(94vw - 128px); max-height: 82vh; object-fit: contain;
         border-radius: 10px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
-        transform-origin: center center; will-change: transform;
+        transform-origin: center center; will-change: transform; display: block;
       }
       #nsc-lightbox img.is-pannable { cursor: grab; }
       #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
       .nsc-lb-nav {
-        position: fixed; top: 50%; transform: translateY(-50%); z-index: 10002;
-        width: 46px; height: 46px; border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.26); background: rgba(20,22,28,0.62);
+        position: absolute; top: 50%; transform: translateY(-50%); z-index: 10002;
+        width: 44px; height: 44px; border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.28); background: rgba(20,22,28,0.68);
         color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
         transition: background 0.14s ease, transform 0.14s ease;
       }
-      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.75); transform: translateY(-50%) scale(1.06); }
-      .nsc-lb-nav.prev { left: 22px; }
-      .nsc-lb-nav.next { right: 22px; }
+      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.82); transform: translateY(-50%) scale(1.06); }
+      .nsc-lb-nav.prev { right: calc(100% + 14px); left: auto; }
+      .nsc-lb-nav.next { left: calc(100% + 14px); right: auto; }
       .nsc-lb-nav:disabled { opacity: 0.22; cursor: default; }
       .nsc-lb-top-badge {
         position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10002;
@@ -2116,11 +2120,13 @@
     lightbox.id = "nsc-lightbox";
     lightbox.innerHTML = `
       <div id="nsc-lb-top-badge" class="nsc-lb-top-badge"></div>
-      <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
       <div class="nsc-lightbox-stage" id="nsc-lb-stage">
-        <img id="nsc-lightbox-img" src="" alt="原图" />
+        <div class="nsc-lb-frame" id="nsc-lb-frame">
+          <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
+          <img id="nsc-lightbox-img" src="" alt="原图" />
+          <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
+        </div>
       </div>
-      <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       <div class="nsc-lightbox-bar">
         <button type="button" id="nsc-lb-bar-prev" class="nsc-lightbox-btn">‹ 上一张</button>
         <span id="nsc-lb-count" class="nsc-lightbox-count"></span>

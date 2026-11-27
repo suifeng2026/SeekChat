@@ -863,25 +863,29 @@
       #nsc-lightbox.is-open { display: flex; }
       .nsc-lightbox-stage {
         position: relative; display: flex; align-items: center; justify-content: center;
-        width: 92vw; height: 82vh; overflow: hidden;
+        width: 96vw; height: 82vh; overflow: hidden;
+      }
+      .nsc-lb-frame {
+        position: relative; display: inline-flex; align-items: center; justify-content: center;
+        max-width: calc(94vw - 128px); max-height: 82vh;
       }
       #nsc-lightbox img {
-        max-width: 100%; max-height: 100%; object-fit: contain;
+        max-width: calc(94vw - 128px); max-height: 82vh; object-fit: contain;
         border-radius: 10px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
-        transform-origin: center center; will-change: transform;
+        transform-origin: center center; will-change: transform; display: block;
       }
       #nsc-lightbox img.is-pannable { cursor: grab; }
       #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
       .nsc-lb-nav {
-        position: fixed; top: 50%; transform: translateY(-50%); z-index: 10002;
-        width: 46px; height: 46px; border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.26); background: rgba(20,22,28,0.62);
+        position: absolute; top: 50%; transform: translateY(-50%); z-index: 10002;
+        width: 44px; height: 44px; border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.28); background: rgba(20,22,28,0.68);
         color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
         transition: background 0.14s ease, transform 0.14s ease;
       }
-      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.75); transform: translateY(-50%) scale(1.06); }
-      .nsc-lb-nav.prev { left: 22px; }
-      .nsc-lb-nav.next { right: 22px; }
+      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.82); transform: translateY(-50%) scale(1.06); }
+      .nsc-lb-nav.prev { right: calc(100% + 14px); left: auto; }
+      .nsc-lb-nav.next { left: calc(100% + 14px); right: auto; }
       .nsc-lb-nav:disabled { opacity: 0.22; cursor: default; }
       .nsc-lb-top-badge {
         position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10002;

@@ -118,11 +118,13 @@
     lightbox.id = "nsc-lightbox";
     lightbox.innerHTML = `
       <div id="nsc-lb-top-badge" class="nsc-lb-top-badge"></div>
-      <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
       <div class="nsc-lightbox-stage" id="nsc-lb-stage">
-        <img id="nsc-lightbox-img" src="" alt="原图" />
+        <div class="nsc-lb-frame" id="nsc-lb-frame">
+          <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
+          <img id="nsc-lightbox-img" src="" alt="原图" />
+          <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
+        </div>
       </div>
-      <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       <div class="nsc-lightbox-bar">
         <button type="button" id="nsc-lb-bar-prev" class="nsc-lightbox-btn">‹ 上一张</button>
         <span id="nsc-lb-count" class="nsc-lightbox-count"></span>
