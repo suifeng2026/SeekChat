@@ -1271,7 +1271,17 @@
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > *:hover {
         background: var(--nsc-accent-soft) !important;
       }
-      /* 阅读区回复框未聚焦/无内容时默认紧凑模式，聚焦或输入时恢复 6 行高度 */
+      /* 阅读区回复框多档高度（小/中/大）与自动紧凑态 */
+      #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-u-preview {
+        height: 78px !important; min-height: 78px !important; max-height: 78px !important;
+      }
+      #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-u-preview {
+        height: 216px !important; min-height: 216px !important; max-height: 216px !important;
+      }
       #nsc-composer-dock.is-compact .mde-toolbar,
       #nsc-composer-dock.is-compact .nsc-mde-toolbar,
       #nsc-composer-dock.is-compact .topic-select,
@@ -1281,6 +1291,33 @@
       #nsc-composer-dock.is-compact .md-editor:not(.fullscreen) .CodeMirror,
       #nsc-composer-dock.is-compact .nsc-fallback-textarea {
         height: 36px !important; min-height: 36px !important; max-height: 36px !important;
+      }
+      .nsc-composer-ctrl-wrap {
+        display: inline-flex; align-items: center; gap: 4px; margin-left: auto; margin-right: 4px; flex: 0 0 auto;
+      }
+      .nsc-csize-seg {
+        display: inline-flex; align-items: center; gap: 1px; padding: 1px;
+        border-radius: 5px; background: var(--nsc-hover); border: 1px solid var(--nsc-border);
+      }
+      .nsc-csize-btn {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 10.5px; font-weight: 600; padding: 1px 5px; border-radius: 4px; cursor: pointer;
+        line-height: 1.3;
+      }
+      .nsc-csize-btn:hover { color: var(--nsc-text); }
+      .nsc-csize-btn.is-active {
+        background: var(--nsc-bg-card); color: var(--nsc-accent);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+      }
+      .nsc-cpin-btn {
+        width: 22px; height: 20px; padding: 0; border-radius: 5px;
+        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+      }
+      .nsc-cpin-btn svg { width: 12.5px; height: 12.5px; }
+      .nsc-cpin-btn:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-cpin-btn.is-pinned {
+        background: var(--nsc-accent-soft); color: var(--nsc-accent); border-color: rgba(0, 122, 255, 0.25);
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-mde-sep { width: 1px; height: 14px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px; }
@@ -2407,10 +2444,10 @@
         position: relative;
       }
       .nsc-ruling-row {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; flex-wrap: nowrap;
       }
       .nsc-ruling-tags {
-        display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0;
+        display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; flex: 1 1 auto;
       }
       .nsc-ruling-prefix { font-size: 11px; color: var(--nsc-muted); font-weight: 600; margin-right: 2px; }
       .nsc-ruling-tag {
@@ -2428,7 +2465,7 @@
       body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-warn { color: #ff9f0a; }
       body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-indigo { color: #818cf8; }
       body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-success { color: #30d158; }
-      .nsc-ruling-ops { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+      .nsc-ruling-ops { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; white-space: nowrap; padding-top: 1px; }
       .nsc-ruling-link-btn {
         border: none; background: transparent; color: var(--nsc-muted);
         font-size: 11px; font-weight: 600; padding: 2px 5px; border-radius: 4px; cursor: pointer;

@@ -556,21 +556,21 @@
 
     const msgsEl = document.getElementById("nsc-chat-messages");
     let target =
-      (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
+      (msgsEl && (msgsEl.querySelector(`[data-floor="${targetId}"]`) || msgsEl.querySelector(`[data-comment-id="${targetId}"]`))) ||
       document.getElementById(`nsc-floor-${targetId}`);
 
     if (!target && state.currentRoom) {
       const room = state.currentRoom;
       const jumpSeq = state.chatViewSeq;
-      const expectedPage = Math.max(1, Math.ceil(Number(targetId) / 10));
+      const expectedPage = Number(targetId) < 100000 ? Math.max(1, Math.ceil(Number(targetId) / 10)) : 0;
       let foundDuringLoad = false;
 
-      if (!state.loadedPages.has(expectedPage)) {
+      if (expectedPage > 0 && !state.loadedPages.has(expectedPage)) {
         try {
           const doc = await fetchPostPageDoc(`/post-${room.pid}-${expectedPage}`);
           if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
           mergePostPageComments(room, doc, expectedPage);
-          foundDuringLoad = room.flatComments.some((c) => String(c.floorId) === targetId);
+          foundDuringLoad = room.flatComments.some((c) => String(c.floorId) === targetId || String(c.commentId || "") === targetId);
         } catch (_) {}
       }
 
@@ -582,7 +582,7 @@
             const doc = await fetchPostPageDoc(p.href);
             if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
             mergePostPageComments(room, doc, p.num);
-            if (room.flatComments.some((c) => String(c.floorId) === targetId)) break;
+            if (room.flatComments.some((c) => String(c.floorId) === targetId || String(c.commentId || "") === targetId)) break;
           } catch (_) {}
         }
       }
@@ -593,7 +593,7 @@
       if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
       renderChatRoom(room, true);
       target =
-        (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
+        (msgsEl && (msgsEl.querySelector(`[data-floor="${targetId}"]`) || msgsEl.querySelector(`[data-comment-id="${targetId}"]`))) ||
         document.getElementById(`nsc-floor-${targetId}`);
     }
 
@@ -1553,6 +1553,7 @@
       (hasOpInThread ? " nsc-has-op" : "");
     wrap.id = `nsc-floor-${obj.floorId}`;
     wrap.dataset.floor = obj.floorId;
+    if (obj.commentId) wrap.dataset.commentId = String(obj.commentId);
     wrap.dataset.author = obj.author;
     wrap.dataset.uid = obj.uid || "";
 
@@ -1627,6 +1628,7 @@
           (chIsSelf && chIsRight ? " is-self-thread" : "");
         ti.id = `nsc-floor-${ch.floorId}`;
         ti.dataset.floor = ch.floorId;
+        if (ch.commentId) ti.dataset.commentId = String(ch.commentId);
         ti.dataset.author = ch.author;
         ti.dataset.uid = ch.uid || "";
         ti.innerHTML = `

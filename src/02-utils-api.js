@@ -1344,13 +1344,16 @@
     const page = m[2] && Number(m[2]) > 0 ? m[2] : "1";
     const floorRaw = m[3];
     const floorId = floorRaw !== undefined && Number(floorRaw) >= 0 ? String(floorRaw) : "";
+    const isCommentRef = floorId !== "" && Number(floorId) >= 100000;
     const href = `/post-${pid}-${page}${floorId !== "" ? `#${floorId}` : ""}`;
     return {
       postId: pid,
       page,
       floorId,
       href,
-      label: floorId !== "" ? `帖子 #${pid} · #${floorId}` : `帖子 #${pid}`,
+      label: isCommentRef
+        ? `帖子 #${pid} · 评论 #${floorId}`
+        : (floorId !== "" ? `帖子 #${pid} · #${floorId}` : `帖子 #${pid}`),
     };
   }
 

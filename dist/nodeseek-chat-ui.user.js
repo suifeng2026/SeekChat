@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.32
+// @version      7.22.33
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -67,6 +67,7 @@
     RULING_CACHE: "nsc_v7_ruling_cache",
     SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
     PANE_COLLAPSED: "nsc_v7_pane_collapsed",
+    COMPOSER_PREFS: "nsc_v7_composer_prefs",
   };
 
   function isBrowsePath(pathname) {
@@ -319,6 +320,7 @@
     workbenchSection: "theme",
     paneSkins: loadJson(LS.PANE_SKINS, {}),
     paneCollapsed: loadJson(LS.PANE_COLLAPSED, { nav: false, list: false, right: false }),
+    composerPrefs: loadJson(LS.COMPOSER_PREFS, { pinned: false, size: "md" }),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
@@ -342,7 +344,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.32",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.33",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -1712,13 +1714,16 @@
     const page = m[2] && Number(m[2]) > 0 ? m[2] : "1";
     const floorRaw = m[3];
     const floorId = floorRaw !== undefined && Number(floorRaw) >= 0 ? String(floorRaw) : "";
+    const isCommentRef = floorId !== "" && Number(floorId) >= 100000;
     const href = `/post-${pid}-${page}${floorId !== "" ? `#${floorId}` : ""}`;
     return {
       postId: pid,
       page,
       floorId,
       href,
-      label: floorId !== "" ? `帖子 #${pid} · #${floorId}` : `帖子 #${pid}`,
+      label: isCommentRef
+        ? `帖子 #${pid} · 评论 #${floorId}`
+        : (floorId !== "" ? `帖子 #${pid} · #${floorId}` : `帖子 #${pid}`),
     };
   }
 
@@ -3440,7 +3445,17 @@
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > *:hover {
         background: var(--nsc-accent-soft) !important;
       }
-      /* 阅读区回复框未聚焦/无内容时默认紧凑模式，聚焦或输入时恢复 6 行高度 */
+      /* 阅读区回复框多档高度（小/中/大）与自动紧凑态 */
+      #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="sm"]:not(.is-compact) .nsc-u-preview {
+        height: 78px !important; min-height: 78px !important; max-height: 78px !important;
+      }
+      #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-fallback-textarea,
+      #nsc-composer-dock[data-nsc-csize="lg"]:not(.is-compact) .nsc-u-preview {
+        height: 216px !important; min-height: 216px !important; max-height: 216px !important;
+      }
       #nsc-composer-dock.is-compact .mde-toolbar,
       #nsc-composer-dock.is-compact .nsc-mde-toolbar,
       #nsc-composer-dock.is-compact .topic-select,
@@ -3450,6 +3465,33 @@
       #nsc-composer-dock.is-compact .md-editor:not(.fullscreen) .CodeMirror,
       #nsc-composer-dock.is-compact .nsc-fallback-textarea {
         height: 36px !important; min-height: 36px !important; max-height: 36px !important;
+      }
+      .nsc-composer-ctrl-wrap {
+        display: inline-flex; align-items: center; gap: 4px; margin-left: auto; margin-right: 4px; flex: 0 0 auto;
+      }
+      .nsc-csize-seg {
+        display: inline-flex; align-items: center; gap: 1px; padding: 1px;
+        border-radius: 5px; background: var(--nsc-hover); border: 1px solid var(--nsc-border);
+      }
+      .nsc-csize-btn {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 10.5px; font-weight: 600; padding: 1px 5px; border-radius: 4px; cursor: pointer;
+        line-height: 1.3;
+      }
+      .nsc-csize-btn:hover { color: var(--nsc-text); }
+      .nsc-csize-btn.is-active {
+        background: var(--nsc-bg-card); color: var(--nsc-accent);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+      }
+      .nsc-cpin-btn {
+        width: 22px; height: 20px; padding: 0; border-radius: 5px;
+        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+      }
+      .nsc-cpin-btn svg { width: 12.5px; height: 12.5px; }
+      .nsc-cpin-btn:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-cpin-btn.is-pinned {
+        background: var(--nsc-accent-soft); color: var(--nsc-accent); border-color: rgba(0, 122, 255, 0.25);
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-mde-sep { width: 1px; height: 14px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px; }
@@ -4576,10 +4618,10 @@
         position: relative;
       }
       .nsc-ruling-row {
-        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; flex-wrap: nowrap;
       }
       .nsc-ruling-tags {
-        display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0;
+        display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; flex: 1 1 auto;
       }
       .nsc-ruling-prefix { font-size: 11px; color: var(--nsc-muted); font-weight: 600; margin-right: 2px; }
       .nsc-ruling-tag {
@@ -4597,7 +4639,7 @@
       body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-warn { color: #ff9f0a; }
       body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-indigo { color: #818cf8; }
       body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-success { color: #30d158; }
-      .nsc-ruling-ops { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+      .nsc-ruling-ops { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; white-space: nowrap; padding-top: 1px; }
       .nsc-ruling-link-btn {
         border: none; background: transparent; color: var(--nsc-muted);
         font-size: 11px; font-weight: 600; padding: 2px 5px; border-radius: 4px; cursor: pointer;
@@ -5536,20 +5578,31 @@
     const raw = String(rawTpl || "");
     const markerIdx = raw.indexOf("@@CURSOR@@");
     const clean = raw.replace("@@CURSOR@@", "");
-    const cur = cm.getCursor();
-    const lineTxt = cm.getLine(cur.line) || "";
+    let cur = { line: 0, ch: 0 };
+    let lineTxt = "";
+    try {
+      cur = cm.getCursor() || { line: 0, ch: 0 };
+      lineTxt = cm.getLine(cur.line) || "";
+    } catch (_) {}
     const needLeadNl = raw.includes("\n") && cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
     const full = `${needLeadNl}${clean}`;
-    cm.operation(() => {
-      cm.replaceSelection(full);
-      if (markerIdx >= 0) {
-        const beforeCursor = full.slice(0, needLeadNl.length + markerIdx);
-        const lines = beforeCursor.split("\n");
-        const targetLine = cur.line + lines.length - 1;
-        const targetCh = lines.length === 1 ? cur.ch + lines[0].length : lines[lines.length - 1].length;
-        cm.setCursor({ line: targetLine, ch: targetCh });
+    try {
+      if (typeof cm.focus === "function") cm.focus();
+    } catch (_) {}
+    cm.replaceSelection(full);
+    if (markerIdx >= 0) {
+      const beforeCursor = full.slice(0, needLeadNl.length + markerIdx);
+      const lines = beforeCursor.split("\n");
+      const targetLine = (cur.line || 0) + lines.length - 1;
+      const targetCh = lines.length === 1 ? (cur.ch || 0) + lines[0].length : lines[lines.length - 1].length;
+      try {
+        cm.setCursor(targetLine, targetCh);
+      } catch (_) {
+        try {
+          if (typeof cm.getDoc === "function") cm.getDoc().setCursor(targetLine, targetCh);
+        } catch (_) {}
       }
-    });
+    }
     if (typeof cm.refresh === "function") cm.refresh();
     const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
     if (inputField && typeof inputField.focus === "function") inputField.focus({ preventScroll: true });
@@ -5855,17 +5908,28 @@
 
     const dockEl = shell.querySelector("#nsc-composer-dock");
     if (dockEl) {
-      dockEl.classList.add("is-compact");
-      dockEl.addEventListener("pointerdown", () => syncComposerCompactState(true));
-      dockEl.addEventListener("focusin", () => syncComposerCompactState(true));
-      dockEl.addEventListener("focusout", () => {
-        setTimeout(() => syncComposerCompactState(false), 130);
+      applyComposerPrefsToDom();
+      dockEl.addEventListener("pointerdown", () => {
+        _composerEngaged = true;
+        syncComposerCompactState(true);
+      }, true);
+      dockEl.addEventListener("focusin", () => {
+        _composerEngaged = true;
+        syncComposerCompactState(true);
       });
       document.addEventListener("pointerdown", (e) => {
         if (!dockEl.isConnected || dockEl.style.display === "none") return;
         const t = e.target;
-        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-ni-backdrop"))) return;
-        setTimeout(() => syncComposerCompactState(false), 60);
+        if (t && t.closest && (
+          t.closest("#nsc-composer-dock") ||
+          t.closest("#nsc-ni-backdrop") ||
+          t.closest("#nsc-lightbox") ||
+          t.closest("#nsc-jump-backdrop")
+        )) {
+          return;
+        }
+        _composerEngaged = false;
+        syncComposerCompactState(false);
       });
     }
 
@@ -6648,11 +6712,72 @@
     return ta ? ta.value : "";
   }
 
+  let _composerEngaged = false;
+
+  function applyComposerPrefsToDom() {
+    const prefs = state.composerPrefs || { pinned: false, size: "md" };
+    const size = ["sm", "md", "lg"].includes(prefs.size) ? prefs.size : "md";
+    const pinned = Boolean(prefs.pinned);
+    const dock = document.getElementById("nsc-composer-dock");
+    if (dock) {
+      dock.dataset.nscCsize = size;
+      dock.querySelectorAll(".nsc-csize-btn").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.csize === size);
+      });
+      dock.querySelectorAll(".nsc-cpin-btn").forEach((b) => {
+        b.classList.toggle("is-pinned", pinned);
+        b.title = pinned ? "已固定展开不自动收缩（点击取消固定）" : "自动收缩模式（点击钉住固定展开）";
+      });
+      const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
+      const cm = nat ? getNativeCodeMirror(nat) : null;
+      if (cm && typeof cm.refresh === "function") requestAnimationFrame(() => cm.refresh());
+    }
+    syncComposerCompactState(false);
+  }
+
+  function createComposerCtrlWrap() {
+    const wrap = document.createElement("div");
+    wrap.className = "nsc-composer-ctrl-wrap";
+    wrap.innerHTML = `
+      <div class="nsc-csize-seg" title="调节回复框高度">
+        <button type="button" class="nsc-csize-btn" data-csize="sm">小</button>
+        <button type="button" class="nsc-csize-btn" data-csize="md">中</button>
+        <button type="button" class="nsc-csize-btn" data-csize="lg">大</button>
+      </div>
+      <button type="button" class="nsc-cpin-btn" title="固定展开不自动收缩">${ICONS.pin}</button>
+    `;
+    wrap.addEventListener("mousedown", (e) => e.preventDefault());
+    wrap.querySelectorAll(".nsc-csize-btn").forEach((b) => {
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _composerEngaged = true;
+        state.composerPrefs = { ...(state.composerPrefs || {}), size: b.dataset.csize || "md" };
+        saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
+        applyComposerPrefsToDom();
+        syncComposerCompactState(true);
+      });
+    });
+    wrap.querySelector(".nsc-cpin-btn").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextPinned = !(state.composerPrefs && state.composerPrefs.pinned);
+      state.composerPrefs = { ...(state.composerPrefs || {}), pinned: nextPinned };
+      saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
+      if (nextPinned) _composerEngaged = true;
+      applyComposerPrefsToDom();
+    });
+    return wrap;
+  }
+
   function syncComposerCompactState(forceExpand = false) {
     const dock = document.getElementById("nsc-composer-dock");
     if (!dock) return;
     const prevCompact = dock.classList.contains("is-compact");
-    if (forceExpand) {
+    const prefs = state.composerPrefs || { pinned: false, size: "md" };
+    const niOpen = Boolean(document.getElementById("nsc-ni-backdrop")?.classList.contains("is-open"));
+    if (forceExpand) _composerEngaged = true;
+    if (forceExpand || prefs.pinned || niOpen) {
       dock.classList.remove("is-compact");
       if (prevCompact) {
         const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
@@ -6695,10 +6820,12 @@
       }
     }
 
-    let focused = false;
-    try {
-      focused = dock.matches(":focus-within");
-    } catch (_) {}
+    let focused = _composerEngaged;
+    if (!focused) {
+      try {
+        focused = dock.matches(":focus-within");
+      } catch (_) {}
+    }
     if (!focused && nat && nat.style.display !== "none") {
       const cm = getNativeCodeMirror(nat);
       if (cm && typeof cm.hasFocus === "function" && cm.hasFocus()) focused = true;
@@ -6816,6 +6943,8 @@
         _composerDrafts.delete(`pm:${peer.uid}`);
         if (isSameCtx()) {
           if (clearFn) clearFn();
+          _composerEngaged = false;
+          syncComposerCompactState(false);
           if (setStatusFn) setStatusFn("私信发送成功");
         }
         if (seq === state.chatViewSeq && state.activePmPeer && state.activePmPeer.uid === peer.uid) {
@@ -6844,6 +6973,8 @@
       _composerDrafts.delete(`post:${pid}`);
       if (isSameCtx()) {
         if (clearFn) clearFn();
+        _composerEngaged = false;
+        syncComposerCompactState(false);
         if (setStatusFn) setStatusFn("评论已发布，正在同步楼层...");
       }
       if (!state.activePmPeer && room && room.pid === pid && state.currentPostId === pid) {
@@ -6981,6 +7112,13 @@
     const sdForm = box.querySelector(".nsc-u-sd-form");
     const statusEl = box.querySelector(`#${prefix}-unified-status`);
     const sendBtn = box.querySelector(`#${prefix}-unified-send`);
+    if (prefix === "nsc") {
+      const topActs = box.querySelector(".nsc-u-top-acts");
+      if (topActs) {
+        topActs.insertBefore(createComposerCtrlWrap(), topActs.firstChild);
+        applyComposerPrefsToDom();
+      }
+    }
 
     const undoStack = [""];
     const redoStack = [];
@@ -7333,8 +7471,26 @@
 
   function ensureNativeToolbarEnhanced(editor) {
     if (!editor) return;
+    const header = editor.querySelector(".tab-select.window_header");
+    if (header && editor.closest("#nsc-composer-dock") && !header.querySelector(".nsc-composer-ctrl-wrap")) {
+      const ctrlWrap = createComposerCtrlWrap();
+      const firstTopBtn = header.querySelector(".editor-top-button");
+      if (firstTopBtn) header.insertBefore(ctrlWrap, firstTopBtn);
+      else header.appendChild(ctrlWrap);
+      applyComposerPrefsToDom();
+    }
     const mdeToolbar = editor.querySelector(".mde-toolbar");
     if (mdeToolbar && !mdeToolbar.querySelector(".nsc-mde-extra-sep")) {
+      if (!mdeToolbar.dataset.nscNoBlur) {
+        mdeToolbar.dataset.nscNoBlur = "1";
+        mdeToolbar.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          if (editor.closest("#nsc-composer-dock")) {
+            _composerEngaged = true;
+            syncComposerCompactState(true);
+          }
+        });
+      }
       const sep1 = document.createElement("div");
       sep1.className = "sep nsc-mde-extra-sep";
       mdeToolbar.appendChild(sep1);
@@ -7344,13 +7500,17 @@
         b.dataset.snip = snip.id;
         b.title = snip.title;
         b.innerHTML = snip.icon();
+        b.addEventListener("mousedown", (e) => e.preventDefault());
         b.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (editor.closest("#nsc-composer-dock")) {
+            _composerEngaged = true;
+            syncComposerCompactState(true);
+          }
           ensureNativeEditorWriteTab(editor);
           const cm = getNativeCodeMirror(editor);
           if (cm) insertSnippetIntoNativeCm(cm, snip.tpl);
-          if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
         });
         mdeToolbar.appendChild(b);
       }
@@ -7362,6 +7522,7 @@
       clearBtn.className = "toolbar-item";
       clearBtn.title = "清空内容";
       clearBtn.innerHTML = ICONS.eraser;
+      clearBtn.addEventListener("mousedown", (e) => e.preventDefault());
       clearBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -7374,9 +7535,14 @@
       niBtn.title = "NodeImage 图床上传与管理";
       niBtn.style.marginLeft = "auto";
       niBtn.innerHTML = `${ICONS.imgHost}<span class="nsc-ni-dot"></span>`;
+      niBtn.addEventListener("mousedown", (e) => e.preventDefault());
       niBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (editor.closest("#nsc-composer-dock")) {
+          _composerEngaged = true;
+          syncComposerCompactState(true);
+        }
         const mode = editor.closest("#nsc-newpost-backdrop") ? "newpost" : (state.activePmPeer ? "pm" : "chat");
         openNodeImageModal(mode);
       });
@@ -7515,13 +7681,14 @@
     const cmInst = getNativeCodeMirror(editor);
     if (cmInst && typeof cmInst.on === "function") {
       cmInst.on("focus", () => {
-        if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
-      });
-      cmInst.on("blur", () => {
-        if (editor.closest("#nsc-composer-dock")) setTimeout(() => syncComposerCompactState(false), 130);
+        if (editor.closest("#nsc-composer-dock")) {
+          _composerEngaged = true;
+          syncComposerCompactState(true);
+        }
       });
       cmInst.on("change", () => {
         if (editor.closest("#nsc-composer-dock") && cmInst.getValue().trim()) {
+          _composerEngaged = true;
           syncComposerCompactState(true);
         }
       });
@@ -11016,21 +11183,21 @@
 
     const msgsEl = document.getElementById("nsc-chat-messages");
     let target =
-      (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
+      (msgsEl && (msgsEl.querySelector(`[data-floor="${targetId}"]`) || msgsEl.querySelector(`[data-comment-id="${targetId}"]`))) ||
       document.getElementById(`nsc-floor-${targetId}`);
 
     if (!target && state.currentRoom) {
       const room = state.currentRoom;
       const jumpSeq = state.chatViewSeq;
-      const expectedPage = Math.max(1, Math.ceil(Number(targetId) / 10));
+      const expectedPage = Number(targetId) < 100000 ? Math.max(1, Math.ceil(Number(targetId) / 10)) : 0;
       let foundDuringLoad = false;
 
-      if (!state.loadedPages.has(expectedPage)) {
+      if (expectedPage > 0 && !state.loadedPages.has(expectedPage)) {
         try {
           const doc = await fetchPostPageDoc(`/post-${room.pid}-${expectedPage}`);
           if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
           mergePostPageComments(room, doc, expectedPage);
-          foundDuringLoad = room.flatComments.some((c) => String(c.floorId) === targetId);
+          foundDuringLoad = room.flatComments.some((c) => String(c.floorId) === targetId || String(c.commentId || "") === targetId);
         } catch (_) {}
       }
 
@@ -11042,7 +11209,7 @@
             const doc = await fetchPostPageDoc(p.href);
             if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
             mergePostPageComments(room, doc, p.num);
-            if (room.flatComments.some((c) => String(c.floorId) === targetId)) break;
+            if (room.flatComments.some((c) => String(c.floorId) === targetId || String(c.commentId || "") === targetId)) break;
           } catch (_) {}
         }
       }
@@ -11053,7 +11220,7 @@
       if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
       renderChatRoom(room, true);
       target =
-        (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
+        (msgsEl && (msgsEl.querySelector(`[data-floor="${targetId}"]`) || msgsEl.querySelector(`[data-comment-id="${targetId}"]`))) ||
         document.getElementById(`nsc-floor-${targetId}`);
     }
 
@@ -12013,6 +12180,7 @@
       (hasOpInThread ? " nsc-has-op" : "");
     wrap.id = `nsc-floor-${obj.floorId}`;
     wrap.dataset.floor = obj.floorId;
+    if (obj.commentId) wrap.dataset.commentId = String(obj.commentId);
     wrap.dataset.author = obj.author;
     wrap.dataset.uid = obj.uid || "";
 
@@ -12087,6 +12255,7 @@
           (chIsSelf && chIsRight ? " is-self-thread" : "");
         ti.id = `nsc-floor-${ch.floorId}`;
         ti.dataset.floor = ch.floorId;
+        if (ch.commentId) ti.dataset.commentId = String(ch.commentId);
         ti.dataset.author = ch.author;
         ti.dataset.uid = ch.uid || "";
         ti.innerHTML = `
@@ -13154,9 +13323,9 @@
                     <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}</div>
                     <div class="nsc-ruling-post-row">
                       ${r.postTarget
-                        ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">打开涉事帖${r.postTarget.floorId !== "" ? ` #${escHtml(r.postTarget.floorId)}` : ""}</button>
+                        ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">关联内容：${escHtml(r.postTarget.label)}</button>
                            <a href="${escHtml(r.postTarget.href)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--nsc-muted);text-decoration:none;">原帖 ↗</a>`
-                        : `<span style="font-size:11px;color:var(--nsc-muted);">无关联帖子</span>`}
+                        : `<span style="font-size:11px;color:var(--nsc-muted);">无关联内容</span>`}
                     </div>
                   </div>
                 `).join("")}
@@ -13196,10 +13365,10 @@
                 <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
               </div>
               <div>原因：${escHtml(r.reasonText)}</div>
-              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 涉事 ${escHtml(r.postTarget.label)}` : ""}</div>
+              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 关联 ${escHtml(r.postTarget.label)}` : ""}</div>
             </div>
           `).join("")}
-          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开完整明细并跳转涉事帖</div>
+          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开明细并查看关联内容</div>
         `;
         hoverTip.classList.add("is-open");
       };

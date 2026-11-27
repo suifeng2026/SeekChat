@@ -32,6 +32,7 @@
     RULING_CACHE: "nsc_v7_ruling_cache",
     SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
     PANE_COLLAPSED: "nsc_v7_pane_collapsed",
+    COMPOSER_PREFS: "nsc_v7_composer_prefs",
   };
 
   function isBrowsePath(pathname) {
@@ -284,6 +285,7 @@
     workbenchSection: "theme",
     paneSkins: loadJson(LS.PANE_SKINS, {}),
     paneCollapsed: loadJson(LS.PANE_COLLAPSED, { nav: false, list: false, right: false }),
+    composerPrefs: loadJson(LS.COMPOSER_PREFS, { pinned: false, size: "md" }),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
@@ -307,7 +309,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.32",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.33",
       latest: "",
       installUrl: "",
       hasUpdate: false,

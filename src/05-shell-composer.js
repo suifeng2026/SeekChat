@@ -61,20 +61,31 @@
     const raw = String(rawTpl || "");
     const markerIdx = raw.indexOf("@@CURSOR@@");
     const clean = raw.replace("@@CURSOR@@", "");
-    const cur = cm.getCursor();
-    const lineTxt = cm.getLine(cur.line) || "";
+    let cur = { line: 0, ch: 0 };
+    let lineTxt = "";
+    try {
+      cur = cm.getCursor() || { line: 0, ch: 0 };
+      lineTxt = cm.getLine(cur.line) || "";
+    } catch (_) {}
     const needLeadNl = raw.includes("\n") && cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
     const full = `${needLeadNl}${clean}`;
-    cm.operation(() => {
-      cm.replaceSelection(full);
-      if (markerIdx >= 0) {
-        const beforeCursor = full.slice(0, needLeadNl.length + markerIdx);
-        const lines = beforeCursor.split("\n");
-        const targetLine = cur.line + lines.length - 1;
-        const targetCh = lines.length === 1 ? cur.ch + lines[0].length : lines[lines.length - 1].length;
-        cm.setCursor({ line: targetLine, ch: targetCh });
+    try {
+      if (typeof cm.focus === "function") cm.focus();
+    } catch (_) {}
+    cm.replaceSelection(full);
+    if (markerIdx >= 0) {
+      const beforeCursor = full.slice(0, needLeadNl.length + markerIdx);
+      const lines = beforeCursor.split("\n");
+      const targetLine = (cur.line || 0) + lines.length - 1;
+      const targetCh = lines.length === 1 ? (cur.ch || 0) + lines[0].length : lines[lines.length - 1].length;
+      try {
+        cm.setCursor(targetLine, targetCh);
+      } catch (_) {
+        try {
+          if (typeof cm.getDoc === "function") cm.getDoc().setCursor(targetLine, targetCh);
+        } catch (_) {}
       }
-    });
+    }
     if (typeof cm.refresh === "function") cm.refresh();
     const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
     if (inputField && typeof inputField.focus === "function") inputField.focus({ preventScroll: true });
@@ -380,17 +391,28 @@
 
     const dockEl = shell.querySelector("#nsc-composer-dock");
     if (dockEl) {
-      dockEl.classList.add("is-compact");
-      dockEl.addEventListener("pointerdown", () => syncComposerCompactState(true));
-      dockEl.addEventListener("focusin", () => syncComposerCompactState(true));
-      dockEl.addEventListener("focusout", () => {
-        setTimeout(() => syncComposerCompactState(false), 130);
+      applyComposerPrefsToDom();
+      dockEl.addEventListener("pointerdown", () => {
+        _composerEngaged = true;
+        syncComposerCompactState(true);
+      }, true);
+      dockEl.addEventListener("focusin", () => {
+        _composerEngaged = true;
+        syncComposerCompactState(true);
       });
       document.addEventListener("pointerdown", (e) => {
         if (!dockEl.isConnected || dockEl.style.display === "none") return;
         const t = e.target;
-        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-ni-backdrop"))) return;
-        setTimeout(() => syncComposerCompactState(false), 60);
+        if (t && t.closest && (
+          t.closest("#nsc-composer-dock") ||
+          t.closest("#nsc-ni-backdrop") ||
+          t.closest("#nsc-lightbox") ||
+          t.closest("#nsc-jump-backdrop")
+        )) {
+          return;
+        }
+        _composerEngaged = false;
+        syncComposerCompactState(false);
       });
     }
 
@@ -1173,11 +1195,72 @@
     return ta ? ta.value : "";
   }
 
+  let _composerEngaged = false;
+
+  function applyComposerPrefsToDom() {
+    const prefs = state.composerPrefs || { pinned: false, size: "md" };
+    const size = ["sm", "md", "lg"].includes(prefs.size) ? prefs.size : "md";
+    const pinned = Boolean(prefs.pinned);
+    const dock = document.getElementById("nsc-composer-dock");
+    if (dock) {
+      dock.dataset.nscCsize = size;
+      dock.querySelectorAll(".nsc-csize-btn").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.csize === size);
+      });
+      dock.querySelectorAll(".nsc-cpin-btn").forEach((b) => {
+        b.classList.toggle("is-pinned", pinned);
+        b.title = pinned ? "已固定展开不自动收缩（点击取消固定）" : "自动收缩模式（点击钉住固定展开）";
+      });
+      const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
+      const cm = nat ? getNativeCodeMirror(nat) : null;
+      if (cm && typeof cm.refresh === "function") requestAnimationFrame(() => cm.refresh());
+    }
+    syncComposerCompactState(false);
+  }
+
+  function createComposerCtrlWrap() {
+    const wrap = document.createElement("div");
+    wrap.className = "nsc-composer-ctrl-wrap";
+    wrap.innerHTML = `
+      <div class="nsc-csize-seg" title="调节回复框高度">
+        <button type="button" class="nsc-csize-btn" data-csize="sm">小</button>
+        <button type="button" class="nsc-csize-btn" data-csize="md">中</button>
+        <button type="button" class="nsc-csize-btn" data-csize="lg">大</button>
+      </div>
+      <button type="button" class="nsc-cpin-btn" title="固定展开不自动收缩">${ICONS.pin}</button>
+    `;
+    wrap.addEventListener("mousedown", (e) => e.preventDefault());
+    wrap.querySelectorAll(".nsc-csize-btn").forEach((b) => {
+      b.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _composerEngaged = true;
+        state.composerPrefs = { ...(state.composerPrefs || {}), size: b.dataset.csize || "md" };
+        saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
+        applyComposerPrefsToDom();
+        syncComposerCompactState(true);
+      });
+    });
+    wrap.querySelector(".nsc-cpin-btn").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextPinned = !(state.composerPrefs && state.composerPrefs.pinned);
+      state.composerPrefs = { ...(state.composerPrefs || {}), pinned: nextPinned };
+      saveJson(LS.COMPOSER_PREFS, state.composerPrefs);
+      if (nextPinned) _composerEngaged = true;
+      applyComposerPrefsToDom();
+    });
+    return wrap;
+  }
+
   function syncComposerCompactState(forceExpand = false) {
     const dock = document.getElementById("nsc-composer-dock");
     if (!dock) return;
     const prevCompact = dock.classList.contains("is-compact");
-    if (forceExpand) {
+    const prefs = state.composerPrefs || { pinned: false, size: "md" };
+    const niOpen = Boolean(document.getElementById("nsc-ni-backdrop")?.classList.contains("is-open"));
+    if (forceExpand) _composerEngaged = true;
+    if (forceExpand || prefs.pinned || niOpen) {
       dock.classList.remove("is-compact");
       if (prevCompact) {
         const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
@@ -1220,10 +1303,12 @@
       }
     }
 
-    let focused = false;
-    try {
-      focused = dock.matches(":focus-within");
-    } catch (_) {}
+    let focused = _composerEngaged;
+    if (!focused) {
+      try {
+        focused = dock.matches(":focus-within");
+      } catch (_) {}
+    }
     if (!focused && nat && nat.style.display !== "none") {
       const cm = getNativeCodeMirror(nat);
       if (cm && typeof cm.hasFocus === "function" && cm.hasFocus()) focused = true;
@@ -1341,6 +1426,8 @@
         _composerDrafts.delete(`pm:${peer.uid}`);
         if (isSameCtx()) {
           if (clearFn) clearFn();
+          _composerEngaged = false;
+          syncComposerCompactState(false);
           if (setStatusFn) setStatusFn("私信发送成功");
         }
         if (seq === state.chatViewSeq && state.activePmPeer && state.activePmPeer.uid === peer.uid) {
@@ -1369,6 +1456,8 @@
       _composerDrafts.delete(`post:${pid}`);
       if (isSameCtx()) {
         if (clearFn) clearFn();
+        _composerEngaged = false;
+        syncComposerCompactState(false);
         if (setStatusFn) setStatusFn("评论已发布，正在同步楼层...");
       }
       if (!state.activePmPeer && room && room.pid === pid && state.currentPostId === pid) {
@@ -1506,6 +1595,13 @@
     const sdForm = box.querySelector(".nsc-u-sd-form");
     const statusEl = box.querySelector(`#${prefix}-unified-status`);
     const sendBtn = box.querySelector(`#${prefix}-unified-send`);
+    if (prefix === "nsc") {
+      const topActs = box.querySelector(".nsc-u-top-acts");
+      if (topActs) {
+        topActs.insertBefore(createComposerCtrlWrap(), topActs.firstChild);
+        applyComposerPrefsToDom();
+      }
+    }
 
     const undoStack = [""];
     const redoStack = [];
@@ -1858,8 +1954,26 @@
 
   function ensureNativeToolbarEnhanced(editor) {
     if (!editor) return;
+    const header = editor.querySelector(".tab-select.window_header");
+    if (header && editor.closest("#nsc-composer-dock") && !header.querySelector(".nsc-composer-ctrl-wrap")) {
+      const ctrlWrap = createComposerCtrlWrap();
+      const firstTopBtn = header.querySelector(".editor-top-button");
+      if (firstTopBtn) header.insertBefore(ctrlWrap, firstTopBtn);
+      else header.appendChild(ctrlWrap);
+      applyComposerPrefsToDom();
+    }
     const mdeToolbar = editor.querySelector(".mde-toolbar");
     if (mdeToolbar && !mdeToolbar.querySelector(".nsc-mde-extra-sep")) {
+      if (!mdeToolbar.dataset.nscNoBlur) {
+        mdeToolbar.dataset.nscNoBlur = "1";
+        mdeToolbar.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          if (editor.closest("#nsc-composer-dock")) {
+            _composerEngaged = true;
+            syncComposerCompactState(true);
+          }
+        });
+      }
       const sep1 = document.createElement("div");
       sep1.className = "sep nsc-mde-extra-sep";
       mdeToolbar.appendChild(sep1);
@@ -1869,13 +1983,17 @@
         b.dataset.snip = snip.id;
         b.title = snip.title;
         b.innerHTML = snip.icon();
+        b.addEventListener("mousedown", (e) => e.preventDefault());
         b.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (editor.closest("#nsc-composer-dock")) {
+            _composerEngaged = true;
+            syncComposerCompactState(true);
+          }
           ensureNativeEditorWriteTab(editor);
           const cm = getNativeCodeMirror(editor);
           if (cm) insertSnippetIntoNativeCm(cm, snip.tpl);
-          if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
         });
         mdeToolbar.appendChild(b);
       }
@@ -1887,6 +2005,7 @@
       clearBtn.className = "toolbar-item";
       clearBtn.title = "清空内容";
       clearBtn.innerHTML = ICONS.eraser;
+      clearBtn.addEventListener("mousedown", (e) => e.preventDefault());
       clearBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1899,9 +2018,14 @@
       niBtn.title = "NodeImage 图床上传与管理";
       niBtn.style.marginLeft = "auto";
       niBtn.innerHTML = `${ICONS.imgHost}<span class="nsc-ni-dot"></span>`;
+      niBtn.addEventListener("mousedown", (e) => e.preventDefault());
       niBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (editor.closest("#nsc-composer-dock")) {
+          _composerEngaged = true;
+          syncComposerCompactState(true);
+        }
         const mode = editor.closest("#nsc-newpost-backdrop") ? "newpost" : (state.activePmPeer ? "pm" : "chat");
         openNodeImageModal(mode);
       });
@@ -2040,13 +2164,14 @@
     const cmInst = getNativeCodeMirror(editor);
     if (cmInst && typeof cmInst.on === "function") {
       cmInst.on("focus", () => {
-        if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
-      });
-      cmInst.on("blur", () => {
-        if (editor.closest("#nsc-composer-dock")) setTimeout(() => syncComposerCompactState(false), 130);
+        if (editor.closest("#nsc-composer-dock")) {
+          _composerEngaged = true;
+          syncComposerCompactState(true);
+        }
       });
       cmInst.on("change", () => {
         if (editor.closest("#nsc-composer-dock") && cmInst.getValue().trim()) {
+          _composerEngaged = true;
           syncComposerCompactState(true);
         }
       });

@@ -832,9 +832,9 @@
                     <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}</div>
                     <div class="nsc-ruling-post-row">
                       ${r.postTarget
-                        ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">打开涉事帖${r.postTarget.floorId !== "" ? ` #${escHtml(r.postTarget.floorId)}` : ""}</button>
+                        ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">关联内容：${escHtml(r.postTarget.label)}</button>
                            <a href="${escHtml(r.postTarget.href)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--nsc-muted);text-decoration:none;">原帖 ↗</a>`
-                        : `<span style="font-size:11px;color:var(--nsc-muted);">无关联帖子</span>`}
+                        : `<span style="font-size:11px;color:var(--nsc-muted);">无关联内容</span>`}
                     </div>
                   </div>
                 `).join("")}
@@ -874,10 +874,10 @@
                 <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
               </div>
               <div>原因：${escHtml(r.reasonText)}</div>
-              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 涉事 ${escHtml(r.postTarget.label)}` : ""}</div>
+              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 关联 ${escHtml(r.postTarget.label)}` : ""}</div>
             </div>
           `).join("")}
-          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开完整明细并跳转涉事帖</div>
+          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开明细并查看关联内容</div>
         `;
         hoverTip.classList.add("is-open");
       };
