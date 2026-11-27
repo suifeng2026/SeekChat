@@ -917,7 +917,8 @@
         overflow-anchor: none;
       }
       .nsc-composer-box,
-      .nsc-composer-dock .md-editor {
+      .nsc-composer-dock .md-editor,
+      #nsc-np-editor-host .md-editor {
         border: 1px solid var(--nsc-border) !important;
         border-radius: 10px !important;
         background: var(--nsc-bg-card) !important;
@@ -928,34 +929,45 @@
         padding: 0 !important;
         width: 100% !important;
         box-sizing: border-box !important;
+        position: relative !important;
       }
       .nsc-composer-box:focus-within,
-      .nsc-composer-dock .md-editor:focus-within {
+      .nsc-composer-dock .md-editor:focus-within,
+      #nsc-np-editor-host .md-editor:focus-within {
         border-color: var(--nsc-accent) !important;
         box-shadow: 0 0 0 2.5px var(--nsc-accent-soft) !important;
       }
-      .nsc-composer-dock #editor-body { background: transparent !important; position: static !important; margin: 0 !important; padding: 0 !important; }
+      .nsc-composer-dock #editor-body,
+      #nsc-np-editor-host #editor-body { background: transparent !important; position: static !important; margin: 0 !important; padding: 0 !important; }
       .nsc-composer-dock #cm-editor-wrapper,
       .nsc-composer-dock .content-area,
-      .nsc-composer-dock .split-view-container {
+      .nsc-composer-dock .split-view-container,
+      #nsc-np-editor-host #cm-editor-wrapper,
+      #nsc-np-editor-host .content-area,
+      #nsc-np-editor-host .split-view-container {
         min-height: 0 !important; height: auto !important; margin: 0 !important; padding: 0 !important;
       }
 
       .nsc-composer-header,
-      .nsc-composer-dock .tab-select.window_header {
+      .nsc-composer-dock .tab-select.window_header,
+      #nsc-np-editor-host .tab-select.window_header {
         display: flex !important; align-items: center !important; flex-wrap: wrap !important; gap: 3px !important;
         padding: 2px 8px !important; height: auto !important; min-height: 25px !important;
         background: var(--nsc-hover) !important; border-bottom: 1px solid var(--nsc-border) !important;
         border-radius: 10px 10px 0 0 !important;
       }
-      .nsc-composer-dock .tab-select.window_header .tab-option { padding: 2px 7px !important; font-size: 11.5px !important; cursor: pointer; }
-      .nsc-composer-dock .tab-select.window_header > div[style*="margin-left: auto"] { display: none !important; }
+      .nsc-composer-dock .tab-select.window_header .tab-option,
+      #nsc-np-editor-host .tab-select.window_header .tab-option { padding: 2px 7px !important; font-size: 11.5px !important; cursor: pointer; }
+      .nsc-composer-dock .tab-select.window_header > div[style*="margin-left: auto"],
+      #nsc-np-editor-host .tab-select.window_header > div[style*="margin-left: auto"] { display: none !important; }
 
-      .nsc-composer-dock .tab-select.window_header .expression {
+      .nsc-composer-dock .tab-select.window_header .expression,
+      #nsc-np-editor-host .tab-select.window_header .expression {
         display: inline-flex !important; align-items: center !important; gap: 2px !important;
         background: transparent !important; border: none !important; padding: 0 !important; margin: 0 auto 0 8px !important;
       }
-      .nsc-composer-dock .tab-select.window_header .expression .exp-item {
+      .nsc-composer-dock .tab-select.window_header .expression .exp-item,
+      #nsc-np-editor-host .tab-select.window_header .expression .exp-item {
         padding: 2px 7px !important;
         border: none !important;
         background: transparent !important;
@@ -968,7 +980,9 @@
         transition: none !important;
       }
       .nsc-composer-dock .tab-select.window_header .expression .exp-item:hover,
-      .nsc-composer-dock .tab-select.window_header .expression .exp-item.active {
+      .nsc-composer-dock .tab-select.window_header .expression .exp-item.active,
+      #nsc-np-editor-host .tab-select.window_header .expression .exp-item:hover,
+      #nsc-np-editor-host .tab-select.window_header .expression .exp-item.active {
         color: var(--nsc-accent) !important;
         background: transparent !important;
         border-bottom-color: var(--nsc-accent) !important;
@@ -984,41 +998,64 @@
       .nsc-nodeimage-btn:hover { border-color: var(--nsc-accent); color: var(--nsc-accent) !important; background: var(--nsc-accent-soft); }
 
       .nsc-mde-toolbar,
-      .nsc-composer-dock .mde-toolbar {
+      .nsc-composer-dock .mde-toolbar,
+      #nsc-np-editor-host .mde-toolbar {
         display: flex !important; align-items: center !important; flex-wrap: wrap !important; gap: 2px !important;
         padding: 2px 6px !important; height: auto !important; min-height: 24px !important; background: transparent !important;
         border-bottom: 1px solid var(--nsc-border) !important;
       }
       .nsc-mde-btn,
-      .nsc-composer-dock .mde-toolbar .toolbar-item {
+      .nsc-composer-dock .mde-toolbar .toolbar-item,
+      #nsc-np-editor-host .mde-toolbar .toolbar-item {
         display: inline-flex !important; align-items: center !important; justify-content: center !important;
         width: 23px !important; height: 21px !important; padding: 0 !important; border-radius: 5px !important;
         border: none; background: transparent;
         color: var(--nsc-muted) !important; transition: none !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
       }
       .nsc-mde-btn:hover,
-      .nsc-composer-dock .mde-toolbar .toolbar-item:hover {
+      .nsc-composer-dock .mde-toolbar .toolbar-item:hover,
+      #nsc-np-editor-host .mde-toolbar .toolbar-item:hover {
         background: var(--nsc-accent-soft) !important; color: var(--nsc-accent) !important;
       }
-      .nsc-composer-dock .mde-toolbar .toolbar-item svg { width: 13px !important; height: 13px !important; }
-      .nsc-composer-dock .CodeMirror {
-        height: 68px !important; min-height: 64px !important; max-height: 130px !important;
+      .nsc-composer-dock .mde-toolbar .toolbar-item svg,
+      #nsc-np-editor-host .mde-toolbar .toolbar-item svg { width: 13px !important; height: 13px !important; }
+      .nsc-composer-dock .md-editor:not(.fullscreen) .CodeMirror {
+        height: auto !important; min-height: 76px !important; max-height: 180px !important;
         font-size: 13px !important; line-height: 1.45 !important;
         background: transparent !important; color: var(--nsc-text) !important;
       }
-      .nsc-composer-dock .CodeMirror-scroll { min-height: 64px !important; max-height: 130px !important; padding-bottom: 0 !important; }
-      .nsc-composer-dock .CodeMirror-lines { padding: 4px 0 !important; }
+      .nsc-composer-dock .md-editor:not(.fullscreen) .CodeMirror-scroll {
+        min-height: 76px !important; max-height: 180px !important;
+      }
+      #nsc-np-editor-host .md-editor:not(.fullscreen) .CodeMirror {
+        height: auto !important; min-height: 200px !important; max-height: 44vh !important;
+        font-size: 13.5px !important; line-height: 1.55 !important;
+        background: transparent !important; color: var(--nsc-text) !important;
+      }
+      #nsc-np-editor-host .md-editor:not(.fullscreen) .CodeMirror-scroll {
+        min-height: 200px !important; max-height: 44vh !important;
+      }
+      .nsc-composer-dock .CodeMirror-lines,
+      #nsc-np-editor-host .CodeMirror-lines { padding: 4px 0 !important; }
+      #nsc-np-editor-host .nsc-fallback-textarea {
+        min-height: 200px; max-height: 44vh; resize: vertical; padding: 10px 12px; font-size: 13.5px; line-height: 1.55;
+      }
+      #nsc-np-editor-host .nsc-u-preview { min-height: 200px; max-height: 44vh; }
+      #nsc-np-editor-host .md-editor .topic-select .submit.btn { display: none !important; }
       .nsc-fallback-textarea {
-        width: 100%; box-sizing: border-box; height: 70px; border: none; outline: none; resize: none;
+        width: 100%; box-sizing: border-box; height: 74px; border: none; outline: none; resize: none;
         padding: 7px 10px; font-size: 13px; line-height: 1.45; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
       /* 表情面板改为贴底悬浮层（最多约 2 行高度），AC娘仅显示前 32 个热门经典贴图 */
       .nsc-composer-dock .exp-container.cur-sticker-group-null,
-      .nsc-composer-dock .exp-container:empty {
+      .nsc-composer-dock .exp-container:empty,
+      #nsc-np-editor-host .exp-container.cur-sticker-group-null,
+      #nsc-np-editor-host .exp-container:empty {
         display: none !important;
       }
-      .nsc-composer-dock .exp-container {
+      .nsc-composer-dock .exp-container,
+      #nsc-np-editor-host .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
         z-index: 260 !important; max-height: 92px !important; overflow-y: auto !important;
         padding: 6px 8px !important; flex-wrap: wrap !important; align-content: flex-start !important;
@@ -1026,7 +1063,12 @@
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
       }
-      .nsc-composer-dock .exp-container.cur-sticker-group-app {
+      #nsc-np-editor-host .exp-container,
+      #nsc-np-editor-host .nsc-u-app-pop {
+        top: 32px !important; bottom: auto !important; max-height: 136px !important;
+      }
+      .nsc-composer-dock .exp-container.cur-sticker-group-app,
+      #nsc-np-editor-host .exp-container.cur-sticker-group-app {
         left: var(--nsc-app-pop-left, auto) !important;
         right: var(--nsc-app-pop-right, 12px) !important;
         width: fit-content !important; min-width: 0 !important; max-width: calc(100% - 12px) !important;
@@ -1034,14 +1076,18 @@
         display: inline-flex !important; align-items: center !important; flex-wrap: nowrap !important;
         gap: 6px !important; padding: 5px 8px !important; border-radius: 12px !important;
       }
-      .nsc-composer-dock .exp-container.cur-sticker-group-app > * {
+      .nsc-composer-dock .exp-container.cur-sticker-group-app > *,
+      #nsc-np-editor-host .exp-container.cur-sticker-group-app > * {
         margin: 0 !important; flex: 0 0 auto !important;
       }
-      .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33) {
+      .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33) {
         display: none !important;
       }
       .nsc-composer-dock .exp-container img,
-      .nsc-composer-dock .exp-container video {
+      .nsc-composer-dock .exp-container video,
+      #nsc-np-editor-host .exp-container img,
+      #nsc-np-editor-host .exp-container video {
         width: 34px !important; height: 34px !important; max-width: 34px !important; max-height: 34px !important;
         object-fit: contain !important; display: block !important;
       }
@@ -1049,7 +1095,12 @@
       .nsc-composer-dock .exp-container .exp-list > *,
       .nsc-composer-dock .exp-container span,
       .nsc-composer-dock .exp-container button,
-      .nsc-composer-dock .exp-container a {
+      .nsc-composer-dock .exp-container a,
+      #nsc-np-editor-host .exp-container > *,
+      #nsc-np-editor-host .exp-container .exp-list > *,
+      #nsc-np-editor-host .exp-container span,
+      #nsc-np-editor-host .exp-container button,
+      #nsc-np-editor-host .exp-container a {
         padding: 2px !important; margin: 2px !important; border-radius: 7px !important;
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
@@ -1146,13 +1197,15 @@
       .nsc-fb-exp-item:hover { background: var(--nsc-accent-soft); }
       .nsc-fb-exp-item img { width: 32px; height: 32px; object-fit: contain; display: block; }
       .nsc-composer-footer,
-      .nsc-composer-dock .topic-select {
+      .nsc-composer-dock .topic-select,
+      #nsc-np-editor-host .topic-select {
         display: flex !important; align-items: center !important; justify-content: space-between !important;
         padding: 3px 8px !important; min-height: 26px !important; border-top: 1px solid var(--nsc-border) !important;
         background: var(--nsc-hover) !important; border-radius: 0 0 10px 10px !important;
       }
       .nsc-send-btn,
-      .nsc-composer-dock .topic-select .submit.btn {
+      .nsc-composer-dock .topic-select .submit.btn,
+      #nsc-np-editor-host .topic-select .submit.btn {
         height: 23px !important; padding: 0 12px !important; font-size: 11.5px !important; font-weight: 600 !important;
         border-radius: 7px !important; background: var(--nsc-accent) !important; color: #fff !important;
         border: none !important; cursor: pointer;
@@ -1477,18 +1530,18 @@
       }
       #nsc-newpost-backdrop.is-open { display: flex; }
       .nsc-newpost-modal {
-        width: min(640px, 94vw); max-height: 88vh;
+        width: min(740px, 94vw); max-height: 90vh;
         background: var(--nsc-bg-card); color: var(--nsc-text);
         border: 1px solid var(--nsc-border); border-radius: 16px;
         box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
-        display: flex; flex-direction: column; overflow: hidden;
+        display: flex; flex-direction: column; overflow: visible;
       }
       .nsc-newpost-head {
         display: flex; align-items: center; justify-content: space-between; gap: 10px;
         padding: 12px 16px; border-bottom: 1px solid var(--nsc-border);
-        background: var(--nsc-hover);
+        background: var(--nsc-hover); border-radius: 16px 16px 0 0;
       }
-      .nsc-newpost-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+      .nsc-newpost-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow: visible; }
       .nsc-newpost-row { display: flex; gap: 8px; align-items: center; }
       .nsc-newpost-select {
         height: 34px; padding: 0 10px; border-radius: 9px;
@@ -1502,8 +1555,14 @@
       }
       .nsc-newpost-title:focus, .nsc-newpost-select:focus { border-color: var(--nsc-accent); }
       .nsc-newpost-editor {
-        border: 1px solid var(--nsc-border); border-radius: 10px; overflow: hidden;
-        background: var(--nsc-bg-card);
+        border: 1px solid var(--nsc-border); border-radius: 10px; overflow: visible;
+        background: var(--nsc-bg-card); position: relative;
+      }
+      .nsc-newpost-editor .nsc-fb-exp-pop {
+        top: 32px; bottom: auto;
+      }
+      .nsc-np-editor-host {
+        position: relative; width: 100%;
       }
       .nsc-newpost-ta {
         width: 100%; box-sizing: border-box; min-height: 210px; max-height: 44vh;
@@ -1514,6 +1573,7 @@
       .nsc-newpost-foot {
         display: flex; align-items: center; justify-content: space-between; gap: 10px;
         padding: 10px 16px; border-top: 1px solid var(--nsc-border); background: var(--nsc-hover);
+        border-radius: 0 0 16px 16px;
       }
 
       .nsc-ni-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff3b30; display: inline-block; }

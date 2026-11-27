@@ -209,8 +209,10 @@
       }
       rightPanel.insertBefore(userCard, rightPanel.firstChild);
     }
+    const npBd = document.getElementById("nsc-newpost-backdrop");
+    if (npBd && typeof npBd._nscCloseNp === "function") npBd._nscCloseNp();
     const commentContainer = document.querySelector("#nsk-frame .comment-container");
-    const nativeEditor = document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)");
+    const nativeEditor = document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor), #nsc-np-editor-host .md-editor:not(.nsc-unified-editor)");
     if (commentContainer && nativeEditor) {
       const submitBtn = nativeEditor.querySelector("button.submit.btn");
       if (submitBtn) {

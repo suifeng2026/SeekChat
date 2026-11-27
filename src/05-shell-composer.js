@@ -476,7 +476,7 @@
       if (e.key === "Escape") {
         lightbox.classList.remove("is-open");
         backdrop.classList.remove("is-open");
-        npBackdrop.classList.remove("is-open");
+        if (npBackdrop.classList.contains("is-open")) closeNp();
         const editBd = document.getElementById("nsc-edit-backdrop");
         if (editBd) editBd.classList.remove("is-open");
         const hubBd = document.getElementById("nsc-hub-backdrop");
@@ -518,13 +518,10 @@
             </select>
             <input type="text" class="nsc-newpost-title" id="nsc-np-title" placeholder="请输入帖子标题..." />
           </div>
-          <div class="nsc-newpost-editor">
-            ${buildMarkdownToolbarHtml({ id: "nsc-np-toolbar", expBtnId: "nsc-np-exp-btn", niTarget: "newpost" })}
-            <textarea class="nsc-newpost-ta" id="nsc-np-content" placeholder="支持 Markdown 语法，Ctrl + Enter 快捷发布..."></textarea>
-          </div>
+          <div class="nsc-np-editor-host" id="nsc-np-editor-host"></div>
         </div>
         <div class="nsc-newpost-foot">
-          <span id="nsc-np-status" style="font-size:11.5px;color:var(--nsc-muted);">无刷新直发社区，或右上角切原版编辑器</span>
+          <span id="nsc-np-status" style="font-size:11.5px;color:var(--nsc-muted);">无刷新直发社区，支持完整 Markdown / 表情 / 图床</span>
           <div style="display:flex;gap:8px;">
             <button type="button" class="nsc-pill-btn" id="nsc-np-cancel">取消</button>
             <button type="button" class="nsc-send-btn" id="nsc-np-submit">发布帖子</button>
@@ -534,30 +531,101 @@
     `;
     document.body.appendChild(npBackdrop);
 
-    const closeNp = () => npBackdrop.classList.remove("is-open");
+    const npCat = npBackdrop.querySelector("#nsc-np-cat");
+    const npTitle = npBackdrop.querySelector("#nsc-np-title");
+    const npHost = npBackdrop.querySelector("#nsc-np-editor-host");
+    const npNativeLink = npBackdrop.querySelector("#nsc-np-native-link");
+    const npStatus = npBackdrop.querySelector("#nsc-np-status");
+    const npSubmit = npBackdrop.querySelector("#nsc-np-submit");
+
+    const getNpEditorVal = () => {
+      const nat = npHost.querySelector(".md-editor:not(.nsc-unified-editor)");
+      if (nat) return getNativeEditorValue(nat);
+      const uTa = npHost.querySelector("#nsc-np-unified-ta");
+      return uTa ? uTa.value : "";
+    };
+    const clearNpEditorVal = () => {
+      const nat = npHost.querySelector(".md-editor:not(.nsc-unified-editor)");
+      if (nat) setNativeEditorValue(nat, "");
+      const uTa = npHost.querySelector("#nsc-np-unified-ta");
+      if (uTa) {
+        uTa.value = "";
+        uTa.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      _composerDrafts.delete("newpost");
+    };
+    const mountNpEditor = () => {
+      const nat =
+        document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)") ||
+        document.querySelector("#nsk-frame .md-editor:not(.nsc-unified-editor)") ||
+        npHost.querySelector(".md-editor:not(.nsc-unified-editor)");
+      let npUni = npHost.querySelector("#nsc-np-unified-composer");
+      if (nat) {
+        if (!npHost.contains(nat)) {
+          const curCtx = getActiveComposerContextKey();
+          if (curCtx) _composerDrafts.set(curCtx, getNativeEditorValue(nat));
+          npHost.appendChild(nat);
+          enhanceNativeEditor(nat);
+        }
+        nat.style.display = "block";
+        if (npUni) npUni.style.display = "none";
+        setNativeEditorValue(nat, _composerDrafts.get("newpost") || "");
+        syncNativeEditorContextUi(nat);
+        requestAnimationFrame(() => {
+          const cm = getNativeCodeMirror(nat);
+          if (cm && typeof cm.refresh === "function") cm.refresh();
+        });
+        return;
+      }
+      if (!npUni) {
+        npUni = buildUnifiedComposer({
+          prefix: "nsc-np",
+          hideFooterSubmit: true,
+          placeholder: "支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发布...",
+          onCtrlEnter: () => submitNewPost(),
+        });
+        npHost.appendChild(npUni);
+      }
+      npUni.style.display = "block";
+      const uTa = npUni.querySelector("#nsc-np-unified-ta");
+      if (uTa) {
+        uTa.value = _composerDrafts.get("newpost") || "";
+        uTa.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    };
+    const closeNp = () => {
+      if (!npBackdrop.classList.contains("is-open")) return;
+      const nat = npHost.querySelector(".md-editor:not(.nsc-unified-editor)");
+      if (nat) {
+        _composerDrafts.set("newpost", getNativeEditorValue(nat));
+        const composerBody = document.getElementById("nsc-composer-body");
+        if (composerBody) composerBody.appendChild(nat);
+        const dockMode = state.activePmPeer
+          ? "pm"
+          : (state.currentPostId || isPostPath(location.pathname)) ? "post" : "none";
+        syncComposerMode(dockMode);
+      } else {
+        const uTa = npHost.querySelector("#nsc-np-unified-ta");
+        if (uTa) _composerDrafts.set("newpost", uTa.value);
+      }
+      npBackdrop.classList.remove("is-open");
+    };
+    npBackdrop._nscCloseNp = closeNp;
+
     npBackdrop.addEventListener("click", (e) => {
       if (e.target === npBackdrop) closeNp();
     });
     npBackdrop.querySelector("#nsc-np-close").addEventListener("click", closeNp);
     npBackdrop.querySelector("#nsc-np-cancel").addEventListener("click", closeNp);
 
-    const npCat = npBackdrop.querySelector("#nsc-np-cat");
-    const npTitle = npBackdrop.querySelector("#nsc-np-title");
-    const npContent = npBackdrop.querySelector("#nsc-np-content");
-    const npNativeLink = npBackdrop.querySelector("#nsc-np-native-link");
-    const npStatus = npBackdrop.querySelector("#nsc-np-status");
-    const npSubmit = npBackdrop.querySelector("#nsc-np-submit");
-
     npCat.addEventListener("change", () => {
       npNativeLink.href = `/new-discussion?category=${encodeURIComponent(npCat.value)}`;
     });
 
-    bindMarkdownToolbar(npBackdrop.querySelector("#nsc-np-toolbar"), npContent);
-
     const submitNewPost = async () => {
       const category = npCat.value || "daily";
       const title = npTitle.value.trim();
-      const content = npContent.value.trim();
+      const content = getNpEditorVal().trim();
       if (!title) {
         npStatus.textContent = "请输入帖子标题";
         npTitle.focus();
@@ -565,7 +633,6 @@
       }
       if (!content) {
         npStatus.textContent = "请输入帖子内容";
-        npContent.focus();
         return;
       }
       npSubmit.disabled = true;
@@ -583,7 +650,7 @@
           throw new Error(resJson.message || `HTTP ${resp.status}`);
         }
         npTitle.value = "";
-        npContent.value = "";
+        clearNpEditorVal();
         npStatus.textContent = "发布成功！";
         closeNp();
         const targetCh = state.activeChannel === "home" ? "home" : category;
@@ -609,19 +676,14 @@
     };
 
     npSubmit.addEventListener("click", submitNewPost);
-    npContent.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        submitNewPost();
-      }
-    });
 
     shell.querySelector("#nsc-newpost-open-btn").addEventListener("click", () => {
       const defCat = postableChannels.some((c) => c.id === state.activeChannel) ? state.activeChannel : "daily";
       npCat.value = defCat;
       npNativeLink.href = `/new-discussion?category=${encodeURIComponent(defCat)}`;
-      npStatus.textContent = "无刷新直发社区，或右上角切原版编辑器";
+      npStatus.textContent = "无刷新直发社区，支持完整 Markdown / 表情 / 图床";
       npBackdrop.classList.add("is-open");
+      mountNpEditor();
       setTimeout(() => npTitle.focus(), 40);
     });
 
@@ -654,11 +716,6 @@
     }
 
     initNodeImageUi(npBackdrop);
-    const npEditorEl = npBackdrop.querySelector(".nsc-newpost-editor");
-    if (npEditorEl) {
-      npEditorEl.style.position = "relative";
-      attachStickerPicker(npBackdrop.querySelector("#nsc-np-exp-btn"), npContent, npEditorEl);
-    }
 
     let searchTimer = null;
     shell.querySelector("#nsc-feed-search").addEventListener("input", (e) => {
@@ -841,8 +898,10 @@
   function getNativeCodeMirror(editor) {
     if (!editor) return null;
     const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+    const inNp = Boolean(editor.closest && editor.closest("#nsc-np-editor-host"));
+    const sel = inNp ? "#nsc-np-editor-host .md-editor .CodeMirror" : "#nsc-composer-body .md-editor .CodeMirror";
     const cmEl =
-      (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
+      (pageWin.document && pageWin.document.querySelector(sel)) ||
       editor.querySelector(".CodeMirror");
     if (!cmEl) return null;
     return cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror) || null;
@@ -1028,10 +1087,11 @@
     return html;
   }
 
-  function buildUnifiedComposer() {
+  function buildUnifiedComposer(opts = {}) {
+    const prefix = opts.prefix || "nsc";
     const box = document.createElement("div");
     box.className = "nsc-composer-box md-editor nsc-unified-editor";
-    box.id = "nsc-unified-composer";
+    box.id = `${prefix}-unified-composer`;
     box.style.position = "relative";
 
     const groups = getEffectiveStickerGroups();
@@ -1042,16 +1102,16 @@
           <button type="button" class="nsc-u-tab" data-umode="preview">预览</button>
           <button type="button" class="nsc-u-tab" data-umode="split">对照</button>
         </div>
-        <div class="nsc-u-exp-tabs" id="nsc-u-exp-tabs">
+        <div class="nsc-u-exp-tabs">
           ${groups.map((g) => `<button type="button" class="nsc-u-exp-tab" data-ugroup="${escHtml(g.id)}">${escHtml(g.label)}</button>`).join("")}
           <button type="button" class="nsc-u-exp-tab sticker-group-app" data-ugroup="app">App</button>
         </div>
         <div class="nsc-u-top-acts">
-          <button type="button" class="nsc-mde-btn" id="nsc-u-toggle-tb" title="显示/隐藏工具栏">🛠</button>
-          <button type="button" class="nsc-mde-btn" id="nsc-u-toggle-fs" title="全屏编辑">${ICONS.fullscreen}</button>
+          <button type="button" class="nsc-mde-btn" data-role="toggle-tb" title="显示/隐藏工具栏">🛠</button>
+          <button type="button" class="nsc-mde-btn" data-role="toggle-fs" title="全屏编辑">${ICONS.fullscreen}</button>
         </div>
       </div>
-      <div class="nsc-mde-toolbar" id="nsc-u-toolbar">
+      <div class="nsc-mde-toolbar">
         <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
         <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
         <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
@@ -1069,51 +1129,51 @@
         <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| 内容 | 内容 |\n" title="表格">田</button>
         <button type="button" class="nsc-mde-btn" data-tpl="\n---\n" title="分割线">—</button>
         <span class="nsc-mde-sep"></span>
-        <button type="button" class="nsc-mde-btn" id="nsc-u-undo" title="撤销">${ICONS.undo}</button>
-        <button type="button" class="nsc-mde-btn" id="nsc-u-redo" title="重做">${ICONS.redo}</button>
+        <button type="button" class="nsc-mde-btn" data-role="undo" title="撤销">${ICONS.undo}</button>
+        <button type="button" class="nsc-mde-btn" data-role="redo" title="重做">${ICONS.redo}</button>
       </div>
-      <div class="nsc-u-body" id="nsc-u-body">
-        <textarea class="nsc-fallback-textarea" id="nsc-unified-ta" placeholder="支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发送"></textarea>
-        <div class="nsc-u-preview" id="nsc-u-preview"></div>
+      <div class="nsc-u-body">
+        <textarea class="nsc-fallback-textarea" id="${prefix}-unified-ta" placeholder="${escHtml(opts.placeholder || "支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发送")}"></textarea>
+        <div class="nsc-u-preview"></div>
       </div>
-      <div class="exp-container cur-sticker-group-null" id="nsc-u-sticker-pop"></div>
-      <div class="nsc-u-app-pop" id="nsc-u-app-pop">
+      <div class="exp-container cur-sticker-group-null"></div>
+      <div class="nsc-u-app-pop">
         <div class="nsc-u-app-row">
-          <button type="button" class="nsc-u-app-btn" id="nsc-u-app-stardust">${ICONS.stardust}<span>星辰收款</span></button>
-          <button type="button" class="nsc-u-app-btn" id="nsc-u-app-vote">${ICONS.review}<span>发起投票</span></button>
+          <button type="button" class="nsc-u-app-btn" data-role="app-stardust">${ICONS.stardust}<span>星辰收款</span></button>
+          <button type="button" class="nsc-u-app-btn" data-role="app-vote">${ICONS.review}<span>发起投票</span></button>
         </div>
-        <div class="nsc-u-sd-form" id="nsc-u-sd-form">
+        <div class="nsc-u-sd-form">
           <div style="display:flex;gap:5px;align-items:center;">
-            <input type="number" id="nsc-u-sd-diff" min="1" max="1000" value="1" placeholder="星辰数" style="width:74px;" />
+            <input type="number" data-role="sd-diff" min="1" max="1000" value="1" placeholder="星辰数" style="width:74px;" />
             <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--nsc-muted);white-space:nowrap;">
-              <input type="checkbox" id="nsc-u-sd-once" />一次性
+              <input type="checkbox" data-role="sd-once" />一次性
             </label>
           </div>
-          <input type="text" id="nsc-u-sd-desc" placeholder="收款说明（可选）..." />
+          <input type="text" data-role="sd-desc" placeholder="收款说明（可选）..." />
           <div style="display:flex;justify-content:flex-end;gap:6px;">
-            <button type="button" class="nsc-mini-btn" id="nsc-u-sd-cancel">取消</button>
-            <button type="button" class="nsc-send-btn" id="nsc-u-sd-ins">插入收款码</button>
+            <button type="button" class="nsc-mini-btn" data-role="sd-cancel">取消</button>
+            <button type="button" class="nsc-send-btn" data-role="sd-ins">插入收款码</button>
           </div>
         </div>
       </div>
       <div class="topic-select nsc-composer-footer">
         <div style="display:inline-flex;align-items:center;gap:8px;min-width:0;">
-          <button type="button" class="nsc-nodeimage-btn" id="nsc-u-ni-btn" title="NodeImage 图床上传/管理"><span class="nsc-ni-dot"></span>图床</button>
-          <span id="nsc-unified-status" class="nsc-ni-status" style="font-size:11px;color:var(--nsc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">支持完整 Markdown · Ctrl+V 贴图 · Ctrl+Enter 发送</span>
+          <button type="button" class="nsc-nodeimage-btn" data-role="ni-btn" title="NodeImage 图床上传/管理"><span class="nsc-ni-dot"></span>图床</button>
+          <span id="${prefix}-unified-status" class="nsc-ni-status" style="font-size:11px;color:var(--nsc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">支持完整 Markdown · Ctrl+V 贴图 · Ctrl+Enter 发送</span>
         </div>
-        <button type="button" class="submit btn nsc-send-btn" id="nsc-unified-send">发布评论</button>
+        <button type="button" class="submit btn nsc-send-btn" id="${prefix}-unified-send" ${opts.hideFooterSubmit ? 'style="display:none;"' : ""}>发布评论</button>
       </div>
     `;
 
-    const ta = box.querySelector("#nsc-unified-ta");
-    const bodyEl = box.querySelector("#nsc-u-body");
-    const previewEl = box.querySelector("#nsc-u-preview");
-    const toolbarEl = box.querySelector("#nsc-u-toolbar");
-    const stickerPop = box.querySelector("#nsc-u-sticker-pop");
-    const appPop = box.querySelector("#nsc-u-app-pop");
-    const sdForm = box.querySelector("#nsc-u-sd-form");
-    const statusEl = box.querySelector("#nsc-unified-status");
-    const sendBtn = box.querySelector("#nsc-unified-send");
+    const ta = box.querySelector(`#${prefix}-unified-ta`);
+    const bodyEl = box.querySelector(".nsc-u-body");
+    const previewEl = box.querySelector(".nsc-u-preview");
+    const toolbarEl = box.querySelector(".nsc-mde-toolbar");
+    const stickerPop = box.querySelector(".exp-container");
+    const appPop = box.querySelector(".nsc-u-app-pop");
+    const sdForm = box.querySelector(".nsc-u-sd-form");
+    const statusEl = box.querySelector(`#${prefix}-unified-status`);
+    const sendBtn = box.querySelector(`#${prefix}-unified-send`);
 
     const undoStack = [""];
     const redoStack = [];
@@ -1139,7 +1199,7 @@
       snapTimer = setTimeout(() => pushSnap(ta.value), 260);
     });
 
-    box.querySelector("#nsc-u-undo").addEventListener("click", () => {
+    box.querySelector('[data-role="undo"]').addEventListener("click", () => {
       if (undoStack.length <= 1) return;
       const cur = undoStack.pop();
       redoStack.push(cur);
@@ -1149,7 +1209,7 @@
       syncPreview();
       ta.focus({ preventScroll: true });
     });
-    box.querySelector("#nsc-u-redo").addEventListener("click", () => {
+    box.querySelector('[data-role="redo"]').addEventListener("click", () => {
       if (redoStack.length === 0) return;
       const nxt = redoStack.pop();
       undoStack.push(nxt);
@@ -1174,10 +1234,10 @@
       b.addEventListener("click", () => setMode(b.dataset.umode));
     });
 
-    box.querySelector("#nsc-u-toggle-tb").addEventListener("click", () => {
+    box.querySelector('[data-role="toggle-tb"]').addEventListener("click", () => {
       toolbarEl.style.display = toolbarEl.style.display === "none" ? "flex" : "none";
     });
-    box.querySelector("#nsc-u-toggle-fs").addEventListener("click", () => {
+    box.querySelector('[data-role="toggle-fs"]').addEventListener("click", () => {
       box.classList.toggle("is-fullscreen");
       ta.focus({ preventScroll: true });
     });
@@ -1251,15 +1311,15 @@
       });
     });
 
-    box.querySelector("#nsc-u-app-stardust").addEventListener("click", (e) => {
+    box.querySelector('[data-role="app-stardust"]').addEventListener("click", (e) => {
       e.stopPropagation();
       sdForm.classList.toggle("is-open");
     });
-    box.querySelector("#nsc-u-sd-cancel").addEventListener("click", (e) => {
+    box.querySelector('[data-role="sd-cancel"]').addEventListener("click", (e) => {
       e.stopPropagation();
       sdForm.classList.remove("is-open");
     });
-    box.querySelector("#nsc-u-sd-ins").addEventListener("click", (e) => {
+    box.querySelector('[data-role="sd-ins"]').addEventListener("click", (e) => {
       e.stopPropagation();
       detectCurrentUser();
       const uid = state.currentUserId;
@@ -1267,23 +1327,30 @@
         if (statusEl) statusEl.textContent = "请先登录后生成星辰收款码";
         return;
       }
-      const diff = Math.min(1000, Math.max(1, parseInt(box.querySelector("#nsc-u-sd-diff").value, 10) || 1));
-      const desc = box.querySelector("#nsc-u-sd-desc").value.trim() || "Pay with Stardust";
-      const onetime = box.querySelector("#nsc-u-sd-once").checked;
+      const diff = Math.min(1000, Math.max(1, parseInt(box.querySelector('[data-role="sd-diff"]').value, 10) || 1));
+      const desc = box.querySelector('[data-role="sd-desc"]').value.trim() || "Pay with Stardust";
+      const onetime = box.querySelector('[data-role="sd-once"]').checked;
       const refId = Math.floor(10000000 + Math.random() * 89999999);
       const url = `nsapp://stardust-receive?member_id=${uid}&ref_id=${refId}&description=${encodeURIComponent(desc)}&diff=${diff}&onetime=${onetime}`;
       pushSnap(ta.value);
       const s = ta.selectionStart || 0;
       const end = ta.selectionEnd || 0;
-      const prefix = s > 0 && !ta.value.slice(0, s).endsWith("\n") ? "\n" : "";
-      ta.setRangeText(`${prefix}${url}\n`, s, end, "end");
+      const prefixStr = s > 0 && !ta.value.slice(0, s).endsWith("\n") ? "\n" : "";
+      ta.setRangeText(`${prefixStr}${url}\n`, s, end, "end");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
       closePopovers();
       ta.focus({ preventScroll: true });
     });
-    box.querySelector("#nsc-u-app-vote").addEventListener("click", (e) => {
+    box.querySelector('[data-role="app-vote"]').addEventListener("click", (e) => {
       e.stopPropagation();
       closePopovers();
+      if (prefix === "nsc-np") {
+        const lnk = document.getElementById("nsc-np-native-link");
+        if (statusEl) {
+          statusEl.innerHTML = `点击右上角 <a href="${escHtml((lnk && lnk.href) || "/new-discussion")}" style="color:var(--nsc-accent);font-weight:600;">原版编辑器 ↗</a> 可在发帖页发起官方投票`;
+        }
+        return;
+      }
       if (state.activePmPeer) {
         if (statusEl) statusEl.textContent = "私信暂不支持创建帖子投票，请在帖子页使用投票卡片";
         return;
@@ -1297,12 +1364,16 @@
       if (!box.contains(e.target)) closePopovers();
     });
 
-    box.querySelector("#nsc-u-ni-btn").addEventListener("click", () => {
-      openNodeImageModal(state.activePmPeer ? "pm" : "chat");
+    box.querySelector('[data-role="ni-btn"]').addEventListener("click", () => {
+      openNodeImageModal(prefix === "nsc-np" ? "newpost" : (state.activePmPeer ? "pm" : "chat"));
     });
     NodeImage.syncDots();
 
     const doSubmit = () => {
+      if (typeof opts.onCtrlEnter === "function") {
+        opts.onCtrlEnter();
+        return;
+      }
       if (sendBtn.disabled) return;
       box.classList.remove("is-fullscreen");
       setMode("write");
@@ -1335,6 +1406,10 @@
     if (!editor) return;
     const submitBtn = editor.querySelector("button.submit.btn");
     const statusEl = editor.querySelector(".topic-select .nsc-ni-status");
+    if (editor.closest("#nsc-newpost-backdrop")) {
+      if (statusEl) statusEl.textContent = "发帖模式 · 支持完整 Markdown / 贴图 / App · Ctrl+Enter 发布";
+      return;
+    }
     if (state.activePmPeer) {
       if (submitBtn && !submitBtn.disabled) submitBtn.textContent = "发送私信";
       if (statusEl) {
@@ -1416,7 +1491,7 @@
 
   function positionAppPopover(editor) {
     if (!editor) return;
-    const dock = document.getElementById("nsc-composer-dock") || editor;
+    const dock = editor.closest("#nsc-np-editor-host, #nsc-composer-dock") || document.getElementById("nsc-composer-dock") || editor;
     const pop = editor.querySelector(".exp-container.cur-sticker-group-app");
     const appBtn = editor.querySelector(".expression .sticker-group-app");
     if (!pop || !appBtn || !dock) return;
@@ -1466,7 +1541,10 @@
       imgHostBtn.className = "nsc-nodeimage-btn";
       imgHostBtn.title = "NodeImage 图床上传与授权";
       imgHostBtn.innerHTML = `<span class="nsc-ni-dot"></span>图床`;
-      imgHostBtn.addEventListener("click", () => openNodeImageModal(state.activePmPeer ? "pm" : "chat"));
+      imgHostBtn.addEventListener("click", () => {
+        const mode = editor.closest("#nsc-newpost-backdrop") ? "newpost" : (state.activePmPeer ? "pm" : "chat");
+        openNodeImageModal(mode);
+      });
       if (leftSlot) {
         leftSlot.style.cssText = "display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--nsc-muted);min-width:0;";
         leftSlot.innerHTML = "";
@@ -1485,6 +1563,16 @@
     editor.addEventListener("keydown", (e) => {
       if (!document.body.classList.contains("nsc-app-active")) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (editor.closest("#nsc-newpost-backdrop")) {
+          const npBtn = document.getElementById("nsc-np-submit");
+          if (npBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            npBtn.click();
+          }
+          return;
+        }
         const btn = editor.querySelector("button.submit.btn");
         if (btn) {
           e.preventDefault();

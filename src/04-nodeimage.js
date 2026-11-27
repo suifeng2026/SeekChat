@@ -108,13 +108,34 @@
         ta.focus({ preventScroll: true });
       };
       if (targetMode === "newpost") {
-        const ta = document.getElementById("nsc-np-content");
+        const npWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+        const npCmEl =
+          (npWin.document && npWin.document.querySelector("#nsc-np-editor-host .md-editor .CodeMirror")) ||
+          document.querySelector("#nsc-np-editor-host .md-editor .CodeMirror");
+        if (npCmEl && npCmEl.offsetParent !== null) {
+          const npCm = npCmEl.CodeMirror || (npCmEl.wrappedJSObject && npCmEl.wrappedJSObject.CodeMirror);
+          if (npCm && typeof npCm.replaceSelection === "function") {
+            const cur = npCm.getCursor();
+            const lineTxt = npCm.getLine(cur.line) || "";
+            const prefix = cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
+            npCm.replaceSelection(`${prefix}${markdown}\n`);
+            if (typeof npCm.refresh === "function") npCm.refresh();
+            npCm.focus();
+            return;
+          }
+        }
+        const ta = document.getElementById("nsc-np-unified-ta") || document.getElementById("nsc-np-content");
         if (ta) smartWrapTa(ta);
         return;
       }
       if (targetMode === "edit") {
         const ta = document.getElementById("nsc-edit-content");
         if (ta) smartWrapTa(ta);
+        return;
+      }
+      const npBd = document.getElementById("nsc-newpost-backdrop");
+      if (npBd && npBd.classList.contains("is-open")) {
+        NodeImage.insertToTarget("newpost", markdown);
         return;
       }
       const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
@@ -128,6 +149,7 @@
           const lineTxt = cm.getLine(cur.line) || "";
           const prefix = cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
           cm.replaceSelection(`${prefix}${markdown}\n`);
+          if (typeof cm.refresh === "function") cm.refresh();
           cm.focus();
           return;
         }
@@ -148,11 +170,13 @@
       if (!containerEl || containerEl.dataset.nscNiBound === "1") return;
       containerEl.dataset.nscNiBound = "1";
       const resolveMode = () => {
+        const npBd = document.getElementById("nsc-newpost-backdrop");
+        if (npBd && npBd.classList.contains("is-open") && containerEl.closest("#nsc-newpost-backdrop")) return "newpost";
         if (targetMode === "chat" && state.activePmPeer) return "pm";
         return targetMode;
       };
       const getStatusEl = (effMode) => {
-        if (effMode === "newpost") return document.getElementById("nsc-np-status");
+        if (effMode === "newpost") return document.getElementById("nsc-np-status") || document.getElementById("nsc-np-unified-status");
         if (effMode === "edit") return document.getElementById("nsc-edit-status");
         return (
           document.querySelector("#nsc-composer-body .nsc-ni-status") ||
@@ -391,9 +415,8 @@
       NodeImage.syncDots();
     }
     if (npBackdropEl) {
-      const npBtn = npBackdropEl.querySelector('[data-ni-btn="newpost"]');
-      if (npBtn) npBtn.addEventListener("click", () => openNodeImageModal("newpost"));
-      NodeImage.bindPasteAndDrop(npBackdropEl.querySelector("#nsc-np-content"), "newpost", "#nsc-np-status");
+      const npHost = npBackdropEl.querySelector("#nsc-np-editor-host");
+      if (npHost) NodeImage.bindPasteAndDrop(npHost, "newpost", "#nsc-np-status");
     }
     const dock = document.getElementById("nsc-composer-dock");
     if (dock) NodeImage.bindPasteAndDrop(dock, "chat", "#nsc-composer-status");
