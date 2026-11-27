@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.9
+// @version      7.9.10
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -3564,83 +3564,137 @@
     return "";
   }
 
-  function highlightSysNoticeSegment(text) {
-    let s = String(text || "")
+  function escHtml(str) {
+    return String(str || "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    s = s.replace(/[您你]关注的用户\s*/g, "");
-    s = s.replace(/发布了?一篇新的帖子/g, "发布新帖");
-    s = s.replace(/您的\s*评论\s*被用户\s*/g, "评论 · ");
-    s = s.replace(/您的帖子『#?\s*/g, "《");
-    s = s.replace(/』被用户\s*/g, "》· ");
-    s = s.replace(/投喂鸡腿/g, '<span class="nsc-sn-kw-reward">🍗 鸡腿</span>');
-    s = s.replace(/星辰点赞/g, '<span class="nsc-sn-kw-reward">⭐ 点赞</span>');
-    s = s.replace(/(发布新帖|新的帖子|新帖子|新主题)/g, '<span class="nsc-sn-kw-post">$1</span>');
-    s = s.replace(/(评论|回复|引用)/g, '<span class="nsc-sn-kw-comment">$1</span>');
-    s = s.replace(/(鸡腿|星辰|奖励|中奖|抽奖|签到)/g, '<span class="nsc-sn-kw-reward">$1</span>');
-    s = s.replace(/(警告|封禁|禁言|违规|删除)/g, '<span class="nsc-sn-kw-warn">$1</span>');
-    s = s.replace(/^([^\s<，。,:：]{1,24})(?=\s*<span class="nsc-sn-kw-post">发布新帖)/, '<span class="nsc-sn-user">$1</span> ');
-    s = s.replace(/(评论 · |》· )([^\s<，。,:：]+)/g, '$1<span class="nsc-sn-user">$2</span>');
-    return s;
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function formatSysNoticeHtml(rawContent) {
-    const src = String(rawContent || "");
+    const src = String(rawContent || "").trim();
     const tokenRe = /\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)|((?:https?:\/\/(?:www\.)?nodeseek\.com)?\/(?:post-\d+(?:-\d+)?(?:#\d+)?|space\/\d+))/g;
-    let out = "";
-    let last = 0;
+
+    let userInfo = null;
     let firstPost = null;
+    let plain = "";
+    let last = 0;
     let m;
+
     while ((m = tokenRe.exec(src)) !== null) {
-      if (m.index > last) out += highlightSysNoticeSegment(src.slice(last, m.index));
-      const rawLabel = m[1] || m[3];
-      const url = m[2] || m[3];
-      const cleanUrl = url.replace(/"/g, "&quot;");
+      plain += src.slice(last, m.index);
+      const rawLabel = (m[1] || m[3] || "").trim();
+      const url = (m[2] || m[3] || "").trim();
       const spaceMatch = url.match(/\/space\/(\d+)/);
       const postMatch = url.match(/\/post-(\d+)(?:-(\d+))?(?:#(\d+))?/);
+
       if (spaceMatch) {
-        const cleanLabel = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        out += `<span class="nsc-sn-user" data-uid="${spaceMatch[1]}">${cleanLabel}</span>`;
+        if (!userInfo) userInfo = { uid: spaceMatch[1], name: rawLabel };
+        plain += rawLabel;
       } else if (postMatch) {
         const pid = postMatch[1];
         const postHref = `/post-${pid}-${postMatch[2] || 1}`;
-        const isGeneric = /^(?:新的帖子|新帖子|帖子|点击查看|https?:\/\/|\/post-)/.test(rawLabel.trim());
-        const resolvedTitle = isGeneric ? resolveKnownPostTitle(pid) : rawLabel.replace(/^#\s*/, "").trim();
-        const displayTitle = resolvedTitle || (isGeneric ? "新帖" : rawLabel);
+        const isGeneric = /^(?:新的帖子|新帖子|帖子|评论|点击查看|https?:\/\/|\/post-)/.test(rawLabel);
+        const cleanRawTitle = rawLabel.replace(/^[#『《\s]+|[』》\s]+$/g, "").trim();
+        const resolvedTitle = isGeneric ? resolveKnownPostTitle(pid) : cleanRawTitle;
         if (!firstPost) {
           firstPost = {
             postId: pid,
             url: postHref,
-            title: resolvedTitle || `帖子 #${pid}`,
-            needsTitle: !resolvedTitle,
+            title: resolvedTitle || (isGeneric ? `帖子 #${pid}` : cleanRawTitle),
+            needsTitle: !resolvedTitle && isGeneric,
             targetFloor: postMatch[3] || "",
           };
         }
-        const safeDisp = displayTitle.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        if (resolvedTitle) {
-          out += ` <a class="nsc-sn-post" href="${cleanUrl}" data-pid="${pid}">《${safeDisp}》</a>`;
-        } else {
-          out += `<a class="nsc-sn-post" href="${cleanUrl}" data-pid="${pid}">${safeDisp}</a>`;
-        }
+        plain += isGeneric ? rawLabel : cleanRawTitle;
       } else {
-        const cleanLabel = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        out += `<a class="nsc-sn-post" href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanLabel}</a>`;
+        plain += rawLabel;
       }
       last = tokenRe.lastIndex;
     }
-    if (last < src.length) out += highlightSysNoticeSegment(src.slice(last));
-    out = out.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
-    return { html: out, firstPost };
-  }
+    plain += src.slice(last);
 
-  function classifySysNoticeTag(rawContent) {
-    const s = String(rawContent || "");
-    if (/新的帖子|新帖子|发布了|新主题/.test(s)) return { label: "新帖", cls: "nsc-sn-kw-post" };
-    if (/评论|回复|引用/.test(s)) return { label: "评论", cls: "nsc-sn-kw-comment" };
-    if (/鸡腿|星辰|奖励|中奖|抽奖|签到/.test(s)) return { label: "奖励", cls: "nsc-sn-kw-reward" };
-    if (/警告|封禁|禁言|违规|删除/.test(s)) return { label: "提醒", cls: "nsc-sn-kw-warn" };
-    return { label: "通知", cls: "nsc-sn-user" };
+    const makeUserHtml = (name, uid) =>
+      uid
+        ? `<span class="nsc-sn-user" data-uid="${escHtml(uid)}">${escHtml(name)}</span>`
+        : `<span class="nsc-sn-user">${escHtml(name)}</span>`;
+    const makePostHtml = (post) =>
+      `<a class="nsc-sn-post" href="${escHtml(post.url)}" data-pid="${escHtml(post.postId)}">${escHtml(post.title)}</a>`;
+
+    // 模板 1：关注的人发了新帖
+    if (/新的帖子|发布了?一篇新/.test(src)) {
+      let uname = userInfo ? userInfo.name : "";
+      if (!uname) {
+        const um = plain.match(/(?:[您你]关注的用户\s*)?([^\s，,:：]+)\s*发布了/);
+        if (um) uname = um[1];
+      }
+      const userPart = uname ? makeUserHtml(uname, userInfo && userInfo.uid) : "";
+      const hasResolvedTitle = firstPost && !firstPost.needsTitle;
+      const html = hasResolvedTitle
+        ? `${userPart} 发布 ${makePostHtml(firstPost)}`
+        : `${userPart} 发布了新帖`;
+      return {
+        html: html.trim(),
+        firstPost,
+        tag: { label: "新帖", cls: "nsc-sn-kw-post" },
+      };
+    }
+
+    // 模板 2：投喂鸡腿 / 星辰点赞（评论或帖子）
+    const isChicken = /投喂鸡腿/.test(src);
+    const isStarLike = /星辰点赞/.test(src);
+    if (isChicken || isStarLike) {
+      const tag = isChicken
+        ? { label: "🍗 鸡腿", cls: "nsc-sn-kw-reward" }
+        : { label: "⭐ 点赞", cls: "nsc-sn-kw-comment" };
+      let uname = userInfo ? userInfo.name : "";
+      if (!uname) {
+        const um = plain.match(/被用户\s*([^\s，。]+)\s*(?:投喂鸡腿|星辰点赞)/);
+        if (um) uname = um[1];
+      }
+      const userPart = uname ? makeUserHtml(uname, userInfo && userInfo.uid) : "";
+      const isCommentTarget = /您的\s*评论\s*被用户/.test(plain);
+      if (isCommentTarget) {
+        const verb = isChicken ? "投喂了评论" : "赞了评论";
+        return { html: `${userPart} ${verb}`.trim(), firstPost, tag };
+      }
+      if (firstPost) {
+        return { html: `${userPart} · ${makePostHtml(firstPost)}`.trim(), firstPost, tag };
+      }
+    }
+
+    // 模板 3：管理扣分 / 违规警告
+    if (/警告|封禁|禁言|违规|删除|-\d+\s*鸡腿/.test(src)) {
+      let clean = plain
+        .replace(/您的帖子『#?\s*/g, "")
+        .replace(/』\s*/g, " ")
+        .replace(/详细信息\s*$/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (firstPost && firstPost.title && clean.includes(firstPost.title)) {
+        clean = escHtml(clean).replace(escHtml(firstPost.title), makePostHtml(firstPost));
+      } else {
+        clean = escHtml(clean);
+      }
+      return { html: clean, firstPost, tag: { label: "⚠️ 管理", cls: "nsc-sn-kw-warn" } };
+    }
+
+    // 模板 4：其他通用通知
+    let clean = plain
+      .replace(/您的帖子『#?\s*/g, "")
+      .replace(/』\s*/g, " ")
+      .replace(/[您你]关注的用户\s*/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    let html = escHtml(clean);
+    if (userInfo && userInfo.name) {
+      html = html.replace(escHtml(userInfo.name), makeUserHtml(userInfo.name, userInfo.uid));
+    }
+    if (firstPost && firstPost.title && !firstPost.needsTitle) {
+      html = html.replace(escHtml(firstPost.title), makePostHtml(firstPost));
+    }
+    return { html, firstPost, tag: { label: "通知", cls: "nsc-sn-user" } };
   }
 
   let _snTitleQueueRunning = false;
@@ -3648,7 +3702,7 @@
     if (_snTitleQueueRunning) return;
     const targets = state.sysNoticeList.items
       .filter((it) => it.firstPost && it.firstPost.needsTitle && it.firstPost.postId && !resolveKnownPostTitle(it.firstPost.postId))
-      .slice(0, 12);
+      .slice(0, 35);
     if (targets.length === 0) return;
     _snTitleQueueRunning = true;
     try {
@@ -3672,13 +3726,14 @@
                   const reParsed = formatSysNoticeHtml(item.content);
                   item.html = reParsed.html;
                   item.firstPost = reParsed.firstPost;
+                  item.tag = reParsed.tag;
                 }
               }
               if (state.activeChannel === "sys-notice") renderTopicList();
             }
           }
         } catch (_) {}
-        await new Promise((r) => setTimeout(r, 320));
+        await new Promise((r) => setTimeout(r, 260));
       }
     } finally {
       _snTitleQueueRunning = false;
@@ -3703,14 +3758,13 @@
       const myId = state.currentUserId;
       const items = rows.map((r) => {
         const parsed = formatSysNoticeHtml(r.content || "");
-        const tag = classifySysNoticeTag(r.content || "");
         const isUnread = (!myId || Number(r.receiver_id) === myId) && (r.viewed === false || r.viewed === 0 || r.viewed === "0");
         return {
           id: Number(r.id) || 0,
           content: String(r.content || ""),
           html: parsed.html,
           firstPost: parsed.firstPost,
-          tag,
+          tag: parsed.tag,
           timeText: formatChineseTime("", r.created_at, ""),
           ts: new Date(r.created_at || 0).getTime() || 0,
           unread: isUnread,
