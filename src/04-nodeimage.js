@@ -112,6 +112,11 @@
         if (ta) smartWrapTa(ta);
         return;
       }
+      if (targetMode === "edit") {
+        const ta = document.getElementById("nsc-edit-content");
+        if (ta) smartWrapTa(ta);
+        return;
+      }
       const pmBox = document.getElementById("nsc-pm-composer");
       if (targetMode === "pm" || (pmBox && pmBox.style.display !== "none")) {
         const ta = document.getElementById("nsc-pm-ta");
@@ -158,6 +163,7 @@
       const getStatusEl = (effMode) => {
         if (effMode === "pm") return document.getElementById("nsc-pm-status");
         if (effMode === "newpost") return document.getElementById("nsc-np-status");
+        if (effMode === "edit") return document.getElementById("nsc-edit-status");
         return (
           (statusSelector && document.querySelector(statusSelector)) ||
           document.getElementById("nsc-composer-status") ||

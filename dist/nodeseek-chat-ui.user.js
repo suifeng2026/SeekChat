@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.10
+// @version      7.10.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -95,6 +95,7 @@
     trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
     theme: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>`,
     smile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
+    edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -1709,6 +1710,11 @@
         if (ta) smartWrapTa(ta);
         return;
       }
+      if (targetMode === "edit") {
+        const ta = document.getElementById("nsc-edit-content");
+        if (ta) smartWrapTa(ta);
+        return;
+      }
       const pmBox = document.getElementById("nsc-pm-composer");
       if (targetMode === "pm" || (pmBox && pmBox.style.display !== "none")) {
         const ta = document.getElementById("nsc-pm-ta");
@@ -1755,6 +1761,7 @@
       const getStatusEl = (effMode) => {
         if (effMode === "pm") return document.getElementById("nsc-pm-status");
         if (effMode === "newpost") return document.getElementById("nsc-np-status");
+        if (effMode === "edit") return document.getElementById("nsc-edit-status");
         return (
           (statusSelector && document.querySelector(statusSelector)) ||
           document.getElementById("nsc-composer-status") ||
@@ -2255,6 +2262,8 @@
         lightbox.classList.remove("is-open");
         backdrop.classList.remove("is-open");
         npBackdrop.classList.remove("is-open");
+        const editBd = document.getElementById("nsc-edit-backdrop");
+        if (editBd) editBd.classList.remove("is-open");
         if (niBackdrop) niBackdrop.classList.remove("is-open");
       } else if (lightbox.classList.contains("is-open")) {
         if (e.key === "ArrowLeft") stepLightbox(-1);
@@ -4901,6 +4910,10 @@
       });
     }
 
+    if (room.opObj && state.currentUser && room.opObj.author === state.currentUser) {
+      addBtn("编辑主题", false, () => openEditModal(room.opObj, true));
+    }
+
     addBtn("只看楼主", state.onlyOp, (b) => {
       state.onlyOp = !state.onlyOp;
       state.onlyMember = "";
@@ -5102,7 +5115,242 @@
     }
   }
 
-  function buildHoverBar(obj, isNativePage, reactionsEl, isThread = false) {
+  function htmlToMarkdown(html) {
+    if (!html) return "";
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    const walk = (node) => {
+      if (!node) return "";
+      if (node.nodeType === 3) return node.nodeValue || "";
+      if (node.nodeType !== 1) return "";
+      const tag = node.tagName.toLowerCase();
+      if (tag === "br") return "\n";
+      if (tag === "hr") return "\n---\n";
+      if (tag === "img") {
+        const src = node.getAttribute("src") || "";
+        const stickerMatch = src.match(/\/static\/image\/sticker\/([a-z]+)\/([0-9]+)\./i);
+        if (stickerMatch) return `:${stickerMatch[1]}${stickerMatch[2]}:`;
+        const alt = node.getAttribute("alt") || "image";
+        return `![${alt}](${src})`;
+      }
+      if (tag === "pre") {
+        const code = node.textContent || "";
+        return `\n\`\`\`\n${code.replace(/^\n+|\n+$/g, "")}\n\`\`\`\n`;
+      }
+      if (tag === "code") {
+        if (node.parentElement && node.parentElement.tagName.toLowerCase() === "pre") return node.textContent || "";
+        return `\`${node.textContent || ""}\``;
+      }
+      const inner = Array.from(node.childNodes).map(walk).join("");
+      if (tag === "a") {
+        const href = node.getAttribute("href") || "";
+        const txt = inner.trim() || href;
+        if (!href || href.startsWith("#")) return txt;
+        return `[${txt}](${href})`;
+      }
+      if (tag === "strong" || tag === "b") return `**${inner}**`;
+      if (tag === "em" || tag === "i") return `*${inner}*`;
+      if (tag === "del" || tag === "s") return `~~${inner}~~`;
+      if (/^h([1-6])$/.test(tag)) return `\n${"#".repeat(Number(RegExp.$1))} ${inner.trim()}\n`;
+      if (tag === "blockquote") {
+        const lines = inner.trim().split(/\n/).map((l) => `> ${l}`).join("\n");
+        return `\n${lines}\n`;
+      }
+      if (tag === "li") {
+        const parentTag = node.parentElement && node.parentElement.tagName.toLowerCase();
+        const prefix = parentTag === "ol" ? "1. " : "- ";
+        return `${prefix}${inner.trim()}\n`;
+      }
+      if (tag === "ul" || tag === "ol") return `\n${inner}`;
+      if (tag === "p" || tag === "div") return `${inner.trim()}\n\n`;
+      return inner;
+    };
+    return Array.from(tpl.content.childNodes)
+      .map(walk)
+      .join("")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  let _editModalCtx = null;
+  function openEditModal(obj, isTopic = false) {
+    if (!obj || !state.currentPostId) return;
+    const pid = state.currentPostId;
+    const room = state.currentRoom;
+    let bd = document.getElementById("nsc-edit-backdrop");
+    if (!bd) {
+      bd = document.createElement("div");
+      bd.id = "nsc-edit-backdrop";
+      bd.style.cssText =
+        "position:fixed;inset:0;z-index:9550;background:rgba(15,23,42,0.40);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:16px;";
+      bd.innerHTML = `
+        <div class="nsc-newpost-modal" role="dialog" aria-label="编辑内容">
+          <div class="nsc-newpost-head">
+            <span id="nsc-edit-head-title" style="font-size:14.5px;font-weight:700;">编辑内容</span>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <a id="nsc-edit-orig-link" href="#" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--nsc-accent);text-decoration:none;font-weight:600;">原帖查看 ↗</a>
+              <button type="button" id="nsc-edit-close" style="border:none;background:transparent;color:var(--nsc-muted);font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
+            </div>
+          </div>
+          <div class="nsc-newpost-body">
+            <div class="nsc-newpost-row" id="nsc-edit-title-row">
+              <input type="text" class="nsc-newpost-title" id="nsc-edit-title" placeholder="请输入帖子标题..." />
+            </div>
+            <div class="nsc-newpost-editor" style="position:relative;">
+              <div class="nsc-mde-toolbar" id="nsc-edit-toolbar">
+                <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
+                <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
+                <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+                <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+                <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
+                <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+                <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
+                <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+                <button type="button" class="nsc-mde-btn" id="nsc-edit-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
+                <button type="button" class="nsc-nodeimage-btn" id="nsc-edit-ni-btn" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>
+              </div>
+              <textarea class="nsc-newpost-ta" id="nsc-edit-content" placeholder="支持 Markdown 语法，Ctrl+V 可直接粘贴传图，Ctrl+Enter 保存..."></textarea>
+            </div>
+          </div>
+          <div class="nsc-newpost-foot">
+            <span id="nsc-edit-status" style="font-size:11.5px;color:var(--nsc-muted);">由原贴 HTML 还原为 Markdown，保存前请核对格式</span>
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="nsc-pill-btn" id="nsc-edit-cancel">取消</button>
+              <button type="button" class="nsc-send-btn" id="nsc-edit-submit">保存修改</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(bd);
+
+      const closeEdit = () => { bd.style.display = "none"; bd.classList.remove("is-open"); };
+      bd.addEventListener("click", (e) => { if (e.target === bd) closeEdit(); });
+      bd.querySelector("#nsc-edit-close").addEventListener("click", closeEdit);
+      bd.querySelector("#nsc-edit-cancel").addEventListener("click", closeEdit);
+
+      const edContent = bd.querySelector("#nsc-edit-content");
+      const edTitle = bd.querySelector("#nsc-edit-title");
+      const edStatus = bd.querySelector("#nsc-edit-status");
+      const edSubmit = bd.querySelector("#nsc-edit-submit");
+
+      bd.querySelectorAll("#nsc-edit-toolbar .nsc-mde-btn[data-wrap], #nsc-edit-toolbar .nsc-mde-btn[data-prefix], #nsc-edit-toolbar .nsc-mde-btn[data-tpl]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const s = edContent.selectionStart || 0;
+          const e = edContent.selectionEnd || 0;
+          const sel = edContent.value.slice(s, e);
+          let ins = "";
+          if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
+          else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
+          else if (b.dataset.tpl) ins = b.dataset.tpl;
+          edContent.setRangeText(ins, s, e, "end");
+          edContent.focus();
+        });
+      });
+
+      attachStickerPicker(bd.querySelector("#nsc-edit-exp-btn"), edContent, bd.querySelector(".nsc-newpost-editor"));
+      bd.querySelector("#nsc-edit-ni-btn").addEventListener("click", () => openNodeImageModal("edit"));
+      NodeImage.bindPasteAndDrop(edContent, "edit", "#nsc-edit-status");
+
+      const doSaveEdit = async () => {
+        if (!_editModalCtx) return;
+        const { obj: curObj, isTopic: curIsTopic, pid: curPid } = _editModalCtx;
+        const newContent = edContent.value.trim();
+        const newTitle = edTitle.value.trim();
+        if (!newContent) {
+          edStatus.textContent = "正文内容不能为空";
+          edContent.focus();
+          return;
+        }
+        if (curIsTopic && !newTitle) {
+          edStatus.textContent = "主题标题不能为空";
+          edTitle.focus();
+          return;
+        }
+        if (!curIsTopic && !curObj.commentId) {
+          edStatus.textContent = "未获取到 commentId，请点击右上角「原帖查看」修改";
+          return;
+        }
+        edSubmit.disabled = true;
+        edSubmit.textContent = "保存中...";
+        edStatus.textContent = "正在提交修改...";
+        try {
+          const endpoint = curIsTopic ? "/api/content/edit-discussion" : "/api/content/edit-comment";
+          const payload = curIsTopic
+            ? { content: newContent, mode: "edit-discussion", title: newTitle, postId: Number(curPid), rank: 0 }
+            : { content: newContent, mode: "edit-comment", commentId: Number(curObj.commentId) };
+          const resp = await fetch(endpoint, {
+            method: "POST",
+            credentials: "include",
+            headers: getNodeSeekPostHeaders(),
+            body: JSON.stringify(payload),
+          });
+          const resJson = await resp.json().catch(() => ({}));
+          if (!resp.ok || resJson.success === false) {
+            throw new Error(resJson.message || `HTTP ${resp.status}`);
+          }
+          edStatus.textContent = "修改成功，正在刷新内容...";
+          const targetPage = curIsTopic ? 1 : curObj.pageNum || 1;
+          const pResp = await fetch(`/post-${curPid}-${targetPage}`, { credentials: "include" });
+          if (pResp.ok && state.currentRoom && state.currentRoom.pid === curPid) {
+            const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
+            if (curIsTopic) {
+              state.currentRoom.title = newTitle;
+              const opEl = pDoc.querySelector(".nsk-post .content-item");
+              if (opEl) {
+                const updatedOp = extractCommentObject(opEl, true, 1);
+                state.currentRoom.opObj = updatedOp;
+              }
+            } else {
+              const updatedEl = pDoc.querySelector(`ul.comments li.content-item[id="${curObj.floorId}"]`) ||
+                pDoc.querySelector(`ul.comments li.content-item[data-comment-id="${curObj.commentId}"]`);
+              if (updatedEl) {
+                const updatedObj = extractCommentObject(updatedEl, false, targetPage);
+                const idx = state.currentRoom.flatComments.findIndex((c) => c.floorId === curObj.floorId);
+                if (idx >= 0) {
+                  updatedObj.isOp = state.currentRoom.flatComments[idx].isOp;
+                  state.currentRoom.flatComments[idx] = updatedObj;
+                }
+              }
+            }
+            const msgsEl = document.getElementById("nsc-chat-messages");
+            const prevTop = msgsEl ? msgsEl.scrollTop : 0;
+            renderChatRoom(state.currentRoom, true);
+            if (msgsEl) msgsEl.scrollTop = prevTop;
+          }
+          closeEdit();
+        } catch (err) {
+          edStatus.textContent = "保存失败: " + err.message;
+        } finally {
+          edSubmit.disabled = false;
+          edSubmit.textContent = "保存修改";
+        }
+      };
+
+      edSubmit.addEventListener("click", doSaveEdit);
+      edContent.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+          e.preventDefault();
+          doSaveEdit();
+        }
+      });
+    }
+
+    _editModalCtx = { obj, isTopic, pid };
+    bd.querySelector("#nsc-edit-head-title").textContent = isTopic ? `编辑主题 #${pid}` : `编辑 #${obj.floorId}楼 评论`;
+    bd.querySelector("#nsc-edit-orig-link").href = isTopic ? `/post-${pid}-1` : `/post-${pid}-${obj.pageNum || 1}#${obj.floorId}`;
+    const titleRow = bd.querySelector("#nsc-edit-title-row");
+    const titleInp = bd.querySelector("#nsc-edit-title");
+    titleRow.style.display = isTopic ? "flex" : "none";
+    titleInp.value = isTopic ? (room && room.title) || "" : "";
+    bd.querySelector("#nsc-edit-content").value = htmlToMarkdown(obj.bodyHtml || "");
+    bd.querySelector("#nsc-edit-status").textContent = "由原贴 HTML 还原为 Markdown，保存前请核对格式";
+    NodeImage.syncDots();
+    bd.style.display = "flex";
+    bd.classList.add("is-open");
+    setTimeout(() => bd.querySelector(isTopic ? "#nsc-edit-title" : "#nsc-edit-content").focus(), 40);
+  }
+
+  function buildHoverBar(obj, isNativePage, reactionsEl, isThread = false, isOpCard = false) {
     const bar = document.createElement("div");
     bar.className = "nsc-hover-bar" + (isThread ? " is-thread-bar" : "");
 
@@ -5150,6 +5398,21 @@
     bar.appendChild(btnLeg);
     bar.appendChild(btnQuote);
     bar.appendChild(btnReply);
+
+    const isMine = state.currentUser && obj.author === state.currentUser;
+    if (isMine) {
+      const btnEdit = document.createElement("button");
+      btnEdit.type = "button";
+      btnEdit.className = "nsc-hb-btn";
+      btnEdit.title = isOpCard || obj.floorId === "0" ? "编辑主题" : `编辑 #${obj.floorId}楼`;
+      btnEdit.innerHTML = ICONS.edit;
+      btnEdit.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openEditModal(obj, isOpCard || obj.floorId === "0");
+      });
+      bar.appendChild(btnEdit);
+    }
+
     return bar;
   }
 
@@ -5217,7 +5480,7 @@
     reactionsEl.className = "nsc-reactions";
     renderReactionPills(reactionsEl, obj, isNativePage);
 
-    const hoverBar = buildHoverBar(obj, isNativePage, reactionsEl, false);
+    const hoverBar = buildHoverBar(obj, isNativePage, reactionsEl, false, isOpCard);
     meta.appendChild(hoverBar);
     bubbleRow.appendChild(bubble);
 
