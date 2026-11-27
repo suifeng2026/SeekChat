@@ -126,11 +126,26 @@
         background: linear-gradient(180deg, #5177ad 0%, #3d6094 100%);
         box-shadow: 0 2px 8px rgba(61, 96, 148, 0.22);
       }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse { color: #a85513; }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse.is-active { background: #b8621c; color: #fff; box-shadow: 0 2px 8px rgba(184, 98, 28, 0.25); }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(184, 98, 28, 0.14); color: #a85513; }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg { color: #c2497a; }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg.is-active { background: linear-gradient(135deg, #d66793, #bf4777); }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse { color: #9c4e12; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse:hover { background: rgba(184, 98, 28, 0.11); color: #84400c; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse.is-active {
+        background: linear-gradient(135deg, #c97329, #a85513); color: #fff;
+        box-shadow: 0 2px 8px rgba(184, 98, 28, 0.24);
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(184, 98, 28, 0.14); color: #9c4e12; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg { color: #b34a2f; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg:hover { background: rgba(179, 74, 47, 0.11); color: #963820; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg .nsc-nav-badge { background: rgba(179, 74, 47, 0.14); color: #a84126; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg.is-active {
+        background: linear-gradient(135deg, #cf6749, #b34a2f); color: #fff;
+        box-shadow: 0 2px 8px rgba(179, 74, 47, 0.24);
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-board { color: #594a3a; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-board:hover { background: rgba(120, 88, 52, 0.09); color: #3a3025; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-board .nsc-nav-badge { background: rgba(120, 88, 52, 0.13); color: #785834; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-board.is-active { background: #b8621c; color: #fff; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-admin { color: #7b6750; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-admin:hover { background: rgba(120, 88, 52, 0.10); color: #9c4e12; }
       body.nsc-app-active.nsc-theme-dusk .nsc-lv-pill { background: rgba(68, 104, 158, 0.12); color: #3d6094; }
 
       #nsc-mode-switch-btn {
@@ -265,19 +280,25 @@
       }
       /* macOS 分区色彩搭配：浏览(访达蓝) / 消息中心(樱花粉) / 版块(清雅靛蓝) / 站务(暖琥珀) */
       .nsc-nav-item.group-browse { color: #007aff; }
-      body.dark-layout .nsc-nav-item.group-browse { color: #4da3ff; }
+      body.dark-layout .nsc-nav-item.group-browse { color: #7bc0ff; }
       .nsc-nav-item.group-browse:hover { background: rgba(0, 122, 255, 0.09); color: #0066d6; }
+      body.dark-layout .nsc-nav-item.group-browse:hover { background: rgba(56, 139, 253, 0.14); color: #a8d7ff; }
       .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(0, 122, 255, 0.13); color: #007aff; }
-      body.dark-layout .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(10, 132, 255, 0.22); color: #64b5ff; }
-      .nsc-nav-item.group-browse.is-active { background: #007aff; color: #fff; }
+      body.dark-layout .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(56, 139, 253, 0.20); color: #8ac9ff; }
+      .nsc-nav-item.group-browse.is-active,
+      body.dark-layout .nsc-nav-item.group-browse.is-active {
+        background: linear-gradient(135deg, #2b7de9, #1f6feb); color: #fff;
+        box-shadow: 0 2px 10px rgba(31, 111, 235, 0.30);
+      }
 
       .nsc-nav-item.group-msg { color: #f45b9a; font-weight: 600; }
-      body.dark-layout .nsc-nav-item.group-msg { color: #ff85b8; }
+      body.dark-layout .nsc-nav-item.group-msg { color: #f592ba; }
       .nsc-nav-item.group-msg:hover { background: rgba(244, 114, 182, 0.13); color: #ec4899; }
-      body.dark-layout .nsc-nav-item.group-msg:hover { color: #ffa6cb; }
+      body.dark-layout .nsc-nav-item.group-msg:hover { background: rgba(244, 114, 182, 0.14); color: #ffb3d1; }
       .nsc-nav-item.group-msg .nsc-nav-badge { background: rgba(244, 114, 182, 0.18); color: #ec4899; }
-      body.dark-layout .nsc-nav-item.group-msg .nsc-nav-badge { background: rgba(255, 133, 184, 0.24); color: #ff9ec7; }
-      .nsc-nav-item.group-msg.is-active {
+      body.dark-layout .nsc-nav-item.group-msg .nsc-nav-badge { background: rgba(244, 114, 182, 0.20); color: #ffaad0; }
+      .nsc-nav-item.group-msg.is-active,
+      body.dark-layout .nsc-nav-item.group-msg.is-active {
         background: linear-gradient(135deg, #ff7eb3, #f45b9a); color: #fff;
         box-shadow: 0 2px 8px rgba(244, 91, 154, 0.30);
       }
@@ -288,7 +309,7 @@
       .nsc-nav-item.group-admin { color: #8b7355; }
       body.dark-layout .nsc-nav-item.group-admin { color: #c4a47c; }
       .nsc-nav-item.group-admin:hover { background: rgba(245, 158, 11, 0.10); color: #d97706; }
-      body.dark-layout .nsc-nav-item.group-admin:hover { color: #fbbf24; }
+      body.dark-layout .nsc-nav-item.group-admin:hover { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
 
       .nsc-sn-card {
         display: flex; flex-direction: column; gap: 3px; padding: 6px 8px; margin-bottom: 2px;
