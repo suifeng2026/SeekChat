@@ -311,6 +311,8 @@
         npBackdrop.classList.remove("is-open");
         const editBd = document.getElementById("nsc-edit-backdrop");
         if (editBd) editBd.classList.remove("is-open");
+        const hubBd = document.getElementById("nsc-hub-backdrop");
+        if (hubBd) hubBd.classList.remove("is-open");
         if (niBackdrop) niBackdrop.classList.remove("is-open");
       } else if (lightbox.classList.contains("is-open")) {
         if (e.key === "ArrowLeft") stepLightbox(-1);

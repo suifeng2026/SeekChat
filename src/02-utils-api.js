@@ -339,6 +339,90 @@
     return { status: "read", delta: 0 };
   }
 
+  function syncUserCardNotifyBadge() {
+    const total =
+      (Number(state.unreadCounts.atMe) || 0) +
+      (Number(state.unreadCounts.reply) || 0) +
+      (Number(state.unreadCounts.message) || 0) +
+      (Number(state.unreadCounts.sysNotice) || 0);
+    for (const el of document.querySelectorAll(".user-card .notify-count")) {
+      el.textContent = String(total);
+      el.style.display = total > 0 ? "inline" : "none";
+    }
+  }
+
+  async function prefetchCollectionsSet() {
+    if (state.collectionsLoaded) return;
+    state.collectionsLoaded = true;
+    try {
+      for (let page = 1; page <= 3; page++) {
+        const resp = await fetch(`/api/statistics/list-collection?page=${page}`, {
+          headers: { Accept: "application/json, text/plain, */*" },
+          credentials: "include",
+        });
+        if (!resp.ok) break;
+        const json = await resp.json().catch(() => null);
+        const rows = (json && (json.collections || json.data || json.list)) || [];
+        if (!Array.isArray(rows) || rows.length === 0) break;
+        for (const it of rows) {
+          const pid = String(it.post_id || it.postId || it.id || "").trim();
+          if (pid) state.collectedSet.add(pid);
+        }
+        if (rows.length < 15) break;
+      }
+      if (state.currentRoom && state.currentPostId) {
+        const colBtn = document.getElementById("nsc-collect-post-btn");
+        if (colBtn) {
+          const on = state.collectedSet.has(String(state.currentPostId));
+          colBtn.classList.toggle("is-active", on);
+          colBtn.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function togglePostCollection(postId, btnEl = null) {
+    const pid = String(postId || "").trim();
+    if (!pid) return { ok: false };
+    const isCollected = state.collectedSet.has(pid);
+    const action = isCollected ? "remove" : "add";
+    if (btnEl) btnEl.disabled = true;
+    try {
+      const resp = await fetch("/api/statistics/collection", {
+        method: "POST",
+        credentials: "include",
+        headers: getNodeSeekPostHeaders(),
+        body: JSON.stringify({ action, postId: Number(pid) }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || json.success === false) {
+        throw new Error(json.message || `HTTP ${resp.status}`);
+      }
+      if (action === "add") state.collectedSet.add(pid);
+      else state.collectedSet.delete(pid);
+      state.hubData.collections = { items: [], page: 0, loading: false, noMore: false, error: null };
+
+      if (btnEl) {
+        const on = state.collectedSet.has(pid);
+        btnEl.classList.toggle("is-active", on);
+        btnEl.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+      }
+      const colStatSpan = document.querySelector('.user-card .user-stat a[href*="#collections"] span');
+      if (colStatSpan) {
+        const m = colStatSpan.textContent.match(/(\d+)/);
+        if (m) {
+          const nextCnt = Math.max(0, Number(m[1]) + (action === "add" ? 1 : -1));
+          colStatSpan.textContent = `收藏 ${nextCnt}`;
+        }
+      }
+      return { ok: true, collected: action === "add" };
+    } catch (err) {
+      return { ok: false, message: err.message };
+    } finally {
+      if (btnEl) btnEl.disabled = false;
+    }
+  }
+
   function getChannelUnreadCount(channelId) {
     if (channelId === "history") return 0;
     if (channelId === "at-me") return Number(state.unreadCounts.atMe) || 0;

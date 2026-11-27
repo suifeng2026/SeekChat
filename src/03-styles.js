@@ -133,6 +133,19 @@
       body:not(.nsc-app-active) #user-setting-panel textarea,
       body:not(.nsc-app-active) #user-setting-panel select { border-radius: 8px !important; border: 1px solid var(--nsc-border) !important; padding: 7px 10px !important; }
 
+      /* 原版个人信息/通知/账簿/空间页面 macOS 轻美化 */
+      body:not(.nsc-app-active) #nsk-body-left .nsk-panel,
+      body:not(.nsc-app-active) #nsk-body-left .credit-table,
+      body:not(.nsc-app-active) #nsk-body-left .stardust-list,
+      body:not(.nsc-app-active) #nsk-body-left .notification-container,
+      body:not(.nsc-app-active) #nsk-body-left .user-info-panel,
+      body:not(.nsc-app-active) #nsk-body-left .progress-container {
+        font-family: var(--mac-font);
+        border-radius: 14px !important;
+        border: 1px solid var(--nsc-border) !important;
+        box-shadow: 0 8px 28px rgba(0,0,0,0.06) !important;
+      }
+
       #nsc-app-shell {
         display: none; box-sizing: border-box; width: min(1600px, 98.5vw); height: calc(100vh - 48px);
         margin: 4px auto; border-radius: 16px;
@@ -349,9 +362,12 @@
       .nsc-pill-btn {
         padding: 4px 10px; border-radius: 999px; border: 1px solid var(--nsc-border);
         background: var(--nsc-bg-card); color: var(--nsc-text); font-size: 11px; font-weight: 500; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 4px; transition: all 0.12s ease;
       }
+      .nsc-pill-btn svg { width: 12px; height: 12px; flex: 0 0 12px; }
       .nsc-pill-btn:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); }
       .nsc-pill-btn.is-active { background: var(--nsc-accent); border-color: var(--nsc-accent); color: #fff; }
+      .nsc-pill-btn.is-collect.is-active { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.45); color: #d97706; }
 
       .nsc-floor-jump-box {
         display: inline-flex; align-items: center; border: 1px solid var(--nsc-border);
@@ -1140,6 +1156,76 @@
         background: rgba(128, 128, 128, 0.06); image-rendering: auto;
       }
       .nsc-ni-card-ops { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; gap: 6px; font-size: 11px; border-top: 1px solid var(--nsc-border); }
+
+      #nsc-hub-backdrop {
+        position: fixed; inset: 0; z-index: 9400;
+        background: rgba(15, 23, 42, 0.42); backdrop-filter: blur(8px);
+        display: none; align-items: center; justify-content: center; padding: 18px;
+      }
+      #nsc-hub-backdrop.is-open { display: flex; }
+      .nsc-hub-modal {
+        width: min(880px, 95vw); height: min(82vh, 760px);
+        background: var(--nsc-bg-list); color: var(--nsc-text);
+        border: 1px solid var(--nsc-border); border-radius: 16px;
+        box-shadow: var(--nsc-shadow); font-family: var(--mac-font);
+        display: flex; flex-direction: column; overflow: hidden;
+      }
+      .nsc-hub-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 12px 16px; background: var(--nsc-bg-nav); border-bottom: 1px solid var(--nsc-border);
+      }
+      .nsc-hub-user { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .nsc-hub-user img { width: 34px; height: 34px; border-radius: 9px; object-fit: cover; border: 1px solid var(--nsc-border); }
+      .nsc-hub-tabs {
+        display: flex; align-items: center; gap: 4px; padding: 8px 14px;
+        background: var(--nsc-bg-right); border-bottom: 1px solid var(--nsc-border);
+        overflow-x: auto; flex: 0 0 auto;
+      }
+      .nsc-hub-tab {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 8px;
+        cursor: pointer; white-space: nowrap; transition: all 0.12s ease;
+        display: inline-flex; align-items: center; gap: 5px;
+      }
+      .nsc-hub-tab:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-hub-tab.is-active { background: var(--nsc-accent); color: #fff; box-shadow: 0 2px 6px rgba(0, 122, 255, 0.25); }
+      .nsc-hub-tab-cnt {
+        font-size: 10px; padding: 0 5px; border-radius: 999px;
+        background: rgba(255, 59, 48, 0.16); color: #ff3b30; font-weight: 700;
+      }
+      .nsc-hub-tab.is-active .nsc-hub-tab-cnt { background: rgba(255,255,255,0.28); color: #fff; }
+      .nsc-hub-subbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 8px 16px; border-bottom: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-chat); flex-wrap: wrap;
+      }
+      .nsc-hub-body { flex: 1; overflow-y: auto; padding: 12px 16px; background: var(--nsc-bg-chat); }
+      .nsc-hub-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 12px; margin-bottom: 6px; border-radius: 11px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease;
+      }
+      .nsc-hub-row:hover { border-color: var(--nsc-accent); }
+      .nsc-hub-row.is-read { opacity: 0.72; }
+      .nsc-hub-row-main { flex: 1; min-width: 0; }
+      .nsc-hub-row-title { font-size: 13px; font-weight: 600; color: var(--nsc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .nsc-hub-row-sub { font-size: 11.5px; color: var(--nsc-muted); margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-hub-delta {
+        font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; flex: 0 0 auto;
+      }
+      .nsc-hub-delta.pos { background: rgba(52, 199, 89, 0.15); color: #16a34a; }
+      .nsc-hub-delta.neg { background: rgba(255, 59, 48, 0.14); color: #ff3b30; }
+      .nsc-hub-kpi-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px;
+      }
+      .nsc-hub-kpi {
+        padding: 12px 14px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-hub-kpi-val { font-size: 20px; font-weight: 700; color: var(--nsc-text); margin-top: 4px; }
+      .nsc-hub-kpi-lbl { font-size: 11.5px; color: var(--nsc-muted); }
+      .nsc-hub-fan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
 
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }

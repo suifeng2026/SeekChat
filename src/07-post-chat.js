@@ -537,6 +537,16 @@
       addBtn("编辑主题", false, () => openEditModal(room.opObj, true));
     }
 
+    const isCollected = state.collectedSet.has(String(room.pid));
+    const colBtn = document.createElement("button");
+    colBtn.type = "button";
+    colBtn.id = "nsc-collect-post-btn";
+    colBtn.className = "nsc-pill-btn is-collect" + (isCollected ? " is-active" : "");
+    colBtn.innerHTML = `${ICONS.bookmark}<span>${isCollected ? "已收藏" : "收藏"}</span>`;
+    colBtn.title = isCollected ? "点击取消收藏该帖子" : "点击收藏该帖子";
+    colBtn.addEventListener("click", () => togglePostCollection(room.pid, colBtn));
+    actionsEl.appendChild(colBtn);
+
     addBtn("只看楼主", state.onlyOp, (b) => {
       state.onlyOp = !state.onlyOp;
       state.onlyMember = "";

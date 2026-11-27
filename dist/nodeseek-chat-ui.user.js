@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.13.0
+// @version      7.14.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -105,6 +105,7 @@
     theme: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>`,
     smile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
     edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+    bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -215,6 +216,18 @@
     loadedPages: new Set(),
     loadingNextPage: false,
     loadingPrevPage: false,
+    collectedSet: new Set(),
+    collectionsLoaded: false,
+    hubTab: "notif",
+    hubNotifSub: "reply-me",
+    hubData: {
+      posts: { items: [], page: 0, loading: false, noMore: false, error: null },
+      comments: { items: [], page: 0, loading: false, noMore: false, error: null },
+      collections: { items: [], page: 0, loading: false, noMore: false, error: null },
+      credit: { items: [], page: 0, loading: false, noMore: false, error: null },
+      stardust: { items: [], cursor: null, mode: "recv", loading: false, noMore: false, error: null },
+      progress: { data: null, loading: false, error: null },
+    },
   };
 
   // ==========================================================================
@@ -561,6 +574,90 @@
     return { status: "read", delta: 0 };
   }
 
+  function syncUserCardNotifyBadge() {
+    const total =
+      (Number(state.unreadCounts.atMe) || 0) +
+      (Number(state.unreadCounts.reply) || 0) +
+      (Number(state.unreadCounts.message) || 0) +
+      (Number(state.unreadCounts.sysNotice) || 0);
+    for (const el of document.querySelectorAll(".user-card .notify-count")) {
+      el.textContent = String(total);
+      el.style.display = total > 0 ? "inline" : "none";
+    }
+  }
+
+  async function prefetchCollectionsSet() {
+    if (state.collectionsLoaded) return;
+    state.collectionsLoaded = true;
+    try {
+      for (let page = 1; page <= 3; page++) {
+        const resp = await fetch(`/api/statistics/list-collection?page=${page}`, {
+          headers: { Accept: "application/json, text/plain, */*" },
+          credentials: "include",
+        });
+        if (!resp.ok) break;
+        const json = await resp.json().catch(() => null);
+        const rows = (json && (json.collections || json.data || json.list)) || [];
+        if (!Array.isArray(rows) || rows.length === 0) break;
+        for (const it of rows) {
+          const pid = String(it.post_id || it.postId || it.id || "").trim();
+          if (pid) state.collectedSet.add(pid);
+        }
+        if (rows.length < 15) break;
+      }
+      if (state.currentRoom && state.currentPostId) {
+        const colBtn = document.getElementById("nsc-collect-post-btn");
+        if (colBtn) {
+          const on = state.collectedSet.has(String(state.currentPostId));
+          colBtn.classList.toggle("is-active", on);
+          colBtn.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function togglePostCollection(postId, btnEl = null) {
+    const pid = String(postId || "").trim();
+    if (!pid) return { ok: false };
+    const isCollected = state.collectedSet.has(pid);
+    const action = isCollected ? "remove" : "add";
+    if (btnEl) btnEl.disabled = true;
+    try {
+      const resp = await fetch("/api/statistics/collection", {
+        method: "POST",
+        credentials: "include",
+        headers: getNodeSeekPostHeaders(),
+        body: JSON.stringify({ action, postId: Number(pid) }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || json.success === false) {
+        throw new Error(json.message || `HTTP ${resp.status}`);
+      }
+      if (action === "add") state.collectedSet.add(pid);
+      else state.collectedSet.delete(pid);
+      state.hubData.collections = { items: [], page: 0, loading: false, noMore: false, error: null };
+
+      if (btnEl) {
+        const on = state.collectedSet.has(pid);
+        btnEl.classList.toggle("is-active", on);
+        btnEl.innerHTML = `${ICONS.bookmark}<span>${on ? "已收藏" : "收藏"}</span>`;
+      }
+      const colStatSpan = document.querySelector('.user-card .user-stat a[href*="#collections"] span');
+      if (colStatSpan) {
+        const m = colStatSpan.textContent.match(/(\d+)/);
+        if (m) {
+          const nextCnt = Math.max(0, Number(m[1]) + (action === "add" ? 1 : -1));
+          colStatSpan.textContent = `收藏 ${nextCnt}`;
+        }
+      }
+      return { ok: true, collected: action === "add" };
+    } catch (err) {
+      return { ok: false, message: err.message };
+    } finally {
+      if (btnEl) btnEl.disabled = false;
+    }
+  }
+
   function getChannelUnreadCount(channelId) {
     if (channelId === "history") return 0;
     if (channelId === "at-me") return Number(state.unreadCounts.atMe) || 0;
@@ -715,6 +812,19 @@
       body:not(.nsc-app-active) #user-setting-panel input,
       body:not(.nsc-app-active) #user-setting-panel textarea,
       body:not(.nsc-app-active) #user-setting-panel select { border-radius: 8px !important; border: 1px solid var(--nsc-border) !important; padding: 7px 10px !important; }
+
+      /* 原版个人信息/通知/账簿/空间页面 macOS 轻美化 */
+      body:not(.nsc-app-active) #nsk-body-left .nsk-panel,
+      body:not(.nsc-app-active) #nsk-body-left .credit-table,
+      body:not(.nsc-app-active) #nsk-body-left .stardust-list,
+      body:not(.nsc-app-active) #nsk-body-left .notification-container,
+      body:not(.nsc-app-active) #nsk-body-left .user-info-panel,
+      body:not(.nsc-app-active) #nsk-body-left .progress-container {
+        font-family: var(--mac-font);
+        border-radius: 14px !important;
+        border: 1px solid var(--nsc-border) !important;
+        box-shadow: 0 8px 28px rgba(0,0,0,0.06) !important;
+      }
 
       #nsc-app-shell {
         display: none; box-sizing: border-box; width: min(1600px, 98.5vw); height: calc(100vh - 48px);
@@ -932,9 +1042,12 @@
       .nsc-pill-btn {
         padding: 4px 10px; border-radius: 999px; border: 1px solid var(--nsc-border);
         background: var(--nsc-bg-card); color: var(--nsc-text); font-size: 11px; font-weight: 500; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 4px; transition: all 0.12s ease;
       }
+      .nsc-pill-btn svg { width: 12px; height: 12px; flex: 0 0 12px; }
       .nsc-pill-btn:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); }
       .nsc-pill-btn.is-active { background: var(--nsc-accent); border-color: var(--nsc-accent); color: #fff; }
+      .nsc-pill-btn.is-collect.is-active { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.45); color: #d97706; }
 
       .nsc-floor-jump-box {
         display: inline-flex; align-items: center; border: 1px solid var(--nsc-border);
@@ -1724,6 +1837,76 @@
       }
       .nsc-ni-card-ops { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; gap: 6px; font-size: 11px; border-top: 1px solid var(--nsc-border); }
 
+      #nsc-hub-backdrop {
+        position: fixed; inset: 0; z-index: 9400;
+        background: rgba(15, 23, 42, 0.42); backdrop-filter: blur(8px);
+        display: none; align-items: center; justify-content: center; padding: 18px;
+      }
+      #nsc-hub-backdrop.is-open { display: flex; }
+      .nsc-hub-modal {
+        width: min(880px, 95vw); height: min(82vh, 760px);
+        background: var(--nsc-bg-list); color: var(--nsc-text);
+        border: 1px solid var(--nsc-border); border-radius: 16px;
+        box-shadow: var(--nsc-shadow); font-family: var(--mac-font);
+        display: flex; flex-direction: column; overflow: hidden;
+      }
+      .nsc-hub-head {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 12px 16px; background: var(--nsc-bg-nav); border-bottom: 1px solid var(--nsc-border);
+      }
+      .nsc-hub-user { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .nsc-hub-user img { width: 34px; height: 34px; border-radius: 9px; object-fit: cover; border: 1px solid var(--nsc-border); }
+      .nsc-hub-tabs {
+        display: flex; align-items: center; gap: 4px; padding: 8px 14px;
+        background: var(--nsc-bg-right); border-bottom: 1px solid var(--nsc-border);
+        overflow-x: auto; flex: 0 0 auto;
+      }
+      .nsc-hub-tab {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 8px;
+        cursor: pointer; white-space: nowrap; transition: all 0.12s ease;
+        display: inline-flex; align-items: center; gap: 5px;
+      }
+      .nsc-hub-tab:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-hub-tab.is-active { background: var(--nsc-accent); color: #fff; box-shadow: 0 2px 6px rgba(0, 122, 255, 0.25); }
+      .nsc-hub-tab-cnt {
+        font-size: 10px; padding: 0 5px; border-radius: 999px;
+        background: rgba(255, 59, 48, 0.16); color: #ff3b30; font-weight: 700;
+      }
+      .nsc-hub-tab.is-active .nsc-hub-tab-cnt { background: rgba(255,255,255,0.28); color: #fff; }
+      .nsc-hub-subbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 8px 16px; border-bottom: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-chat); flex-wrap: wrap;
+      }
+      .nsc-hub-body { flex: 1; overflow-y: auto; padding: 12px 16px; background: var(--nsc-bg-chat); }
+      .nsc-hub-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 12px; margin-bottom: 6px; border-radius: 11px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        cursor: pointer; transition: border-color 0.12s ease, transform 0.12s ease;
+      }
+      .nsc-hub-row:hover { border-color: var(--nsc-accent); }
+      .nsc-hub-row.is-read { opacity: 0.72; }
+      .nsc-hub-row-main { flex: 1; min-width: 0; }
+      .nsc-hub-row-title { font-size: 13px; font-weight: 600; color: var(--nsc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .nsc-hub-row-sub { font-size: 11.5px; color: var(--nsc-muted); margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-hub-delta {
+        font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; flex: 0 0 auto;
+      }
+      .nsc-hub-delta.pos { background: rgba(52, 199, 89, 0.15); color: #16a34a; }
+      .nsc-hub-delta.neg { background: rgba(255, 59, 48, 0.14); color: #ff3b30; }
+      .nsc-hub-kpi-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px;
+      }
+      .nsc-hub-kpi {
+        padding: 12px 14px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-hub-kpi-val { font-size: 20px; font-weight: 700; color: var(--nsc-text); margin-top: 4px; }
+      .nsc-hub-kpi-lbl { font-size: 11.5px; color: var(--nsc-muted); }
+      .nsc-hub-fan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
         100% { box-shadow: 0 0 0 0 transparent; }
@@ -2460,6 +2643,8 @@
         npBackdrop.classList.remove("is-open");
         const editBd = document.getElementById("nsc-edit-backdrop");
         if (editBd) editBd.classList.remove("is-open");
+        const hubBd = document.getElementById("nsc-hub-backdrop");
+        if (hubBd) hubBd.classList.remove("is-open");
         if (niBackdrop) niBackdrop.classList.remove("is-open");
       } else if (lightbox.classList.contains("is-open")) {
         if (e.key === "ArrowLeft") stepLightbox(-1);
@@ -3335,8 +3520,35 @@
           sysNotice: sysUnread,
         };
         renderLeftNav();
+        syncUserCardNotifyBadge();
       }
     } catch (_) {}
+  }
+
+  function bindUserCardStatLinks(userCard) {
+    if (!userCard) return;
+    for (const a of userCard.querySelectorAll(".user-stat a")) {
+      if (a.dataset.nscHubBound === "1") continue;
+      a.dataset.nscHubBound = "1";
+      a.addEventListener("click", (e) => {
+        if (!document.body.classList.contains("nsc-app-active")) return;
+        const href = a.getAttribute("href") || "";
+        let tab = "";
+        if (href.includes("/notification")) tab = "notif";
+        else if (href.includes("#discussions")) tab = "posts";
+        else if (href.includes("#comments")) tab = "comments";
+        else if (href.includes("#collections")) tab = "collections";
+        else if (href.includes("/credit")) tab = "credit";
+        else if (href.includes("/stardust")) tab = "stardust";
+        else if (href.includes("/fans")) tab = "fans";
+        else if (href.includes("/progress")) tab = "progress";
+        if (tab && typeof openUserHubModal === "function") {
+          e.preventDefault();
+          e.stopPropagation();
+          openUserHubModal(tab);
+        }
+      });
+    }
   }
 
   function mountNativeWidgetsIntoApp() {
@@ -3345,6 +3557,7 @@
     if (rightUserHost && nativeUserCard && !rightUserHost.contains(nativeUserCard)) {
       rightUserHost.appendChild(nativeUserCard);
     }
+    bindUserCardStatLinks(document.querySelector("#nsc-right-user .user-card"));
 
     const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
     if (headThemeBtn && headThemeBtn.dataset.nscThemeObs !== "1") {
@@ -3442,6 +3655,7 @@
         fetchUnreadCounts();
         setTimeout(() => fetchSysNotices(true), 600);
         setTimeout(() => fetchServerBlockList(true), 800);
+        setTimeout(() => prefetchCollectionsSet(), 950);
         setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
       }
 
@@ -3486,18 +3700,21 @@
 
     if (channelId === "at-me" || channelId === "reply-me") {
       const st = state.notifData[channelId];
+      fetchUnreadCounts();
       if (forceRefresh || !st.loaded) fetchNotifications(channelId);
       else renderTopicList();
       return;
     }
 
     if (channelId === "pm") {
+      fetchUnreadCounts();
       if (forceRefresh || !state.pmList.loaded) fetchPmList();
       else renderTopicList();
       return;
     }
 
     if (channelId === "sys-notice") {
+      fetchUnreadCounts();
       if (forceRefresh || !state.sysNoticeList.loaded) {
         fetchSysNotices(false);
       } else {
@@ -3548,7 +3765,7 @@
         const floorId = Number(it.floor_id) || 0;
         const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
         return {
-          id: Number(it.id || it.notification_id || it.comment_id) || 0,
+          id: Number(it.id || it.notification_id || it.notify_id || it.msg_id || it.comment_id || it.commentId) || 0,
           postId,
           floorId,
           url: `/post-${postId}-${pageIndex}`,
@@ -3566,6 +3783,7 @@
     } finally {
       store.loading = false;
       if (state.activeChannel === kind) renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
   }
 
@@ -3587,7 +3805,9 @@
         }
       }
       renderLeftNav();
+      syncUserCardNotifyBadge();
       if (state.activeChannel === kind) renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
 
     try {
@@ -3595,8 +3815,8 @@
       const payloads = all
         ? [{}]
         : kind === "at-me"
-          ? [{ atMe: [numId] }, { ids: [numId] }]
-          : [{ replyToMe: [numId] }, { reply: [numId] }, { ids: [numId] }];
+          ? [{ atMe: [numId] }, { ids: [numId] }, { id: numId }]
+          : [{ replyToMe: [numId] }, { reply: [numId] }, { ids: [numId] }, { id: numId }];
 
       if (!all && !numId) return;
 
@@ -3621,7 +3841,9 @@
           if (all) {
             state.unreadCounts[countKey] = 0;
             renderLeftNav();
+            syncUserCardNotifyBadge();
           }
+          if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
         }, 350);
       }
     } catch (_) {}
@@ -3673,6 +3895,7 @@
     } finally {
       state.pmList.loading = false;
       if (state.activeChannel === "pm") renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
   }
 
@@ -4061,6 +4284,7 @@
     } finally {
       state.sysNoticeList.loading = false;
       if (state.activeChannel === "sys-notice") renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
   }
 
@@ -4080,7 +4304,9 @@
       });
       state.unreadCounts.sysNotice = state.sysNoticeList.items.filter((x) => x.unread).length;
       renderLeftNav();
+      syncUserCardNotifyBadge();
       if (state.activeChannel === "sys-notice") renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     } catch (_) {}
   }
 
@@ -5292,6 +5518,16 @@
     if (room.opObj && state.currentUser && room.opObj.author === state.currentUser) {
       addBtn("编辑主题", false, () => openEditModal(room.opObj, true));
     }
+
+    const isCollected = state.collectedSet.has(String(room.pid));
+    const colBtn = document.createElement("button");
+    colBtn.type = "button";
+    colBtn.id = "nsc-collect-post-btn";
+    colBtn.className = "nsc-pill-btn is-collect" + (isCollected ? " is-active" : "");
+    colBtn.innerHTML = `${ICONS.bookmark}<span>${isCollected ? "已收藏" : "收藏"}</span>`;
+    colBtn.title = isCollected ? "点击取消收藏该帖子" : "点击收藏该帖子";
+    colBtn.addEventListener("click", () => togglePostCollection(room.pid, colBtn));
+    actionsEl.appendChild(colBtn);
 
     addBtn("只看楼主", state.onlyOp, (b) => {
       state.onlyOp = !state.onlyOp;
@@ -7075,6 +7311,904 @@
       });
       container.appendChild(row);
     }
+  }
+
+  function renderUserHubIfOpen() {
+    const bd = document.getElementById("nsc-hub-backdrop");
+    if (bd && bd.classList.contains("is-open")) renderUserHub();
+  }
+
+  async function loadHubPosts(reset = false) {
+    detectCurrentUser();
+    const uid = state.currentUserId;
+    const st = state.hubData.posts;
+    if (!uid || st.loading) return;
+    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
+    if (st.noMore) return;
+    st.loading = true;
+    renderUserHubIfOpen();
+    try {
+      const nextPage = st.page + 1;
+      const resp = await fetch(`/api/content/list-discussions?uid=${uid}&page=${nextPage}`, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const rows = (json && (json.discussions || json.data || json.list)) || [];
+      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
+      else {
+        const seen = new Set(st.items.map((x) => String(x.post_id || x.id)));
+        for (const r of rows) {
+          const pid = String(r.post_id || r.id || "");
+          if (pid && !seen.has(pid)) { st.items.push(r); seen.add(pid); }
+        }
+        st.page = nextPage;
+        if (rows.length < 15) st.noMore = true;
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  async function loadHubComments(reset = false) {
+    detectCurrentUser();
+    const uid = state.currentUserId;
+    const st = state.hubData.comments;
+    if (!uid || st.loading) return;
+    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
+    if (st.noMore) return;
+    st.loading = true;
+    renderUserHubIfOpen();
+    try {
+      const nextPage = st.page + 1;
+      const resp = await fetch(`/api/content/list-comments?uid=${uid}&page=${nextPage}`, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const rows = (json && (json.comments || json.data || json.list)) || [];
+      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
+      else {
+        st.items.push(...rows);
+        st.page = nextPage;
+        if (rows.length < 15) st.noMore = true;
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  async function loadHubCollections(reset = false) {
+    const st = state.hubData.collections;
+    if (st.loading) return;
+    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
+    if (st.noMore) return;
+    st.loading = true;
+    renderUserHubIfOpen();
+    try {
+      const nextPage = st.page + 1;
+      const resp = await fetch(`/api/statistics/list-collection?page=${nextPage}`, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const rows = (json && (json.collections || json.data || json.list)) || [];
+      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
+      else {
+        const seen = new Set(st.items.map((x) => String(x.post_id || x.postId || x.id)));
+        for (const r of rows) {
+          const pid = String(r.post_id || r.postId || r.id || "");
+          if (pid) {
+            state.collectedSet.add(pid);
+            if (!seen.has(pid)) { st.items.push(r); seen.add(pid); }
+          }
+        }
+        st.page = nextPage;
+        if (rows.length < 15) st.noMore = true;
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  async function loadHubCredit(reset = false) {
+    const st = state.hubData.credit;
+    if (st.loading) return;
+    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
+    if (st.noMore) return;
+    st.loading = true;
+    renderUserHubIfOpen();
+    try {
+      const nextPage = st.page + 1;
+      const resp = await fetch(`/api/account/credit/page-${nextPage}`, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (json && json.success === false && /max page/i.test(json.message || "")) {
+        st.noMore = true;
+      } else {
+        const rows = (json && (Array.isArray(json.data) ? json.data : json.data?.list || json.data?.records)) || [];
+        if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
+        else {
+          st.items.push(...rows);
+          st.page = nextPage;
+          if (rows.length < 15) st.noMore = true;
+        }
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  async function loadHubStardust(reset = false, modeOverride = null) {
+    detectCurrentUser();
+    const uid = state.currentUserId;
+    const st = state.hubData.stardust;
+    if (modeOverride) st.mode = modeOverride;
+    if (!uid || st.loading) return;
+    if (reset) { st.items = []; st.cursor = null; st.noMore = false; st.error = null; }
+    if (st.noMore) return;
+    st.loading = true;
+    renderUserHubIfOpen();
+    try {
+      const paramKey = st.mode === "sent" ? "peer_id" : "member_id";
+      const url = `/api/stardust/list?${paramKey}=${uid}&count=40${st.cursor ? `&before_id=${encodeURIComponent(st.cursor)}` : ""}`;
+      const resp = await fetch(url, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const rows = (json && Array.isArray(json.records) && json.records) || [];
+      if (rows.length === 0) st.noMore = true;
+      else {
+        st.items.push(...rows);
+        st.cursor = json.cursor || null;
+        if (!json.exist_more) st.noMore = true;
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  async function loadHubProgress(force = false) {
+    detectCurrentUser();
+    const uid = state.currentUserId;
+    const st = state.hubData.progress;
+    if (!uid || st.loading) return;
+    if (st.data && !force) return;
+    st.loading = true;
+    st.error = null;
+    renderUserHubIfOpen();
+    try {
+      const [info, quotaResp] = await Promise.all([
+        fetchUserProfile(String(uid), state.currentUser),
+        fetch("/api/progress/today?scope=freelike", {
+          headers: { Accept: "application/json, text/plain, */*" },
+          credentials: "include",
+        }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      st.data = { info, quota: quotaResp };
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  function renderUserHub() {
+    const bd = document.getElementById("nsc-hub-backdrop");
+    if (!bd) return;
+    const modal = bd.querySelector(".nsc-hub-modal");
+    if (!modal) return;
+
+    detectCurrentUser();
+    const uid = state.currentUserId || "";
+    const avatarUrl = uid ? `/avatar/${uid}.png` : "/static/image/favicon/android-chrome-192x192.png";
+    const totalNotif =
+      (Number(state.unreadCounts.atMe) || 0) +
+      (Number(state.unreadCounts.reply) || 0) +
+      (Number(state.unreadCounts.message) || 0) +
+      (Number(state.unreadCounts.sysNotice) || 0);
+
+    const nativeHrefMap = {
+      notif: "/notification",
+      posts: `/space/${uid}#discussions`,
+      comments: `/space/${uid}#comments`,
+      collections: `/space/${uid}#collections`,
+      credit: "/credit",
+      stardust: `/stardust/list?member_id=${uid}`,
+      fans: "/fans?type=fans",
+      progress: "/progress",
+    };
+
+    const tabs = [
+      { id: "notif", label: "通知中心", cnt: totalNotif },
+      { id: "posts", label: "主题帖" },
+      { id: "comments", label: "评论" },
+      { id: "collections", label: "收藏" },
+      { id: "credit", label: "鸡腿账簿" },
+      { id: "stardust", label: "星辰记录" },
+      { id: "fans", label: "粉丝/关注" },
+      { id: "progress", label: "等级额度" },
+    ];
+
+    const uInfo = uid && state.userCache[String(uid)];
+    modal.innerHTML = `
+      <div class="nsc-hub-head">
+        <div class="nsc-hub-user">
+          <img src="${avatarUrl}" alt="" />
+          <div style="min-width:0;">
+            <div style="font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:6px;">
+              <span>${escHtml(state.currentUser || "个人中心")}</span>
+              ${uInfo && uInfo.level ? `<span class="nsc-lv-pill">${escHtml(uInfo.level)}</span>` : ""}
+            </div>
+            <div style="font-size:11px;color:var(--nsc-muted);">UID: ${uid || "-"} · macOS 工作台个人空间</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <a class="nsc-mini-btn" href="${nativeHrefMap[state.hubTab] || "/notification"}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">原版页面 ↗</a>
+          <button type="button" class="nsc-mini-btn" id="nsc-hub-close" style="padding:3px 9px;">✕</button>
+        </div>
+      </div>
+      <div class="nsc-hub-tabs">
+        ${tabs.map((t) => `
+          <button type="button" class="nsc-hub-tab ${state.hubTab === t.id ? "is-active" : ""}" data-htab="${t.id}">
+            <span>${t.label}</span>
+            ${t.cnt > 0 ? `<span class="nsc-hub-tab-cnt">${t.cnt > 99 ? "99+" : t.cnt}</span>` : ""}
+          </button>
+        `).join("")}
+      </div>
+      <div class="nsc-hub-subbar" id="nsc-hub-subbar"></div>
+      <div class="nsc-hub-body" id="nsc-hub-body"></div>
+    `;
+
+    const closeHub = () => bd.classList.remove("is-open");
+    modal.querySelector("#nsc-hub-close").addEventListener("click", closeHub);
+    modal.querySelectorAll("[data-htab]").forEach((btn) => {
+      btn.addEventListener("click", () => openUserHubModal(btn.dataset.htab));
+    });
+
+    const subbar = modal.querySelector("#nsc-hub-subbar");
+    const body = modal.querySelector("#nsc-hub-body");
+
+    if (state.hubTab === "notif") {
+      const subTabs = [
+        { id: "reply-me", label: "回复我", cnt: Number(state.unreadCounts.reply) || 0 },
+        { id: "at-me", label: "@我", cnt: Number(state.unreadCounts.atMe) || 0 },
+        { id: "pm", label: "私信", cnt: Number(state.unreadCounts.message) || 0 },
+        { id: "sys-notice", label: "系统通知", cnt: Number(state.unreadCounts.sysNotice) || 0 },
+      ];
+      const seg = document.createElement("div");
+      seg.className = "nsc-seg-tabs";
+      subTabs.forEach((st) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "nsc-seg-btn" + (state.hubNotifSub === st.id ? " is-active" : "");
+        b.textContent = st.cnt > 0 ? `${st.label} (${st.cnt})` : st.label;
+        b.addEventListener("click", () => {
+          state.hubNotifSub = st.id;
+          if ((st.id === "at-me" || st.id === "reply-me") && !state.notifData[st.id].loaded) fetchNotifications(st.id);
+          else if (st.id === "pm" && !state.pmList.loaded) fetchPmList();
+          else if (st.id === "sys-notice" && !state.sysNoticeList.loaded) fetchSysNotices(false);
+          renderUserHub();
+        });
+        seg.appendChild(b);
+      });
+      const ops = document.createElement("div");
+      ops.style.cssText = "display:flex;align-items:center;gap:6px;";
+      if (state.hubNotifSub === "at-me" || state.hubNotifSub === "reply-me" || state.hubNotifSub === "sys-notice") {
+        const readAllBtn = document.createElement("button");
+        readAllBtn.type = "button";
+        readAllBtn.className = "nsc-mini-btn";
+        readAllBtn.textContent = "全部标为已读";
+        readAllBtn.addEventListener("click", () => {
+          if (state.hubNotifSub === "sys-notice") {
+            const ids = state.sysNoticeList.items.filter((x) => x.unread && x.id).map((x) => x.id);
+            markSysNoticesRead(ids);
+          } else {
+            markNotificationViewed(state.hubNotifSub, 0, true);
+          }
+        });
+        ops.appendChild(readAllBtn);
+      }
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = "刷新";
+      refBtn.addEventListener("click", () => {
+        fetchUnreadCounts();
+        if (state.hubNotifSub === "pm") fetchPmList();
+        else if (state.hubNotifSub === "sys-notice") fetchSysNotices(false);
+        else fetchNotifications(state.hubNotifSub);
+      });
+      ops.appendChild(refBtn);
+      subbar.appendChild(seg);
+      subbar.appendChild(ops);
+
+      if (state.hubNotifSub === "at-me" || state.hubNotifSub === "reply-me") {
+        const st = state.notifData[state.hubNotifSub];
+        if (st.loading && st.items.length === 0) {
+          body.innerHTML = `<div class="nsc-empty-state">正在加载通知...</div>`;
+          return;
+        }
+        if (st.items.length === 0) {
+          body.innerHTML = `<div class="nsc-empty-state">暂无通知记录</div>`;
+          return;
+        }
+        st.items.forEach((it) => {
+          const row = document.createElement("div");
+          row.className = "nsc-hub-row" + (it.viewed ? " is-read" : "");
+          row.innerHTML = `
+            <img src="${it.avatar || "/static/image/favicon/android-chrome-192x192.png"}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
+            <div class="nsc-hub-row-main">
+              <div class="nsc-hub-row-title">${escHtml(it.title)}</div>
+              <div class="nsc-hub-row-sub">
+                <span>${escHtml(it.author)} ${state.hubNotifSub === "at-me" ? "@了你" : "回复了你"}</span>
+                <span>#${it.floorId || 0}楼</span>
+                ${it.timeText ? `<span>${escHtml(it.timeText)}</span>` : ""}
+              </div>
+            </div>
+            ${!it.viewed ? `<span class="nsc-badge-dot" style="margin-top:0;"></span>` : `<span class="nsc-badge-read">已读</span>`}
+          `;
+          row.addEventListener("click", () => {
+            if (!it.viewed) markNotificationViewed(state.hubNotifSub, it.id, false);
+            closeHub();
+            switchChannel(state.hubNotifSub, false);
+            openPostInChat({
+              postId: it.postId,
+              url: it.url,
+              title: it.title,
+              author: it.author,
+              avatar: it.avatar,
+              targetFloor: it.floorId ? String(it.floorId) : "",
+            });
+          });
+          body.appendChild(row);
+        });
+      } else if (state.hubNotifSub === "pm") {
+        const st = state.pmList;
+        if (st.loading && st.items.length === 0) {
+          body.innerHTML = `<div class="nsc-empty-state">正在读取私信会话...</div>`;
+          return;
+        }
+        if (st.items.length === 0) {
+          body.innerHTML = `<div class="nsc-empty-state">暂无私信记录</div>`;
+          return;
+        }
+        st.items.forEach((it) => {
+          const row = document.createElement("div");
+          row.className = "nsc-hub-row" + (!it.unread ? " is-read" : "");
+          row.innerHTML = `
+            <img src="${it.avatar}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex:0 0 32px;" />
+            <div class="nsc-hub-row-main">
+              <div class="nsc-hub-row-title">${escHtml(it.name)}</div>
+              <div class="nsc-hub-row-sub"><span>${escHtml(it.content || "(无正文)")}</span><span>${escHtml(it.timeText || "")}</span></div>
+            </div>
+            ${it.unread ? `<span class="nsc-badge-dot" style="margin-top:0;"></span>` : `<span class="nsc-badge-read">已读</span>`}
+          `;
+          row.addEventListener("click", () => {
+            closeHub();
+            switchChannel("pm", false);
+            openPmConversation(it);
+          });
+          body.appendChild(row);
+        });
+      } else {
+        const st = state.sysNoticeList;
+        if (st.loading && st.items.length === 0) {
+          body.innerHTML = `<div class="nsc-empty-state">正在读取系统通知...</div>`;
+          return;
+        }
+        if (st.items.length === 0) {
+          body.innerHTML = `<div class="nsc-empty-state">暂无系统通知</div>`;
+          return;
+        }
+        st.items.slice(0, 80).forEach((it) => {
+          const row = document.createElement("div");
+          row.className = "nsc-hub-row" + (!it.unread ? " is-read" : "");
+          row.innerHTML = `
+            <div class="nsc-hub-row-main">
+              <div class="nsc-hub-row-title"><span class="${it.tag.cls}" style="margin-right:6px;">${it.tag.label}</span>${it.html}</div>
+              <div class="nsc-hub-row-sub"><span>${escHtml(it.timeText || "")}</span></div>
+            </div>
+            ${it.unread ? `<span class="nsc-badge-dot" style="margin-top:0;"></span>` : `<span class="nsc-badge-read">已读</span>`}
+          `;
+          row.addEventListener("click", () => {
+            if (it.unread && it.id) markSysNoticesRead([it.id]);
+            if (it.firstPost) {
+              closeHub();
+              switchChannel("sys-notice", false);
+              openPostInChat(it.firstPost);
+            }
+          });
+          body.appendChild(row);
+        });
+      }
+      return;
+    }
+
+    if (state.hubTab === "posts") {
+      const st = state.hubData.posts;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 篇主题帖</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      refBtn.addEventListener("click", () => loadHubPosts(true));
+      subbar.appendChild(refBtn);
+
+      if (st.loading && st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">正在加载我的主题帖...</div>`;
+        return;
+      }
+      if (st.error && st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
+        return;
+      }
+      if (st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">暂无主题帖记录</div>`;
+        return;
+      }
+      st.items.forEach((it) => {
+        const pid = String(it.post_id || it.id || "");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
+            <div class="nsc-hub-row-sub">
+              ${it.category ? `<span>版块: ${escHtml(it.category)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">#${pid}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeHub();
+          openPostInChat({ postId: pid, url: `/post-${pid}-1`, title: it.title || `帖子 #${pid}`, author: state.currentUser });
+        });
+        body.appendChild(row);
+      });
+      if (!st.noMore) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "nsc-load-more-btn";
+        more.textContent = st.loading ? "加载中..." : "加载更多主题帖";
+        more.addEventListener("click", () => loadHubPosts(false));
+        body.appendChild(more);
+      }
+      return;
+    }
+
+    if (state.hubTab === "comments") {
+      const st = state.hubData.comments;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 条历史回复</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      refBtn.addEventListener("click", () => loadHubComments(true));
+      subbar.appendChild(refBtn);
+
+      if (st.loading && st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">正在加载我的评论...</div>`;
+        return;
+      }
+      if (st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">${st.error ? escHtml(st.error) : "暂无评论记录"}</div>`;
+        return;
+      }
+      st.items.forEach((it) => {
+        const pid = String(it.post_id || "");
+        const floor = Number(it.floor_id) || 1;
+        const pageIdx = Math.max(1, Math.ceil(floor / 20));
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
+            <div class="nsc-hub-row-sub">
+              <span>#${floor}楼</span>
+              ${it.text ? `<span style="max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(it.text)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">直达 #${floor}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeHub();
+          openPostInChat({
+            postId: pid,
+            url: `/post-${pid}-${pageIdx}`,
+            title: it.title || `帖子 #${pid}`,
+            targetFloor: String(floor),
+          });
+        });
+        body.appendChild(row);
+      });
+      if (!st.noMore) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "nsc-load-more-btn";
+        more.textContent = st.loading ? "加载中..." : "加载更多评论";
+        more.addEventListener("click", () => loadHubComments(false));
+        body.appendChild(more);
+      }
+      return;
+    }
+
+    if (state.hubTab === "collections") {
+      const st = state.hubData.collections;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 条收藏帖子</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      refBtn.addEventListener("click", () => loadHubCollections(true));
+      subbar.appendChild(refBtn);
+
+      if (st.loading && st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">正在读取收藏夹...</div>`;
+        return;
+      }
+      if (st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">${st.error ? escHtml(st.error) : "暂无收藏帖子"}</div>`;
+        return;
+      }
+      st.items.forEach((it) => {
+        const pid = String(it.post_id || it.postId || it.id || "");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
+            <div class="nsc-hub-row-sub">
+              ${it.author || it.member_name ? `<span>作者: ${escHtml(it.author || it.member_name)}</span>` : ""}
+              ${it.category ? `<span>${escHtml(it.category)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <button type="button" class="nsc-mini-btn" data-uncol="${pid}">取消收藏</button>
+        `;
+        row.querySelector("[data-uncol]").addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          btn.textContent = "...";
+          const res = await togglePostCollection(pid);
+          if (res.ok) {
+            st.items = st.items.filter((x) => String(x.post_id || x.postId || x.id) !== pid);
+            renderUserHub();
+          } else {
+            btn.disabled = false;
+            btn.textContent = "取消收藏";
+          }
+        });
+        row.addEventListener("click", () => {
+          closeHub();
+          openPostInChat({ postId: pid, url: `/post-${pid}-1`, title: it.title || `帖子 #${pid}` });
+        });
+        body.appendChild(row);
+      });
+      if (!st.noMore) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "nsc-load-more-btn";
+        more.textContent = st.loading ? "加载中..." : "加载更多收藏";
+        more.addEventListener("click", () => loadHubCollections(false));
+        body.appendChild(more);
+      }
+      return;
+    }
+
+    if (state.hubTab === "credit") {
+      const st = state.hubData.credit;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 条鸡腿明细（第 ${st.page || 1} 页）</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      refBtn.addEventListener("click", () => loadHubCredit(true));
+      subbar.appendChild(refBtn);
+
+      if (st.loading && st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">正在读取鸡腿账簿...</div>`;
+        return;
+      }
+      if (st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">${st.error ? escHtml(st.error) : "暂无鸡腿记录"}</div>`;
+        return;
+      }
+      let gain = 0;
+      let spend = 0;
+      let latestBal = "--";
+      st.items.forEach((row, idx) => {
+        const delta = Number(Array.isArray(row) ? row[0] : (row.amount ?? row.change ?? row.delta ?? 0));
+        const bal = Array.isArray(row) ? row[1] : (row.balance ?? "--");
+        if (idx === 0 && bal !== undefined) latestBal = String(bal);
+        if (delta > 0) gain += delta;
+        else if (delta < 0) spend += Math.abs(delta);
+      });
+      const kpi = document.createElement("div");
+      kpi.className = "nsc-hub-kpi-grid";
+      kpi.innerHTML = `
+        <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">当前余额</div><div class="nsc-hub-kpi-val">${escHtml(latestBal)}</div></div>
+        <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">已载收入</div><div class="nsc-hub-kpi-val" style="color:#16a34a;">+${gain}</div></div>
+        <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">已载支出</div><div class="nsc-hub-kpi-val" style="color:#ff3b30;">-${spend}</div></div>
+      `;
+      body.appendChild(kpi);
+
+      st.items.forEach((it) => {
+        const delta = Number(Array.isArray(it) ? it[0] : (it.amount ?? it.change ?? it.delta ?? 0));
+        const bal = Array.isArray(it) ? it[1] : (it.balance ?? "--");
+        const reason = String(Array.isArray(it) ? it[2] : (it.reason ?? it.description ?? "明细")).trim();
+        const tm = Array.isArray(it) ? it[3] : (it.created_at || "");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.style.cursor = "default";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(reason)}</div>
+            <div class="nsc-hub-row-sub"><span>余额 ${escHtml(String(bal))}</span>${tm ? `<span>${escHtml(formatChineseTime("", tm, ""))}</span>` : ""}</div>
+          </div>
+          <span class="nsc-hub-delta ${delta >= 0 ? "pos" : "neg"}">${delta >= 0 ? `+${delta}` : delta}</span>
+        `;
+        body.appendChild(row);
+      });
+      if (!st.noMore) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "nsc-load-more-btn";
+        more.textContent = st.loading ? "加载中..." : "加载下一页账簿";
+        more.addEventListener("click", () => loadHubCredit(false));
+        body.appendChild(more);
+      }
+      return;
+    }
+
+    if (state.hubTab === "stardust") {
+      const st = state.hubData.stardust;
+      const seg = document.createElement("div");
+      seg.className = "nsc-seg-tabs";
+      [
+        { id: "recv", label: "我收到的" },
+        { id: "sent", label: "我送出的" },
+      ].forEach((m) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "nsc-seg-btn" + (st.mode === m.id ? " is-active" : "");
+        b.textContent = m.label;
+        b.addEventListener("click", () => loadHubStardust(true, m.id));
+        seg.appendChild(b);
+      });
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      refBtn.addEventListener("click", () => loadHubStardust(true));
+      subbar.appendChild(seg);
+      subbar.appendChild(refBtn);
+
+      if (st.loading && st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">正在读取星辰记录...</div>`;
+        return;
+      }
+      if (st.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">${st.error ? escHtml(st.error) : "暂无星辰明细"}</div>`;
+        return;
+      }
+      st.items.forEach((it) => {
+        const amt = Number(it.amount || it.stardust || it.count || 1);
+        const isRecv = st.mode === "recv";
+        const peerId = String(isRecv ? (it.peer_id || "") : (it.member_id || ""));
+        const peerName = (isRecv ? it.peer_name : it.member_name) || (peerId ? `用户 #${peerId}` : "系统");
+        const typeLbl = it.type === "upvote" ? "点赞互动" : it.type === "transfer" ? "星辰转账" : (it.type || "星辰变动");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(typeLbl)} · ${escHtml(peerName)}</div>
+            <div class="nsc-hub-row-sub">
+              ${it.post_id ? `<span>帖子 #${escHtml(String(it.post_id))}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-hub-delta ${isRecv ? "pos" : "neg"}">${isRecv ? `+${amt}` : `-${amt}`}</span>
+        `;
+        row.addEventListener("click", () => {
+          if (it.post_id) {
+            closeHub();
+            openPostInChat({ postId: String(it.post_id), url: `/post-${it.post_id}-1`, title: `帖子 #${it.post_id}` });
+          } else if (peerId) {
+            openUserProfileModal({ uid: peerId, name: peerName });
+          }
+        });
+        body.appendChild(row);
+      });
+      if (!st.noMore) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "nsc-load-more-btn";
+        more.textContent = st.loading ? "加载中..." : "加载更多记录";
+        more.addEventListener("click", () => loadHubStardust(false));
+        body.appendChild(more);
+      }
+      return;
+    }
+
+    if (state.hubTab === "fans") {
+      const subMode = state._hubFansMode || "fans";
+      const store = subMode === "follow" ? state.followData : state.fansData;
+      const seg = document.createElement("div");
+      seg.className = "nsc-seg-tabs";
+      [
+        { id: "fans", label: `我的粉丝 (${state.fansData.items.length})` },
+        { id: "follow", label: `我的关注 (${state.followData.items.length})` },
+      ].forEach((m) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "nsc-seg-btn" + (subMode === m.id ? " is-active" : "");
+        b.textContent = m.label;
+        b.addEventListener("click", () => {
+          state._hubFansMode = m.id;
+          const tStore = m.id === "follow" ? state.followData : state.fansData;
+          if (!tStore.loaded && !tStore.loading) fetchFansOrFollow(m.id).then(() => renderUserHubIfOpen());
+          renderUserHub();
+        });
+        seg.appendChild(b);
+      });
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = store.loading ? "同步中..." : "刷新";
+      refBtn.addEventListener("click", () => fetchFansOrFollow(subMode).then(() => renderUserHubIfOpen()));
+      subbar.appendChild(seg);
+      subbar.appendChild(refBtn);
+
+      if (store.loading && store.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">正在同步列表...</div>`;
+        return;
+      }
+      if (store.items.length === 0) {
+        body.innerHTML = `<div class="nsc-empty-state">暂无记录</div>`;
+        return;
+      }
+      const grid = document.createElement("div");
+      grid.className = "nsc-hub-fan-grid";
+      store.items.forEach((u) => {
+        const cachedSpeak = u.uid ? state.lastSpeakCache[u.uid] : null;
+        const card = document.createElement("div");
+        card.className = "nsc-hub-row";
+        card.style.marginBottom = "0";
+        card.innerHTML = `
+          <img src="${u.avatar || `/avatar/${u.uid}.png`}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(u.name)}</div>
+            <div class="nsc-hub-row-sub">${cachedSpeak ? `发言: ${escHtml(cachedSpeak.timeStr)}` : `UID: ${escHtml(u.uid)}`}</div>
+          </div>
+          <button type="button" class="nsc-icon-btn" title="发私信">${ICONS.pm}</button>
+        `;
+        card.querySelector("button").addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeHub();
+          switchChannel("pm", false);
+          openPmConversation(u);
+        });
+        card.addEventListener("click", () => openUserProfileModal(u));
+        grid.appendChild(card);
+      });
+      body.appendChild(grid);
+      return;
+    }
+
+    if (state.hubTab === "progress") {
+      const st = state.hubData.progress;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">账号等级与每日互动额度</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "读取中..." : "刷新";
+      refBtn.addEventListener("click", () => loadHubProgress(true));
+      subbar.appendChild(refBtn);
+
+      if (st.loading && !st.data) {
+        body.innerHTML = `<div class="nsc-empty-state">正在读取账号进度...</div>`;
+        return;
+      }
+      const info = (st.data && st.data.info) || {};
+      const quota = (st.data && st.data.quota) || {};
+      const maxFree = Number(quota.maxFreeLike) || 0;
+      const usedFree = Number(quota.freeLikeUsed) || 0;
+      const pct = maxFree > 0 ? Math.min(100, Math.round((usedFree / maxFree) * 100)) : 0;
+      body.innerHTML = `
+        <div class="nsc-hub-kpi-grid">
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">当前等级</div><div class="nsc-hub-kpi-val">${escHtml(info.level || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">加入天数</div><div class="nsc-hub-kpi-val">${escHtml(info.days || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">鸡腿余额</div><div class="nsc-hub-kpi-val">${escHtml(info.legs || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">星辰余额</div><div class="nsc-hub-kpi-val">${escHtml(info.stars || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">主题帖</div><div class="nsc-hub-kpi-val">${escHtml(info.posts || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">评论数</div><div class="nsc-hub-kpi-val">${escHtml(info.comments || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">粉丝数</div><div class="nsc-hub-kpi-val">${escHtml(info.fans || "--")}</div></div>
+        </div>
+        ${maxFree > 0 ? `
+          <div class="nsc-hub-kpi">
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;">
+              <span>今日免费投喂鸡腿额度</span>
+              <span>${usedFree} / ${maxFree}</span>
+            </div>
+            <div style="height:8px;border-radius:999px;background:var(--nsc-hover);overflow:hidden;margin-top:8px;">
+              <div style="height:100%;width:${pct}%;background:var(--nsc-accent);border-radius:999px;"></div>
+            </div>
+          </div>
+        ` : ""}
+      `;
+    }
+  }
+
+  function openUserHubModal(tab = "notif") {
+    let bd = document.getElementById("nsc-hub-backdrop");
+    if (!bd) {
+      bd = document.createElement("div");
+      bd.id = "nsc-hub-backdrop";
+      bd.innerHTML = `<div class="nsc-hub-modal" role="dialog" aria-label="个人中心"></div>`;
+      bd.addEventListener("click", (e) => {
+        if (e.target === bd) bd.classList.remove("is-open");
+      });
+      document.body.appendChild(bd);
+    }
+    state.hubTab = tab;
+    bd.classList.add("is-open");
+
+    if (tab === "notif") {
+      if ((Number(state.unreadCounts.reply) || 0) > 0) state.hubNotifSub = "reply-me";
+      else if ((Number(state.unreadCounts.atMe) || 0) > 0) state.hubNotifSub = "at-me";
+      else if ((Number(state.unreadCounts.message) || 0) > 0) state.hubNotifSub = "pm";
+      else if ((Number(state.unreadCounts.sysNotice) || 0) > 0) state.hubNotifSub = "sys-notice";
+      fetchUnreadCounts();
+      if (!state.notifData["reply-me"].loaded) fetchNotifications("reply-me");
+      if (!state.notifData["at-me"].loaded) fetchNotifications("at-me");
+      if (!state.pmList.loaded) fetchPmList();
+      if (!state.sysNoticeList.loaded) fetchSysNotices(false);
+    } else if (tab === "posts" && state.hubData.posts.items.length === 0) {
+      loadHubPosts(true);
+    } else if (tab === "comments" && state.hubData.comments.items.length === 0) {
+      loadHubComments(true);
+    } else if (tab === "collections" && state.hubData.collections.items.length === 0) {
+      loadHubCollections(true);
+    } else if (tab === "credit" && state.hubData.credit.items.length === 0) {
+      loadHubCredit(true);
+    } else if (tab === "stardust" && state.hubData.stardust.items.length === 0) {
+      loadHubStardust(true);
+    } else if (tab === "fans") {
+      if (!state.fansData.loaded && !state.fansData.loading) fetchFansOrFollow("fans").then(() => renderUserHubIfOpen());
+      if (!state.followData.loaded && !state.followData.loading) fetchFansOrFollow("follow").then(() => renderUserHubIfOpen());
+    } else if (tab === "progress") {
+      loadHubProgress(false);
+    }
+
+    renderUserHub();
   }
 
   // ==========================================================================

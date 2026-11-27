@@ -41,8 +41,35 @@
           sysNotice: sysUnread,
         };
         renderLeftNav();
+        syncUserCardNotifyBadge();
       }
     } catch (_) {}
+  }
+
+  function bindUserCardStatLinks(userCard) {
+    if (!userCard) return;
+    for (const a of userCard.querySelectorAll(".user-stat a")) {
+      if (a.dataset.nscHubBound === "1") continue;
+      a.dataset.nscHubBound = "1";
+      a.addEventListener("click", (e) => {
+        if (!document.body.classList.contains("nsc-app-active")) return;
+        const href = a.getAttribute("href") || "";
+        let tab = "";
+        if (href.includes("/notification")) tab = "notif";
+        else if (href.includes("#discussions")) tab = "posts";
+        else if (href.includes("#comments")) tab = "comments";
+        else if (href.includes("#collections")) tab = "collections";
+        else if (href.includes("/credit")) tab = "credit";
+        else if (href.includes("/stardust")) tab = "stardust";
+        else if (href.includes("/fans")) tab = "fans";
+        else if (href.includes("/progress")) tab = "progress";
+        if (tab && typeof openUserHubModal === "function") {
+          e.preventDefault();
+          e.stopPropagation();
+          openUserHubModal(tab);
+        }
+      });
+    }
   }
 
   function mountNativeWidgetsIntoApp() {
@@ -51,6 +78,7 @@
     if (rightUserHost && nativeUserCard && !rightUserHost.contains(nativeUserCard)) {
       rightUserHost.appendChild(nativeUserCard);
     }
+    bindUserCardStatLinks(document.querySelector("#nsc-right-user .user-card"));
 
     const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
     if (headThemeBtn && headThemeBtn.dataset.nscThemeObs !== "1") {
@@ -148,6 +176,7 @@
         fetchUnreadCounts();
         setTimeout(() => fetchSysNotices(true), 600);
         setTimeout(() => fetchServerBlockList(true), 800);
+        setTimeout(() => prefetchCollectionsSet(), 950);
         setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
       }
 
@@ -192,18 +221,21 @@
 
     if (channelId === "at-me" || channelId === "reply-me") {
       const st = state.notifData[channelId];
+      fetchUnreadCounts();
       if (forceRefresh || !st.loaded) fetchNotifications(channelId);
       else renderTopicList();
       return;
     }
 
     if (channelId === "pm") {
+      fetchUnreadCounts();
       if (forceRefresh || !state.pmList.loaded) fetchPmList();
       else renderTopicList();
       return;
     }
 
     if (channelId === "sys-notice") {
+      fetchUnreadCounts();
       if (forceRefresh || !state.sysNoticeList.loaded) {
         fetchSysNotices(false);
       } else {
@@ -254,7 +286,7 @@
         const floorId = Number(it.floor_id) || 0;
         const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
         return {
-          id: Number(it.id || it.notification_id || it.comment_id) || 0,
+          id: Number(it.id || it.notification_id || it.notify_id || it.msg_id || it.comment_id || it.commentId) || 0,
           postId,
           floorId,
           url: `/post-${postId}-${pageIndex}`,
@@ -272,6 +304,7 @@
     } finally {
       store.loading = false;
       if (state.activeChannel === kind) renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
   }
 
@@ -293,7 +326,9 @@
         }
       }
       renderLeftNav();
+      syncUserCardNotifyBadge();
       if (state.activeChannel === kind) renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
 
     try {
@@ -301,8 +336,8 @@
       const payloads = all
         ? [{}]
         : kind === "at-me"
-          ? [{ atMe: [numId] }, { ids: [numId] }]
-          : [{ replyToMe: [numId] }, { reply: [numId] }, { ids: [numId] }];
+          ? [{ atMe: [numId] }, { ids: [numId] }, { id: numId }]
+          : [{ replyToMe: [numId] }, { reply: [numId] }, { ids: [numId] }, { id: numId }];
 
       if (!all && !numId) return;
 
@@ -327,7 +362,9 @@
           if (all) {
             state.unreadCounts[countKey] = 0;
             renderLeftNav();
+            syncUserCardNotifyBadge();
           }
+          if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
         }, 350);
       }
     } catch (_) {}
@@ -379,6 +416,7 @@
     } finally {
       state.pmList.loading = false;
       if (state.activeChannel === "pm") renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
   }
 
@@ -767,6 +805,7 @@
     } finally {
       state.sysNoticeList.loading = false;
       if (state.activeChannel === "sys-notice") renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
   }
 
@@ -786,7 +825,9 @@
       });
       state.unreadCounts.sysNotice = state.sysNoticeList.items.filter((x) => x.unread).length;
       renderLeftNav();
+      syncUserCardNotifyBadge();
       if (state.activeChannel === "sys-notice") renderTopicList();
+      if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     } catch (_) {}
   }
 
