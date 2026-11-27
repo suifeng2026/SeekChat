@@ -931,58 +931,6 @@
     showLightboxAt(idx >= 0 ? idx : 0);
   }
 
-  let _hoverPreviewTimer = null;
-  function ensureHoverPreviewEl() {
-    let el = document.getElementById("nsc-img-hover-preview");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "nsc-img-hover-preview";
-      el.innerHTML = `<img src="" alt="" />`;
-      document.body.appendChild(el);
-    }
-    return el;
-  }
-
-  function hideHoverImagePreview() {
-    clearTimeout(_hoverPreviewTimer);
-    const el = document.getElementById("nsc-img-hover-preview");
-    if (el) el.classList.remove("is-open");
-  }
-
-  function attachHoverImagePreview(imgEl) {
-    if (!imgEl || imgEl.dataset.nscHoverBound === "1") return;
-    imgEl.dataset.nscHoverBound = "1";
-    const positionAt = (e) => {
-      const box = ensureHoverPreviewEl();
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const maxW = 476;
-      const maxH = 376;
-      let left = e.clientX + 18;
-      if (left + maxW > vw - 12) left = Math.max(12, e.clientX - maxW - 18);
-      let top = Math.min(vh - maxH - 12, Math.max(12, e.clientY - 120));
-      box.style.left = `${left}px`;
-      box.style.top = `${top}px`;
-    };
-    imgEl.addEventListener("mouseenter", (e) => {
-      clearTimeout(_hoverPreviewTimer);
-      const src = imgEl.currentSrc || imgEl.getAttribute("src") || "";
-      if (!src) return;
-      _hoverPreviewTimer = setTimeout(() => {
-        const box = ensureHoverPreviewEl();
-        box.querySelector("img").src = src;
-        positionAt(e);
-        box.classList.add("is-open");
-      }, 220);
-    });
-    imgEl.addEventListener("mousemove", (e) => {
-      const box = document.getElementById("nsc-img-hover-preview");
-      if (box && box.classList.contains("is-open")) positionAt(e);
-    });
-    imgEl.addEventListener("mouseleave", hideHoverImagePreview);
-    imgEl.addEventListener("click", hideHoverImagePreview);
-  }
-
   function processBubbleImages(containerEl) {
     if (!containerEl) return;
     const zoomImgs = [];
@@ -998,7 +946,7 @@
         continue;
       }
       img.classList.add("nsc-zoomable-img");
-      img.title = "悬停放大预览 · 点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
+      img.title = "点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
       if (!img.closest("blockquote, pre, code")) {
         zoomImgs.push(img);
       }
@@ -1012,7 +960,6 @@
         e.stopPropagation();
         openLightbox(img.currentSrc || src, scopeUrls.length >= 2 ? scopeUrls : null);
       });
-      attachHoverImagePreview(img);
     }
 
     // 帖子内有 >= 2 张图片时，自动组合为朋友圈风格宫格（2/4张为两列，3/5+张为三列九宫格）

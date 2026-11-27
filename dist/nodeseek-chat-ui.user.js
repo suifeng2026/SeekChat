@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.5
+// @version      7.9.6
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -938,19 +938,6 @@
       }
       .nsc-img-grid img.nsc-zoomable-img:hover {
         transform: scale(1.02); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
-      }
-
-      /* 悬停图片快速放大预览浮窗 */
-      #nsc-img-hover-preview {
-        position: fixed; z-index: 9800; pointer-events: none;
-        display: none; padding: 6px; border-radius: 12px;
-        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-      }
-      #nsc-img-hover-preview.is-open { display: block; }
-      #nsc-img-hover-preview img {
-        max-width: 460px; max-height: 360px; width: auto; height: auto;
-        object-fit: contain; border-radius: 8px; display: block;
       }
 
       .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
@@ -1925,7 +1912,6 @@
             const insFn = () => { NodeImage.insertToTarget(niTargetMode, md); closeNi(); };
             const niImg = card.querySelector("img");
             niImg.addEventListener("click", insFn);
-            if (typeof attachHoverImagePreview === "function") attachHoverImagePreview(niImg);
             card.querySelectorAll("button")[0].addEventListener("click", insFn);
             card.querySelectorAll("button")[1].addEventListener("click", () => {
               if (typeof openLightbox === "function") openLightbox(directUrl);
@@ -2919,58 +2905,6 @@
     showLightboxAt(idx >= 0 ? idx : 0);
   }
 
-  let _hoverPreviewTimer = null;
-  function ensureHoverPreviewEl() {
-    let el = document.getElementById("nsc-img-hover-preview");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "nsc-img-hover-preview";
-      el.innerHTML = `<img src="" alt="" />`;
-      document.body.appendChild(el);
-    }
-    return el;
-  }
-
-  function hideHoverImagePreview() {
-    clearTimeout(_hoverPreviewTimer);
-    const el = document.getElementById("nsc-img-hover-preview");
-    if (el) el.classList.remove("is-open");
-  }
-
-  function attachHoverImagePreview(imgEl) {
-    if (!imgEl || imgEl.dataset.nscHoverBound === "1") return;
-    imgEl.dataset.nscHoverBound = "1";
-    const positionAt = (e) => {
-      const box = ensureHoverPreviewEl();
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const maxW = 476;
-      const maxH = 376;
-      let left = e.clientX + 18;
-      if (left + maxW > vw - 12) left = Math.max(12, e.clientX - maxW - 18);
-      let top = Math.min(vh - maxH - 12, Math.max(12, e.clientY - 120));
-      box.style.left = `${left}px`;
-      box.style.top = `${top}px`;
-    };
-    imgEl.addEventListener("mouseenter", (e) => {
-      clearTimeout(_hoverPreviewTimer);
-      const src = imgEl.currentSrc || imgEl.getAttribute("src") || "";
-      if (!src) return;
-      _hoverPreviewTimer = setTimeout(() => {
-        const box = ensureHoverPreviewEl();
-        box.querySelector("img").src = src;
-        positionAt(e);
-        box.classList.add("is-open");
-      }, 220);
-    });
-    imgEl.addEventListener("mousemove", (e) => {
-      const box = document.getElementById("nsc-img-hover-preview");
-      if (box && box.classList.contains("is-open")) positionAt(e);
-    });
-    imgEl.addEventListener("mouseleave", hideHoverImagePreview);
-    imgEl.addEventListener("click", hideHoverImagePreview);
-  }
-
   function processBubbleImages(containerEl) {
     if (!containerEl) return;
     const zoomImgs = [];
@@ -2986,7 +2920,7 @@
         continue;
       }
       img.classList.add("nsc-zoomable-img");
-      img.title = "悬停放大预览 · 点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
+      img.title = "点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
       if (!img.closest("blockquote, pre, code")) {
         zoomImgs.push(img);
       }
@@ -3000,7 +2934,6 @@
         e.stopPropagation();
         openLightbox(img.currentSrc || src, scopeUrls.length >= 2 ? scopeUrls : null);
       });
-      attachHoverImagePreview(img);
     }
 
     // 帖子内有 >= 2 张图片时，自动组合为朋友圈风格宫格（2/4张为两列，3/5+张为三列九宫格）

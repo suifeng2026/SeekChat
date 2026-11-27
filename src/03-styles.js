@@ -407,19 +407,6 @@
         transform: scale(1.02); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
       }
 
-      /* 悬停图片快速放大预览浮窗 */
-      #nsc-img-hover-preview {
-        position: fixed; z-index: 9800; pointer-events: none;
-        display: none; padding: 6px; border-radius: 12px;
-        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
-      }
-      #nsc-img-hover-preview.is-open { display: block; }
-      #nsc-img-hover-preview img {
-        max-width: 460px; max-height: 360px; width: auto; height: auto;
-        object-fit: contain; border-radius: 8px; display: block;
-      }
-
       .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
       body.dark-layout .nsc-bubble pre { background: rgba(0,0,0,0.35); }
       .nsc-bubble blockquote {
