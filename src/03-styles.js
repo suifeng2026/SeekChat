@@ -1826,7 +1826,8 @@
       .nsc-checkin-btn:hover:not(:disabled) { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
       .nsc-checkin-btn.primary { background: var(--nsc-accent); color: #fff; border-color: transparent; }
       .nsc-checkin-btn.primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; background: var(--nsc-accent); }
-      .nsc-checkin-btn:disabled { opacity: 0.55; cursor: wait; }
+      .nsc-checkin-btn:disabled { opacity: 0.55; cursor: default; }
+      .nsc-checkin-btn.is-loading:disabled { cursor: wait; }
       .nsc-checkin-auto-row {
         display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
         width: 100%; padding-top: 10px; margin-top: 2px; border-top: 1px dashed var(--nsc-border);

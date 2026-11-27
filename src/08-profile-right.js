@@ -1638,9 +1638,63 @@
     );
   }
 
-  function getBeijingDateStr() {
-    const d = new Date(Date.now() + (new Date().getTimezoneOffset() + 480) * 60000);
+  function getBeijingDateStr(dateInput = new Date()) {
+    const base = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    if (Number.isNaN(base.getTime())) return "";
+    const d = new Date(base.getTime() + (base.getTimezoneOffset() + 480) * 60000);
     return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  let _todayCheckinSyncDate = "";
+  function extractTodayCheckinFromCreditRows(rows, todayStr) {
+    for (const row of rows || []) {
+      const delta = Number(Array.isArray(row) ? row[0] : (row.amount ?? row.change ?? row.delta ?? 0));
+      const bal = Array.isArray(row) ? row[1] : (row.balance ?? null);
+      const reason = String(Array.isArray(row) ? row[2] : (row.reason ?? row.description ?? "")).trim();
+      const tm = Array.isArray(row) ? row[3] : (row.created_at || "");
+      if (!reason.includes("签到") || !(delta > 0) || !tm) continue;
+      if (getBeijingDateStr(tm) === todayStr) {
+        return {
+          date: todayStr,
+          gain: delta,
+          current: bal !== null && bal !== undefined && bal !== "" ? Number(bal) : null,
+          mode: reason.includes("随机") ? "随机签到" : "签到",
+        };
+      }
+    }
+    return null;
+  }
+
+  async function syncTodayCheckinGainIfNeeded() {
+    const today = getBeijingDateStr();
+    if (state.checkinToday && state.checkinToday.date === today && state.checkinToday.gain !== null) {
+      return state.checkinToday;
+    }
+    const localHit = extractTodayCheckinFromCreditRows(state.hubData.credit.items, today);
+    if (localHit) {
+      state.checkinToday = localHit;
+      saveJson(LS.CHECKIN_TODAY, localHit);
+      state.autoCheckinDate = today;
+      localStorage.setItem(LS.AUTO_CHECKIN_DATE, today);
+      renderUserHubIfOpen();
+      return localHit;
+    }
+    if (_todayCheckinSyncDate === today) return null;
+    _todayCheckinSyncDate = today;
+    try {
+      const json = await apiGetJson("/api/account/credit/page-1");
+      const rows = (json && (Array.isArray(json.data) ? json.data : json.data?.list || json.data?.records)) || [];
+      const hit = extractTodayCheckinFromCreditRows(rows, today);
+      if (hit) {
+        state.checkinToday = hit;
+        saveJson(LS.CHECKIN_TODAY, hit);
+        state.autoCheckinDate = today;
+        localStorage.setItem(LS.AUTO_CHECKIN_DATE, today);
+        renderUserHubIfOpen();
+        return hit;
+      }
+    } catch (_) {}
+    return null;
   }
 
   async function maybeRunAutoCheckin() {
@@ -1671,6 +1725,17 @@
         const today = getBeijingDateStr();
         state.autoCheckinDate = today;
         localStorage.setItem(LS.AUTO_CHECKIN_DATE, today);
+        if (ok && json && json.gain !== undefined) {
+          state.checkinToday = {
+            date: today,
+            gain: Number(json.gain),
+            current: json.current !== undefined ? Number(json.current) : null,
+            mode: randomMode ? "随机签到" : "固定签到",
+          };
+          saveJson(LS.CHECKIN_TODAY, state.checkinToday);
+        } else if (alreadyDone) {
+          syncTodayCheckinGainIfNeeded();
+        }
       }
       state.hubData.checkinResult = {
         ok,
@@ -2645,22 +2710,36 @@
 
       const res = state.hubData.checkinResult;
       const todayStr = getBeijingDateStr();
-      const signedToday = state.autoCheckinDate === todayStr;
+      const signedToday = state.autoCheckinDate === todayStr || (state.checkinToday && state.checkinToday.date === todayStr);
+      const todayGain =
+        state.checkinToday && state.checkinToday.date === todayStr && state.checkinToday.gain !== null
+          ? state.checkinToday.gain
+          : (res && res.gain !== undefined ? Number(res.gain) : null);
+      const todayCurrent =
+        state.checkinToday && state.checkinToday.date === todayStr && state.checkinToday.current !== null
+          ? state.checkinToday.current
+          : (res && res.current !== undefined ? Number(res.current) : null);
+      const isLoadingCk = Boolean(state.hubData.checkinLoading);
+      const subText = signedToday
+        ? `今日已完成签到${todayGain !== null ? `，获得 +${todayGain} 鸡腿` : ""}${todayCurrent !== null ? ` · 当前余额 ${todayCurrent} 鸡腿` : ""}`
+        : (res && !res.ok ? `${res.mode}：${res.message}` : "固定签到稳定 +5 鸡腿；随机签到拼手气（1~10+ 鸡腿）");
+      const subColor = signedToday ? "var(--nsc-green)" : (res && !res.ok ? "#ff9f0a" : "var(--nsc-muted)");
       const ckCard = document.createElement("div");
       ckCard.className = "nsc-checkin-card";
       ckCard.innerHTML = `
         <div style="min-width:0;">
-          <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);display:flex;align-items:center;gap:8px;">
+          <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span>每日签到领取鸡腿</span>
             <span class="nsc-badge-read" style="${signedToday ? "color:var(--nsc-green);border-color:var(--nsc-green);" : ""}">${signedToday ? "今日已签" : "今日待签"}</span>
+            ${todayGain !== null ? `<span class="nsc-badge-read" style="color:var(--nsc-green);border-color:rgba(52,199,89,0.45);background:rgba(52,199,89,0.10);font-weight:700;">+${todayGain} 鸡腿</span>` : ""}
           </div>
-          <div style="font-size:11.5px;color:${res ? (res.ok ? "var(--nsc-green)" : "#ff9f0a") : "var(--nsc-muted)"};margin-top:3px;">
-            ${res ? `${escHtml(res.mode)}：${escHtml(res.message)}${res.gain !== undefined ? ` (+${res.gain} 🍗)` : ""}${res.current !== undefined ? ` · 当前 ${res.current} 🍗` : ""}` : "固定签到稳定 +5 鸡腿；随机签到拼手气（1~10+ 鸡腿）"}
+          <div style="font-size:11.5px;color:${subColor};margin-top:3px;">
+            ${escHtml(subText)}
           </div>
         </div>
         <div class="nsc-checkin-actions">
-          <button type="button" class="nsc-checkin-btn primary" id="nsc-ck-fixed" ${state.hubData.checkinLoading ? "disabled" : ""}>固定签到 (+5🍗)</button>
-          <button type="button" class="nsc-checkin-btn" id="nsc-ck-random" ${state.hubData.checkinLoading ? "disabled" : ""}>随机签到 (拼手气)</button>
+          <button type="button" class="nsc-checkin-btn ${!signedToday ? "primary" : ""} ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-fixed" ${signedToday || isLoadingCk ? "disabled" : ""}>${signedToday ? "固定签到 (已签)" : "固定签到 (+5 鸡腿)"}</button>
+          <button type="button" class="nsc-checkin-btn ${isLoadingCk ? "is-loading" : ""}" id="nsc-ck-random" ${signedToday || isLoadingCk ? "disabled" : ""}>${signedToday ? "随机签到 (已签)" : "随机签到 (拼手气)"}</button>
         </div>
         <div class="nsc-checkin-auto-row">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -2668,7 +2747,7 @@
             <span style="font-weight:600;">每日首次访问自动签到</span>
           </div>
           <div class="nsc-seg-tabs" id="nsc-auto-ck-mode">
-            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">自动固定 (+5🍗)</button>
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">自动固定 (+5 鸡腿)</button>
             <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">自动随机 (拼手气)</button>
           </div>
         </div>
@@ -2834,8 +2913,9 @@
     } else if (tab === "fans") {
       if (!state.fansData.loaded && !state.fansData.loading) fetchFansOrFollow("fans").then(() => renderUserHubIfOpen());
       if (!state.followData.loaded && !state.followData.loading) fetchFansOrFollow("follow").then(() => renderUserHubIfOpen());
-    } else if (tab === "attendance" && state.hubData.board.items.length === 0) {
-      loadHubAttendanceBoard(true);
+    } else if (tab === "attendance") {
+      if (state.hubData.board.items.length === 0) loadHubAttendanceBoard(true);
+      syncTodayCheckinGainIfNeeded();
     } else if (tab === "progress") {
       loadHubProgress(false);
     } else {
