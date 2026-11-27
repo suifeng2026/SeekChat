@@ -1202,6 +1202,18 @@
       }
       img.classList.add("nsc-zoomable-img");
       img.title = "点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
+      if (img.closest(".nsk-magic-tab-body")) {
+        const markFullTabImg = () => {
+          if (/\.svg(?:[?#]|$)/i.test(src) || img.naturalWidth >= 320) {
+            img.classList.add("nsc-magic-tab-img-full");
+          }
+        };
+        if (/\.svg(?:[?#]|$)/i.test(src) || (img.complete && img.naturalWidth > 0)) {
+          markFullTabImg();
+        } else {
+          img.addEventListener("load", markFullTabImg, { once: true });
+        }
+      }
       if (!img.closest('blockquote, pre, code, table, .nsc-table-wrap, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"]')) {
         gridImgs.push(img);
       }

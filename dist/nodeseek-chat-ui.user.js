@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.3
+// @version      7.22.4
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -303,7 +303,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.3",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.4",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -1910,6 +1910,11 @@
       .nsc-avatar-btn:hover img { transform: scale(1.06); }
 
       .nsc-msg-main { flex: 0 1 auto; min-width: 0; max-width: min(82%, 740px); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+      .nsc-msg.is-op-card .nsc-msg-main { max-width: calc(100% - 48px); }
+      .nsc-msg.is-op-card .nsc-bubble-row:has(.nsk-magic-tabs, table, pre),
+      .nsc-msg.is-op-card .nsc-bubble:has(.nsk-magic-tabs, table, pre) {
+        width: 100%; box-sizing: border-box;
+      }
       .nsc-msg.is-right .nsc-msg-main,
       .nsc-msg.is-self .nsc-msg-main { align-items: flex-end; }
       .nsc-msg-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 11px; color: var(--nsc-muted); }
@@ -2046,6 +2051,7 @@
       .nsc-bubble .nsk-magic-tabs,
       .nsc-thread-content .nsk-magic-tabs {
         display: flex !important; flex-wrap: wrap !important; align-items: center; gap: 4px;
+        width: 100%; box-sizing: border-box;
         margin: 8px 0; padding: 8px 10px 10px !important;
         border: 1px solid var(--nsc-border) !important; border-radius: 12px !important;
         background: var(--nsc-bg-card) !important; color: var(--nsc-text) !important;
@@ -2081,8 +2087,13 @@
       }
       .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img,
       .nsc-thread-content .nsk-magic-tab-body img.nsc-zoomable-img {
-        margin: 4px 0 !important;
-        max-width: 100% !important; max-height: 520px !important;
+        margin: 4px auto !important;
+        width: auto !important; max-width: 100% !important;
+        height: auto !important; max-height: none !important;
+      }
+      .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img.nsc-magic-tab-img-full,
+      .nsc-thread-content .nsk-magic-tab-body img.nsc-zoomable-img.nsc-magic-tab-img-full {
+        width: 100% !important;
       }
 
       .nsc-bubble pre {
@@ -4920,6 +4931,18 @@
       }
       img.classList.add("nsc-zoomable-img");
       img.title = "点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
+      if (img.closest(".nsk-magic-tab-body")) {
+        const markFullTabImg = () => {
+          if (/\.svg(?:[?#]|$)/i.test(src) || img.naturalWidth >= 320) {
+            img.classList.add("nsc-magic-tab-img-full");
+          }
+        };
+        if (/\.svg(?:[?#]|$)/i.test(src) || (img.complete && img.naturalWidth > 0)) {
+          markFullTabImg();
+        } else {
+          img.addEventListener("load", markFullTabImg, { once: true });
+        }
+      }
       if (!img.closest('blockquote, pre, code, table, .nsc-table-wrap, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"]')) {
         gridImgs.push(img);
       }

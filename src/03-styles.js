@@ -482,6 +482,11 @@
       .nsc-avatar-btn:hover img { transform: scale(1.06); }
 
       .nsc-msg-main { flex: 0 1 auto; min-width: 0; max-width: min(82%, 740px); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+      .nsc-msg.is-op-card .nsc-msg-main { max-width: calc(100% - 48px); }
+      .nsc-msg.is-op-card .nsc-bubble-row:has(.nsk-magic-tabs, table, pre),
+      .nsc-msg.is-op-card .nsc-bubble:has(.nsk-magic-tabs, table, pre) {
+        width: 100%; box-sizing: border-box;
+      }
       .nsc-msg.is-right .nsc-msg-main,
       .nsc-msg.is-self .nsc-msg-main { align-items: flex-end; }
       .nsc-msg-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 11px; color: var(--nsc-muted); }
@@ -618,6 +623,7 @@
       .nsc-bubble .nsk-magic-tabs,
       .nsc-thread-content .nsk-magic-tabs {
         display: flex !important; flex-wrap: wrap !important; align-items: center; gap: 4px;
+        width: 100%; box-sizing: border-box;
         margin: 8px 0; padding: 8px 10px 10px !important;
         border: 1px solid var(--nsc-border) !important; border-radius: 12px !important;
         background: var(--nsc-bg-card) !important; color: var(--nsc-text) !important;
@@ -653,8 +659,13 @@
       }
       .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img,
       .nsc-thread-content .nsk-magic-tab-body img.nsc-zoomable-img {
-        margin: 4px 0 !important;
-        max-width: 100% !important; max-height: 520px !important;
+        margin: 4px auto !important;
+        width: auto !important; max-width: 100% !important;
+        height: auto !important; max-height: none !important;
+      }
+      .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img.nsc-magic-tab-img-full,
+      .nsc-thread-content .nsk-magic-tab-body img.nsc-zoomable-img.nsc-magic-tab-img-full {
+        width: 100% !important;
       }
 
       .nsc-bubble pre {
