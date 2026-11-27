@@ -1,6 +1,6 @@
 # SeekChat 二次开发与架构规范
 
-- **当前基线**：`v7.21.1`（分支策略：`main` 存放正式发布版与基线 Tag；`dev` 分支用于日常测试与实验迭代，验证通过后合并至 `main`）
+- **当前基线**：`v7.21.2`（分支策略：`main` 存放正式发布版与基线 Tag；`dev` 分支用于日常测试与实验迭代，验证通过后合并至 `main`）
 - **目标平台**：NodeSeek（`https://www.nodeseek.com/*`、`https://nodeseek.com/*`）Tampermonkey / Violentmonkey
 - **构建产物**：`dist/nodeseek-chat-ui.user.js`、`dist/nodeseek-chat-ui.meta.js`
 - **工程定位**：零运行时依赖、词法模块化、插槽式可扩展、高性能并发安全、macOS 风格美化
@@ -225,14 +225,14 @@ node build.mjs --local
 
 状态约定：`- [x]` 表示已合入主线并随基线构建验证；`- [ ]` 表示规划待实现需求，**开发前需先补全或确认其「实现方式」条目中的接口与交互细节**。
 
-### 6.1 已完成能力清单（基线：`v7.21.1`）
+### 6.1 已完成能力清单（基线：`v7.21.2`）
 
 #### 工作台骨架、基座中心与外观主题
 - [x] macOS 四栏桌面布局与防闪屏启动守卫，支持「群聊模式 / 原版论坛」零残留切换（`01`、`03`、`05`、`06`、`09`）
 - [x] `ThemeRegistry` 主题注册中心与默认 macOS 三态主题抽离（`03-styles.js`、`src/themes/mac-default.js`、`05`、`06`）
 - [x] `build.mjs` 目录自动发现（`src/themes/*.js`、`src/plugins/*.js`、`custom-*` 后置隔离与 `NSC_DISCOVERED_MODULES` 清单注入）
 - [x] 共享 `FeedEngine`（瀑布流分页 + `mutexGroup` 限频批处理 + `AbortController`）与五大扩展插槽（`02-utils-api.js`、`05`、`06`、`07`、`08`）
-- [x] 工作台统一「基座」配置中心（`src/plugins/core-workbench-base.js`）及四分区快捷设置入口：
+- [x] 工作台统一「基座」配置中心（`src/plugins/core-workbench-base.js`，通过个人名片进入浮窗统一管理，保持主界面零冗余入口）：
   - [x] 主题选择中心（自动识别内置与扩展主题）
   - [x] 四分区皮肤基座（导航区 / 帖子区 / 聊天底图 / 个人信息区独立图片 URL/本地图 + 共享透明度/模糊度滑块 + 推荐尺寸提示）
   - [x] 组件调序与显隐基座（左侧导航排序/显隐 + 右侧栏 `热榜/好友/粉丝/黑名单` 排序/显隐）

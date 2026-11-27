@@ -1687,15 +1687,7 @@
       }
       .nsc-vote-confirm-btns { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
-      /* 工作台共享基座配置中心与分区快捷入口 */
-      .nsc-pane-gear-btn {
-        width: 22px; height: 22px; padding: 0; border-radius: 6px;
-        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
-        display: inline-flex; align-items: center; justify-content: center;
-        cursor: pointer; flex: 0 0 22px; transition: all 0.12s ease;
-      }
-      .nsc-pane-gear-btn svg { width: 13px; height: 13px; }
-      .nsc-pane-gear-btn:hover { background: var(--nsc-hover); color: var(--nsc-accent); border-color: var(--nsc-border); }
+      /* 工作台共享基座配置中心样式 */
 
       .nsc-base-section {
         margin-bottom: 12px; padding: 12px 14px; border-radius: 12px;

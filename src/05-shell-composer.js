@@ -178,9 +178,6 @@
           <a class="nsc-nav-item group-admin" id="nsc-nf-links" href="/award" target="_blank" rel="noopener noreferrer" title="友站链接">
             <span class="nsc-nav-left">${ICONS.links}<span>友链</span></span>
           </a>
-          <button type="button" class="nsc-nav-item" id="nsc-nav-base-btn" title="工作台主题、分区皮肤、组件调序与自定义基座">
-            <span class="nsc-nav-left">${ICONS.sliders}<span>基座</span></span>
-          </button>
           <button type="button" class="nsc-nav-item nsc-update-btn" id="nsc-update-btn" title="检查脚本更新">
             <span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>
           </button>
@@ -191,9 +188,8 @@
         <div class="nsc-list-head">
           <div class="nsc-list-title-row">
             <span id="nsc-channel-title">首页</span>
-            <div style="display:inline-flex;align-items:center;gap:5px;">
+            <div style="display:inline-flex;align-items:center;gap:6px;">
               <span id="nsc-channel-sub" style="font-size:11px;color:var(--nsc-muted);font-weight:500;"></span>
-              <button type="button" class="nsc-pane-gear-btn" id="nsc-list-gear-btn" title="帖子区皮肤与导航设置">${ICONS.sliders}</button>
               <button type="button" class="nsc-newpost-btn" id="nsc-newpost-open-btn" title="发布新主题帖">+ 发帖</button>
             </div>
           </div>
@@ -210,7 +206,6 @@
             <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
           </div>
           <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
-          <button type="button" class="nsc-pane-gear-btn" id="nsc-chat-gear-btn" title="聊天区排版、表情与底图设置">${ICONS.sliders}</button>
         </div>
         <div class="nsc-chat-messages" id="nsc-chat-messages">
           <div class="nsc-empty-state">点击左侧任意版块与帖子主题，即可在中间窗口阅读与讨论</div>
@@ -228,10 +223,7 @@
           <a class="nsc-quick-btn" id="nsc-qb-lucky" href="/lucky" target="_blank" rel="noopener noreferrer" title="幸运抽奖">抽奖</a>
           <a class="nsc-quick-btn" id="nsc-qb-invite" href="/invite" target="_blank" rel="noopener noreferrer" title="邀请好友">邀请</a>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;margin:7px 10px 3px;">
-          <div class="nsc-right-tabs" id="nsc-right-tabs" style="margin:0;flex:1;"></div>
-          <button type="button" class="nsc-pane-gear-btn" id="nsc-right-gear-btn" title="右栏组件顺序、开关与皮肤设置">${ICONS.sliders}</button>
-        </div>
+        <div class="nsc-right-tabs" id="nsc-right-tabs"></div>
         <div class="nsc-right-scroll" id="nsc-right-scroll"></div>
       </aside>
     `;
@@ -570,10 +562,6 @@
     });
 
     renderRightTabs();
-    shell.querySelector("#nsc-nav-base-btn")?.addEventListener("click", () => openWorkbenchBase("theme"));
-    shell.querySelector("#nsc-list-gear-btn")?.addEventListener("click", () => openWorkbenchBase("skin"));
-    shell.querySelector("#nsc-chat-gear-btn")?.addEventListener("click", () => openWorkbenchBase("chat"));
-    shell.querySelector("#nsc-right-gear-btn")?.addEventListener("click", () => openWorkbenchBase("layout"));
 
     const topicScroll = shell.querySelector("#nsc-topic-scroll");
     let topicScrollRaf = 0;
