@@ -259,6 +259,449 @@
     }
   }
 
+  const _userSpaceCache = new Map();
+  const MAX_SPACE_CACHE = 15;
+  const SPACE_CACHE_TTL_MS = 5 * 60 * 1000;
+  const _spaceModalState = { uid: "", info: null, tab: "posts", sigHtml: "" };
+
+  function getOrCreateUserSpaceStore(info) {
+    const uid = String((info && info.uid) || "").trim();
+    if (!uid) return null;
+    const now = Date.now();
+    let entry = _userSpaceCache.get(uid);
+    if (entry && now - entry.ts < SPACE_CACHE_TTL_MS) {
+      _userSpaceCache.delete(uid);
+      _userSpaceCache.set(uid, entry);
+      if (info && info.name && info.name !== "Seeker") entry.info = { ...entry.info, ...info };
+      return entry;
+    }
+    entry = {
+      uid,
+      info: info || { uid, name: `用户 #${uid}`, avatar: `/avatar/${uid}.png` },
+      posts: { items: [], page: 0, loading: false, noMore: Number(info && info.posts) === 0, error: null },
+      comments: { items: [], page: 0, loading: false, noMore: Number(info && info.comments) === 0, error: null },
+      ts: now,
+    };
+    _userSpaceCache.set(uid, entry);
+    while (_userSpaceCache.size > MAX_SPACE_CACHE) {
+      const oldest = _userSpaceCache.keys().next().value;
+      if (oldest === undefined) break;
+      _userSpaceCache.delete(oldest);
+    }
+    return entry;
+  }
+
+  async function loadSpaceTabPage(store, kind, reset = false) {
+    if (!store || !store.uid) return;
+    const st = kind === "comments" ? store.comments : store.posts;
+    if (st.loading) return;
+    if (reset) {
+      st.items = [];
+      st.page = 0;
+      st.noMore = false;
+      st.error = null;
+    }
+    if (st.noMore) return;
+    st.loading = true;
+    renderUserSpaceIfOpen(store.uid);
+    try {
+      const nextPage = st.page + 1;
+      const endpoint = kind === "comments"
+        ? `/api/content/list-comments?uid=${encodeURIComponent(store.uid)}&page=${nextPage}`
+        : `/api/content/list-discussions?uid=${encodeURIComponent(store.uid)}&page=${nextPage}`;
+      const json = await apiGetJson(endpoint);
+      const rows = kind === "comments"
+        ? (json && (json.comments || json.data || json.list)) || []
+        : (json && (json.discussions || json.data || json.list)) || [];
+      if (!Array.isArray(rows) || rows.length === 0) {
+        st.noMore = true;
+      } else {
+        if (kind === "comments") {
+          st.items.push(...rows);
+        } else {
+          const seen = new Set(st.items.map((x) => String(x.post_id || x.id)));
+          for (const r of rows) {
+            const pid = String(r.post_id || r.id || "");
+            if (pid && !seen.has(pid)) {
+              st.items.push(r);
+              seen.add(pid);
+            }
+          }
+        }
+        st.page = nextPage;
+        store.ts = Date.now();
+        if (rows.length < 15) st.noMore = true;
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserSpaceIfOpen(store.uid);
+    }
+  }
+
+  function preloadUserSpace(info) {
+    const store = getOrCreateUserSpaceStore(info);
+    if (!store) return;
+    if (store.posts.page === 0 && !store.posts.loading && !store.posts.noMore) {
+      loadSpaceTabPage(store, "posts", false);
+    }
+    if (store.comments.page === 0 && !store.comments.loading && !store.comments.noMore) {
+      loadSpaceTabPage(store, "comments", false);
+    }
+  }
+
+  function renderUserSpaceIfOpen(uid) {
+    const bd = document.getElementById("nsc-space-backdrop");
+    if (!bd || !bd.classList.contains("is-open")) return;
+    if (uid && String(uid) !== String(_spaceModalState.uid)) return;
+    renderUserSpaceModal();
+  }
+
+  function renderUserSpaceModal() {
+    const bd = document.getElementById("nsc-space-backdrop");
+    if (!bd) return;
+    const modal = bd.querySelector(".nsc-space-modal");
+    if (!modal) return;
+    const store = getOrCreateUserSpaceStore(_spaceModalState.info);
+    if (!store) return;
+    const info = store.info || _spaceModalState.info;
+    const uid = store.uid;
+    const tab = _spaceModalState.tab || "posts";
+
+    if (!modal.dataset.nscSpaceInit) {
+      modal.dataset.nscSpaceInit = "1";
+      modal.innerHTML = `
+        <div class="nsc-hub-head">
+          <div class="nsc-hub-user" style="gap:9px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-space-back" title="返回用户名片">← 返回名片</button>
+            <img id="nsc-space-avatar" src="" loading="lazy" decoding="async" alt="" />
+            <div style="min-width:0;">
+              <div style="font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:6px;">
+                <span id="nsc-space-uname"></span>
+                <span class="nsc-lv-pill" id="nsc-space-ulv" style="display:none;"></span>
+              </div>
+              <div id="nsc-space-usub" style="font-size:11px;color:var(--nsc-muted);"></div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex:0 0 auto;">
+            <a class="nsc-mini-btn" id="nsc-space-native-link" href="/space/${escHtml(uid)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">访问原版 ↗</a>
+            <button type="button" class="nsc-mini-btn" id="nsc-space-close" style="padding:3px 9px;">✕</button>
+          </div>
+        </div>
+        <div class="nsc-hub-tabs" id="nsc-space-tabs"></div>
+        <div class="nsc-hub-subbar" id="nsc-space-subbar"></div>
+        <div class="nsc-hub-body" id="nsc-space-body"></div>
+      `;
+      modal.querySelector("#nsc-space-close").addEventListener("click", () => bd.classList.remove("is-open"));
+      modal.querySelector("#nsc-space-back").addEventListener("click", () => {
+        bd.classList.remove("is-open");
+        const pBd = document.getElementById("nsc-profile-backdrop");
+        if (pBd) pBd.classList.add("is-open");
+      });
+      const bodyEl = modal.querySelector("#nsc-space-body");
+      let spaceScrollRaf = 0;
+      bodyEl.addEventListener("scroll", () => {
+        if (spaceScrollRaf) return;
+        spaceScrollRaf = requestAnimationFrame(() => {
+          spaceScrollRaf = 0;
+          if (bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight < 180) {
+            const curStore = _userSpaceCache.get(String(_spaceModalState.uid));
+            if (!curStore) return;
+            if (_spaceModalState.tab === "posts") loadSpaceTabPage(curStore, "posts", false);
+            else if (_spaceModalState.tab === "comments") loadSpaceTabPage(curStore, "comments", false);
+          }
+        });
+      });
+    }
+
+    const sameTab = modal.dataset.nscSpaceLastTab === tab && modal.dataset.nscSpaceLastUid === uid;
+    const bodyEl = modal.querySelector("#nsc-space-body");
+    if (sameTab && tab === "native" && bodyEl && bodyEl.querySelector(".nsc-hub-iframe")) {
+      return;
+    }
+    const prevTop = sameTab && bodyEl ? bodyEl.scrollTop : 0;
+    modal.dataset.nscSpaceLastTab = tab;
+    modal.dataset.nscSpaceLastUid = uid;
+
+    const avImg = modal.querySelector("#nsc-space-avatar");
+    if (avImg) avImg.src = info.avatar || `/avatar/${uid}.png`;
+    const unameEl = modal.querySelector("#nsc-space-uname");
+    if (unameEl) unameEl.textContent = info.name || `用户 #${uid}`;
+    const ulvEl = modal.querySelector("#nsc-space-ulv");
+    if (ulvEl) {
+      if (info.level && info.level !== "--") {
+        ulvEl.textContent = info.level;
+        ulvEl.style.display = "inline-block";
+      } else {
+        ulvEl.style.display = "none";
+      }
+    }
+    const usubEl = modal.querySelector("#nsc-space-usub");
+    if (usubEl) {
+      usubEl.textContent = `UID: ${uid} · 加入 ${info.days || "--"} · 鸡腿 ${info.legs || "--"} · 星辰 ${info.stars || "--"}`;
+    }
+    const nativeHrefMap = {
+      overview: `/space/${uid}#/general`,
+      posts: `/space/${uid}#/discussions`,
+      comments: `/space/${uid}#/comments`,
+      native: `/space/${uid}`,
+    };
+    const nativeLnk = modal.querySelector("#nsc-space-native-link");
+    if (nativeLnk) nativeLnk.href = nativeHrefMap[tab] || `/space/${uid}`;
+
+    const tabsHost = modal.querySelector("#nsc-space-tabs");
+    const tabDefs = [
+      { id: "posts", label: `主题帖${info.posts !== "--" && info.posts !== undefined ? ` (${info.posts})` : ""}` },
+      { id: "comments", label: `历史评论${info.comments !== "--" && info.comments !== undefined ? ` (${info.comments})` : ""}` },
+      { id: "overview", label: "主页资料 / README" },
+      { id: "native", label: "原版空间 (换肤)" },
+    ];
+    tabsHost.innerHTML = tabDefs
+      .map((t) => `<button type="button" class="nsc-hub-tab ${tab === t.id ? "is-active" : ""}" data-stab="${escHtml(t.id)}">${escHtml(t.label)}</button>`)
+      .join("");
+    tabsHost.querySelectorAll("[data-stab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        _spaceModalState.tab = btn.dataset.stab;
+        if (_spaceModalState.tab === "posts" && store.posts.page === 0 && !store.posts.loading && !store.posts.noMore) {
+          loadSpaceTabPage(store, "posts", false);
+        } else if (_spaceModalState.tab === "comments" && store.comments.page === 0 && !store.comments.loading && !store.comments.noMore) {
+          loadSpaceTabPage(store, "comments", false);
+        }
+        renderUserSpaceModal();
+      });
+    });
+
+    const subbar = modal.querySelector("#nsc-space-subbar");
+    subbar.innerHTML = "";
+    bodyEl.innerHTML = "";
+    bodyEl.style.padding = "";
+    bodyEl.style.overflow = "";
+
+    const closeAllModals = () => {
+      bd.classList.remove("is-open");
+      const pBd = document.getElementById("nsc-profile-backdrop");
+      if (pBd) pBd.classList.remove("is-open");
+    };
+
+    if (tab === "overview") {
+      const friendActive = isFriend(info.name);
+      const blackActive = isBlacklisted(info.name);
+      const lastSp = state.lastSpeakCache[uid];
+      const domSig = sanitizeSignatureHtml(_spaceModalState.sigHtml || "");
+      const apiSig = info.signature ? renderSimpleMarkdown(info.signature) : "";
+      const apiReadme = info.readme && info.readme !== info.signature && info.readme !== info.bio ? renderSimpleMarkdown(info.readme) : "";
+      const sigContent = domSig || apiSig || apiReadme;
+
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">TA 的社区资料、签名与 README</span>`;
+      const ops = document.createElement("div");
+      ops.style.cssText = "display:flex;align-items:center;gap:6px;";
+      const pmBtn = document.createElement("button");
+      pmBtn.type = "button";
+      pmBtn.className = "nsc-mini-btn";
+      pmBtn.textContent = "发私信";
+      pmBtn.addEventListener("click", () => {
+        closeAllModals();
+        switchChannel("pm", false);
+        openPmConversation(info);
+      });
+      const frBtn = document.createElement("button");
+      frBtn.type = "button";
+      frBtn.className = "nsc-mini-btn" + (friendActive ? " is-active" : "");
+      frBtn.textContent = friendActive ? "已是好友" : "加为好友";
+      frBtn.addEventListener("click", () => {
+        toggleFriend(info);
+        renderUserSpaceModal();
+      });
+      const bkBtn = document.createElement("button");
+      bkBtn.type = "button";
+      bkBtn.className = "nsc-mini-btn";
+      bkBtn.style.color = "#ff3b30";
+      bkBtn.textContent = blackActive ? "移出黑名单" : "加入黑名单";
+      bkBtn.addEventListener("click", async () => {
+        bkBtn.disabled = true;
+        await toggleBlacklist(info);
+        renderUserSpaceModal();
+      });
+      ops.appendChild(pmBtn);
+      ops.appendChild(frBtn);
+      ops.appendChild(bkBtn);
+      subbar.appendChild(ops);
+
+      bodyEl.innerHTML = `
+        <div class="nsc-hub-kpi-grid">
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">等级</div><div class="nsc-hub-kpi-val">${escHtml(info.level || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">加入天数</div><div class="nsc-hub-kpi-val">${escHtml(info.days || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">鸡腿 / 星辰</div><div class="nsc-hub-kpi-val">${escHtml(info.legs || "--")} / ${escHtml(info.stars || "--")}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">粉丝数</div><div class="nsc-hub-kpi-val">${escHtml(info.fans || "--")}</div></div>
+        </div>
+        ${info.bio ? `<div class="nsc-space-overview-card"><div class="nsc-profile-sig-label">个人简介</div><div style="font-size:13px;line-height:1.6;">${escHtml(info.bio)}</div></div>` : ""}
+        <div class="nsc-space-overview-card">
+          <div class="nsc-profile-sig-label">个性签名</div>
+          <div class="nsc-profile-sig-body" style="font-size:13px;line-height:1.6;">${sigContent || `<span style="color:var(--nsc-muted);">暂无签名</span>`}</div>
+        </div>
+        ${apiReadme && (domSig || apiSig) ? `<div class="nsc-space-overview-card"><div class="nsc-profile-sig-label">个人主页 README</div><div style="font-size:13px;line-height:1.6;">${apiReadme}</div></div>` : ""}
+        ${lastSp ? `<div class="nsc-space-overview-card"><div class="nsc-profile-sig-label">最后发言记录</div><div style="font-size:12.5px;color:var(--nsc-accent);">${escHtml(lastSp.timeStr)}${lastSp.title ? ` · ${escHtml(lastSp.title)}` : ""}</div></div>` : ""}
+      `;
+      return;
+    }
+
+    if (tab === "posts") {
+      const st = store.posts;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已载入 ${st.items.length} 篇主题帖（点击可在工作台阅读）</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      refBtn.addEventListener("click", () => loadSpaceTabPage(store, "posts", true));
+      subbar.appendChild(refBtn);
+
+      if (st.loading && st.items.length === 0) {
+        bodyEl.innerHTML = `<div class="nsc-empty-state">正在加载 TA 的主题帖...</div>`;
+        return;
+      }
+      if (st.error && st.items.length === 0) {
+        bodyEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
+        return;
+      }
+      if (st.items.length === 0) {
+        bodyEl.innerHTML = `<div class="nsc-empty-state">TA 暂未发布主题帖</div>`;
+        return;
+      }
+      st.items.forEach((it) => {
+        const pid = String(it.post_id || it.id || "");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
+            <div class="nsc-hub-row-sub">
+              ${it.category ? `<span>版块: ${escHtml(it.category)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">#${escHtml(pid)}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeAllModals();
+          openPostInChat({
+            postId: pid,
+            url: `/post-${pid}-1`,
+            title: it.title || `帖子 #${pid}`,
+            author: info.name,
+            avatar: info.avatar,
+          });
+        });
+        bodyEl.appendChild(row);
+      });
+      const wf = document.createElement("div");
+      wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:10px 4px;";
+      wf.textContent = st.noMore ? "已加载全部主题帖" : st.loading ? "正在加载更多..." : "下滑自动加载更多主题帖";
+      bodyEl.appendChild(wf);
+      if (prevTop > 0) bodyEl.scrollTop = prevTop;
+      return;
+    }
+
+    if (tab === "comments") {
+      const st = store.comments;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已载入 ${st.items.length} 条历史回复（点击可直达对应楼层）</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      refBtn.addEventListener("click", () => loadSpaceTabPage(store, "comments", true));
+      subbar.appendChild(refBtn);
+
+      if (st.loading && st.items.length === 0) {
+        bodyEl.innerHTML = `<div class="nsc-empty-state">正在加载 TA 的历史评论...</div>`;
+        return;
+      }
+      if (st.error && st.items.length === 0) {
+        bodyEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
+        return;
+      }
+      if (st.items.length === 0) {
+        bodyEl.innerHTML = `<div class="nsc-empty-state">TA 暂无公开评论记录</div>`;
+        return;
+      }
+      st.items.forEach((it) => {
+        const pid = String(it.post_id || "");
+        const floor = Number(it.floor_id) || 1;
+        const pageIdx = Math.max(1, Math.ceil(floor / 10));
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
+            <div class="nsc-hub-row-sub">
+              <span>#${floor}楼</span>
+              ${it.text ? `<span style="max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(it.text)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">直达 #${floor}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeAllModals();
+          openPostInChat({
+            postId: pid,
+            url: `/post-${pid}-${pageIdx}`,
+            title: it.title || `帖子 #${pid}`,
+            targetFloor: String(floor),
+          });
+        });
+        bodyEl.appendChild(row);
+      });
+      const wf = document.createElement("div");
+      wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:10px 4px;";
+      wf.textContent = st.noMore ? "已加载全部评论" : st.loading ? "正在加载更多..." : "下滑自动加载更多评论";
+      bodyEl.appendChild(wf);
+      if (prevTop > 0) bodyEl.scrollTop = prevTop;
+      return;
+    }
+
+    subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">原版空间页面（已套用 macOS 主题）</span>`;
+    const reloadBtn = document.createElement("button");
+    reloadBtn.type = "button";
+    reloadBtn.className = "nsc-mini-btn";
+    reloadBtn.textContent = "重新加载";
+    reloadBtn.addEventListener("click", () => mountHubThemedIframe(bodyEl, `/space/${uid}`));
+    subbar.appendChild(reloadBtn);
+    mountHubThemedIframe(bodyEl, `/space/${uid}`);
+  }
+
+  function openUserSpaceModal(info, initialTab = "posts", sigHtml = "") {
+    if (!info || !info.uid) return;
+    let bd = document.getElementById("nsc-space-backdrop");
+    if (!bd) {
+      bd = document.createElement("div");
+      bd.id = "nsc-space-backdrop";
+      bd.innerHTML = `<div class="nsc-space-modal" role="dialog" aria-label="用户空间主页"></div>`;
+      bd.addEventListener("click", (e) => {
+        if (e.target === bd) bd.classList.remove("is-open");
+      });
+      document.body.appendChild(bd);
+    }
+    const pBd = document.getElementById("nsc-profile-backdrop");
+    if (pBd) pBd.classList.remove("is-open");
+
+    _spaceModalState.uid = String(info.uid);
+    _spaceModalState.info = info;
+    _spaceModalState.tab = initialTab || "posts";
+    if (sigHtml) _spaceModalState.sigHtml = sigHtml;
+
+    const store = getOrCreateUserSpaceStore(info);
+    if (store) {
+      if (_spaceModalState.tab === "posts" && store.posts.page === 0 && !store.posts.loading && !store.posts.noMore) {
+        loadSpaceTabPage(store, "posts", false);
+      } else if (_spaceModalState.tab === "comments" && store.comments.page === 0 && !store.comments.loading && !store.comments.noMore) {
+        loadSpaceTabPage(store, "comments", false);
+      }
+    }
+    bd.classList.add("is-open");
+    renderUserSpaceModal();
+  }
+
   async function openUserProfileModal(userObj) {
     const backdrop = document.getElementById("nsc-profile-backdrop");
     const modal = document.getElementById("nsc-profile-modal");
@@ -285,7 +728,7 @@
         </div>
         <div class="nsc-profile-body">
           <div class="nsc-profile-head">
-            <img src="${info.avatar || "/static/image/favicon/android-chrome-192x192.png"}" />
+            <img src="${info.avatar || "/static/image/favicon/android-chrome-192x192.png"}" loading="lazy" decoding="async" />
             <div>
               <div style="font-size:16px;font-weight:700;"></div>
               <div style="font-size:12px;color:var(--nsc-muted);">ID: ${info.uid || "-"} · ${info.level} · 加入 ${info.days}${loading ? " (读取中...)" : ""}</div>
@@ -294,8 +737,8 @@
           <div class="nsc-profile-stats">
             <div><div class="nsc-stat-val">${info.legs}</div><div class="nsc-stat-lbl">鸡腿</div></div>
             <div><div class="nsc-stat-val">${info.stars}</div><div class="nsc-stat-lbl">星辰</div></div>
-            <div><div class="nsc-stat-val">${info.posts}</div><div class="nsc-stat-lbl">主题</div></div>
-            <div><div class="nsc-stat-val">${info.comments}</div><div class="nsc-stat-lbl">评论</div></div>
+            <div class="${info.uid ? "nsc-stat-clickable" : ""}" id="nsc-p-stat-posts" title="${info.uid ? "点击查看 TA 的主题帖" : ""}"><div class="nsc-stat-val">${info.posts}</div><div class="nsc-stat-lbl">主题</div></div>
+            <div class="${info.uid ? "nsc-stat-clickable" : ""}" id="nsc-p-stat-comments" title="${info.uid ? "点击查看 TA 的历史评论" : ""}"><div class="nsc-stat-val">${info.comments}</div><div class="nsc-stat-lbl">评论</div></div>
           </div>
           ${info.bio ? `<div class="nsc-profile-bio">简介：${info.bio.replace(/</g, "&lt;")}</div>` : ""}
           <div class="nsc-profile-sig">
@@ -310,7 +753,7 @@
             <button type="button" id="nsc-p-only">本帖只看TA</button>
             <button type="button" id="nsc-p-last">查最后发言</button>
             ${info.uid ? `<button type="button" id="nsc-p-pm">发私信</button>` : `<button type="button" disabled>发私信</button>`}
-            ${info.uid ? `<a href="/space/${info.uid}" target="_blank">空间主页</a>` : ""}
+            ${info.uid ? `<button type="button" id="nsc-p-space">空间主页</button>` : `<button type="button" disabled>空间主页</button>`}
           </div>
         </div>
       `;
@@ -333,6 +776,18 @@
           switchChannel("pm", false);
           openPmConversation(info);
         });
+      }
+      const spaceBtn = modal.querySelector("#nsc-p-space");
+      if (spaceBtn && info.uid) {
+        spaceBtn.addEventListener("click", () => openUserSpaceModal(info, "posts", cachedSigHtml));
+      }
+      const statPosts = modal.querySelector("#nsc-p-stat-posts");
+      if (statPosts && info.uid) {
+        statPosts.addEventListener("click", () => openUserSpaceModal(info, "posts", cachedSigHtml));
+      }
+      const statComments = modal.querySelector("#nsc-p-stat-comments");
+      if (statComments && info.uid) {
+        statComments.addEventListener("click", () => openUserSpaceModal(info, "comments", cachedSigHtml));
       }
       modal.querySelector("#nsc-p-friend").addEventListener("click", () => {
         toggleFriend(info);
@@ -383,6 +838,13 @@
     }
     if (backdrop.classList.contains("is-open")) {
       renderModal(fullInfo, false);
+      if (fullInfo && fullInfo.uid) {
+        preloadUserSpace(fullInfo);
+      }
+    } else if (fullInfo && fullInfo.uid && String(_spaceModalState.uid) === String(fullInfo.uid)) {
+      getOrCreateUserSpaceStore(fullInfo);
+      _spaceModalState.info = fullInfo;
+      renderUserSpaceIfOpen(fullInfo.uid);
     }
   }
 
