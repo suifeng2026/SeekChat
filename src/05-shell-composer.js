@@ -2578,6 +2578,41 @@
     }
   }
 
+  function enhanceVideos(containerEl) {
+    if (!containerEl) return;
+    for (const el of Array.from(containerEl.querySelectorAll("iframe, video"))) {
+      if (el.closest("pre, code, .nsc-video-box, .nsc-sd-card, .nsc-vote-card, .nsc-hub-iframe")) continue;
+      if (el.tagName === "IFRAME") {
+        el.removeAttribute("onload");
+        el.removeAttribute("width");
+        el.removeAttribute("height");
+        el.style.width = "";
+        el.style.height = "";
+        const rawSrc = el.getAttribute("src") || "";
+        if (rawSrc.startsWith("//player.bilibili.com/")) {
+          el.setAttribute("src", `https:${rawSrc}`);
+        }
+        el.setAttribute("allowfullscreen", "true");
+        if (!el.getAttribute("allow")) {
+          el.setAttribute("allow", "autoplay; fullscreen; encrypted-media; picture-in-picture");
+        }
+      } else {
+        el.style.width = "";
+        el.style.height = "";
+      }
+      const wrap = document.createElement("div");
+      wrap.className = "nsc-video-box";
+      const parent = el.parentElement;
+      if (parent && parent.tagName === "P" && parent.children.length === 1 && (parent.textContent || "").trim() === "") {
+        parent.replaceWith(wrap);
+        wrap.appendChild(el);
+      } else if (el.parentNode) {
+        el.parentNode.insertBefore(wrap, el);
+        wrap.appendChild(el);
+      }
+    }
+  }
+
   function enhanceCodeBlocks(containerEl) {
     if (!containerEl) return;
     for (const pre of containerEl.querySelectorAll("pre")) {
@@ -3222,5 +3257,6 @@
   registerBubbleEnhancer({ id: "ansi-blocks", priority: 35, run: enhanceAnsiBlocks });
   registerBubbleEnhancer({ id: "tables", priority: 38, run: enhanceTables });
   registerBubbleEnhancer({ id: "code-blocks", priority: 40, run: enhanceCodeBlocks });
+  registerBubbleEnhancer({ id: "videos", priority: 45, run: enhanceVideos });
   registerBubbleEnhancer({ id: "images", priority: 50, run: processBubbleImages });
 

@@ -481,6 +481,9 @@
       #nsc-app-shell.is-right-collapsed .nsc-msg-main {
         max-width: min(86%, 920px);
       }
+      #nsc-app-shell.is-list-collapsed.is-right-collapsed .nsc-msg-main {
+        max-width: min(92%, 1080px);
+      }
       #nsc-app-shell.is-list-collapsed .nsc-thread-wrap,
       #nsc-app-shell.is-right-collapsed .nsc-thread-wrap {
         width: min(94%, 820px);
@@ -562,10 +565,33 @@
       .nsc-avatar-btn:hover img { transform: scale(1.06); }
 
       .nsc-msg-main { flex: 0 1 auto; min-width: 0; max-width: min(82%, 740px); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+      .nsc-msg:has(.nsc-video-box) .nsc-msg-main { width: 100%; max-width: min(86%, 760px); }
+      #nsc-app-shell.is-list-collapsed .nsc-msg:has(.nsc-video-box) .nsc-msg-main,
+      #nsc-app-shell.is-right-collapsed .nsc-msg:has(.nsc-video-box) .nsc-msg-main {
+        max-width: min(90%, 940px);
+      }
+      #nsc-app-shell.is-list-collapsed.is-right-collapsed .nsc-msg:has(.nsc-video-box) .nsc-msg-main {
+        max-width: min(94%, 1080px);
+      }
       .nsc-msg.is-op-card .nsc-msg-main { max-width: calc(100% - 48px); }
-      .nsc-msg.is-op-card .nsc-bubble-row:has(.nsk-magic-tabs, table, pre),
-      .nsc-msg.is-op-card .nsc-bubble:has(.nsk-magic-tabs, table, pre) {
+      .nsc-bubble-row:has(.nsc-video-box),
+      .nsc-bubble:has(.nsc-video-box),
+      .nsc-msg.is-op-card .nsc-bubble-row:has(.nsk-magic-tabs, table, pre, .nsc-video-box),
+      .nsc-msg.is-op-card .nsc-bubble:has(.nsk-magic-tabs, table, pre, .nsc-video-box) {
         width: 100%; box-sizing: border-box;
+      }
+      .nsc-thread-item:has(.nsc-video-box) .nsc-thread-body { width: min(92%, 680px); max-width: 100%; }
+      .nsc-thread-content:has(.nsc-video-box) { width: 100%; box-sizing: border-box; }
+      .nsc-video-box {
+        position: relative; width: 100%; max-width: 1040px; aspect-ratio: 16 / 9;
+        margin: 6px 0; border-radius: 10px; overflow: hidden;
+        background: #000; border: 1px solid var(--nsc-border); box-sizing: border-box;
+      }
+      .nsc-video-box iframe,
+      .nsc-video-box video {
+        display: block !important; width: 100% !important; height: 100% !important;
+        min-height: 0 !important; max-height: none !important;
+        border: 0 !important; margin: 0 !important;
       }
       .nsc-msg.is-right .nsc-msg-main,
       .nsc-msg.is-self .nsc-msg-main { align-items: flex-end; }

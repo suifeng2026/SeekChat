@@ -737,6 +737,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
       "ansi-blocks": { name: "终端彩色代码", desc: "解析 ANSI 终端转义序列并渲染彩色高亮块" },
       tables: { name: "表格容器优化", desc: "为 Markdown 表格增加圆角边框与横向滚动" },
       "code-blocks": { name: "代码块一键复制", desc: "在代码块右上角挂载快捷复制按钮" },
+      videos: { name: "视频播放器适配", desc: "放大 B站与内嵌视频至 16:9 宽屏并随阅读区自适应" },
       images: { name: "宫格画廊与灯箱", desc: "连续多图自动排列宫格并支持原图缩放灯箱" },
     };
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.37
+// @version      7.22.38
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -353,7 +353,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.37",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.38",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -2717,6 +2717,9 @@
       #nsc-app-shell.is-right-collapsed .nsc-msg-main {
         max-width: min(86%, 920px);
       }
+      #nsc-app-shell.is-list-collapsed.is-right-collapsed .nsc-msg-main {
+        max-width: min(92%, 1080px);
+      }
       #nsc-app-shell.is-list-collapsed .nsc-thread-wrap,
       #nsc-app-shell.is-right-collapsed .nsc-thread-wrap {
         width: min(94%, 820px);
@@ -2798,10 +2801,33 @@
       .nsc-avatar-btn:hover img { transform: scale(1.06); }
 
       .nsc-msg-main { flex: 0 1 auto; min-width: 0; max-width: min(82%, 740px); display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+      .nsc-msg:has(.nsc-video-box) .nsc-msg-main { width: 100%; max-width: min(86%, 760px); }
+      #nsc-app-shell.is-list-collapsed .nsc-msg:has(.nsc-video-box) .nsc-msg-main,
+      #nsc-app-shell.is-right-collapsed .nsc-msg:has(.nsc-video-box) .nsc-msg-main {
+        max-width: min(90%, 940px);
+      }
+      #nsc-app-shell.is-list-collapsed.is-right-collapsed .nsc-msg:has(.nsc-video-box) .nsc-msg-main {
+        max-width: min(94%, 1080px);
+      }
       .nsc-msg.is-op-card .nsc-msg-main { max-width: calc(100% - 48px); }
-      .nsc-msg.is-op-card .nsc-bubble-row:has(.nsk-magic-tabs, table, pre),
-      .nsc-msg.is-op-card .nsc-bubble:has(.nsk-magic-tabs, table, pre) {
+      .nsc-bubble-row:has(.nsc-video-box),
+      .nsc-bubble:has(.nsc-video-box),
+      .nsc-msg.is-op-card .nsc-bubble-row:has(.nsk-magic-tabs, table, pre, .nsc-video-box),
+      .nsc-msg.is-op-card .nsc-bubble:has(.nsk-magic-tabs, table, pre, .nsc-video-box) {
         width: 100%; box-sizing: border-box;
+      }
+      .nsc-thread-item:has(.nsc-video-box) .nsc-thread-body { width: min(92%, 680px); max-width: 100%; }
+      .nsc-thread-content:has(.nsc-video-box) { width: 100%; box-sizing: border-box; }
+      .nsc-video-box {
+        position: relative; width: 100%; max-width: 1040px; aspect-ratio: 16 / 9;
+        margin: 6px 0; border-radius: 10px; overflow: hidden;
+        background: #000; border: 1px solid var(--nsc-border); box-sizing: border-box;
+      }
+      .nsc-video-box iframe,
+      .nsc-video-box video {
+        display: block !important; width: 100% !important; height: 100% !important;
+        min-height: 0 !important; max-height: none !important;
+        border: 0 !important; margin: 0 !important;
       }
       .nsc-msg.is-right .nsc-msg-main,
       .nsc-msg.is-self .nsc-msg-main { align-items: flex-end; }
@@ -8178,6 +8204,41 @@
     }
   }
 
+  function enhanceVideos(containerEl) {
+    if (!containerEl) return;
+    for (const el of Array.from(containerEl.querySelectorAll("iframe, video"))) {
+      if (el.closest("pre, code, .nsc-video-box, .nsc-sd-card, .nsc-vote-card, .nsc-hub-iframe")) continue;
+      if (el.tagName === "IFRAME") {
+        el.removeAttribute("onload");
+        el.removeAttribute("width");
+        el.removeAttribute("height");
+        el.style.width = "";
+        el.style.height = "";
+        const rawSrc = el.getAttribute("src") || "";
+        if (rawSrc.startsWith("//player.bilibili.com/")) {
+          el.setAttribute("src", `https:${rawSrc}`);
+        }
+        el.setAttribute("allowfullscreen", "true");
+        if (!el.getAttribute("allow")) {
+          el.setAttribute("allow", "autoplay; fullscreen; encrypted-media; picture-in-picture");
+        }
+      } else {
+        el.style.width = "";
+        el.style.height = "";
+      }
+      const wrap = document.createElement("div");
+      wrap.className = "nsc-video-box";
+      const parent = el.parentElement;
+      if (parent && parent.tagName === "P" && parent.children.length === 1 && (parent.textContent || "").trim() === "") {
+        parent.replaceWith(wrap);
+        wrap.appendChild(el);
+      } else if (el.parentNode) {
+        el.parentNode.insertBefore(wrap, el);
+        wrap.appendChild(el);
+      }
+    }
+  }
+
   function enhanceCodeBlocks(containerEl) {
     if (!containerEl) return;
     for (const pre of containerEl.querySelectorAll("pre")) {
@@ -8822,6 +8883,7 @@
   registerBubbleEnhancer({ id: "ansi-blocks", priority: 35, run: enhanceAnsiBlocks });
   registerBubbleEnhancer({ id: "tables", priority: 38, run: enhanceTables });
   registerBubbleEnhancer({ id: "code-blocks", priority: 40, run: enhanceCodeBlocks });
+  registerBubbleEnhancer({ id: "videos", priority: 45, run: enhanceVideos });
   registerBubbleEnhancer({ id: "images", priority: 50, run: processBubbleImages });
 
   // ==========================================================================
@@ -17611,6 +17673,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
       "ansi-blocks": { name: "终端彩色代码", desc: "解析 ANSI 终端转义序列并渲染彩色高亮块" },
       tables: { name: "表格容器优化", desc: "为 Markdown 表格增加圆角边框与横向滚动" },
       "code-blocks": { name: "代码块一键复制", desc: "在代码块右上角挂载快捷复制按钮" },
+      videos: { name: "视频播放器适配", desc: "放大 B站与内嵌视频至 16:9 宽屏并随阅读区自适应" },
       images: { name: "宫格画廊与灯箱", desc: "连续多图自动排列宫格并支持原图缩放灯箱" },
     };
 
