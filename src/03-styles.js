@@ -520,7 +520,7 @@
       .nsc-msg.is-self a.nsc-floor-ref { background: rgba(255,255,255,0.22); color: #fff !important; }
       a.nsc-floor-ref:hover { text-decoration: underline !important; }
 
-      /* TG 风格：默认隐藏，仅在已有赞/鸡腿时显示紧凑 Reaction 药丸 */
+      /* TG 风格：赞/鸡腿/踩/评论有数据时直接显示紧凑 Reaction 药丸 */
       .nsc-reactions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
       .nsc-reactions:empty { display: none; }
       .nsc-react-pill {
@@ -533,35 +533,40 @@
       .nsc-react-pill svg { width: 11.5px; height: 11.5px; flex: 0 0 11.5px; }
       .nsc-react-pill.is-like { color: var(--nsc-accent); }
       .nsc-react-pill.is-leg { color: #d97706; }
+      .nsc-react-pill.is-dislike { color: #ff3b30; }
+      .nsc-react-pill.is-reply { color: var(--nsc-muted); }
       .nsc-react-pill.is-voted { background: var(--nsc-accent-soft); border-color: var(--nsc-accent); }
       .nsc-react-pill.is-leg.is-voted { background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.45); }
+      .nsc-react-pill.is-dislike.is-voted { background: rgba(255, 59, 48, 0.12); border-color: rgba(255, 59, 48, 0.35); }
       .nsc-react-pill:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-react-pill.is-dislike:hover { border-color: rgba(255, 59, 48, 0.45); color: #ff3b30; background: rgba(255, 59, 48, 0.10); }
 
-      /* macOS SF Symbols 悬停操作胶囊，内嵌在元信息行尾 */
+      /* 无外框 macOS SF Symbols 悬停操作条：悬停 0.5 秒后自然淡入 */
       .nsc-hover-bar {
-        display: inline-flex; align-items: center; gap: 2px; padding: 2px 5px; margin-left: 4px;
-        border-radius: 999px; border: 1px solid var(--nsc-border);
-        background: var(--nsc-bg-card); backdrop-filter: blur(12px);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        opacity: 0; pointer-events: none;
-        transition: opacity 0.12s ease;
+        display: inline-flex; align-items: center; gap: 2px; padding: 0; margin-left: 4px;
+        background: transparent; border: none; box-shadow: none;
+        opacity: 0; visibility: hidden; pointer-events: none;
+        transition: opacity 0.12s ease 0s, visibility 0s linear 0.12s;
         white-space: nowrap; flex: 0 0 auto;
       }
       .nsc-msg:hover > .nsc-msg-main > .nsc-msg-meta > .nsc-hover-bar,
       .nsc-msg-meta:hover > .nsc-hover-bar,
       .nsc-thread-item:hover > .nsc-thread-body > .nsc-thread-meta > .nsc-hover-bar,
       .nsc-thread-meta:hover > .nsc-hover-bar {
-        opacity: 1; pointer-events: auto;
+        opacity: 1; visibility: visible; pointer-events: auto;
+        transition: opacity 0.18s ease 0.5s, visibility 0s linear 0.5s;
       }
       .nsc-hb-btn {
         border: none; background: transparent; color: var(--nsc-muted);
-        height: 21px; width: 22px; padding: 0; border-radius: 999px;
+        height: 21px; width: 22px; padding: 0; border-radius: 6px;
         display: inline-flex; align-items: center; justify-content: center;
-        cursor: pointer; line-height: 1; transition: all 0.12s ease;
+        cursor: pointer; line-height: 1; transition: background 0.12s ease, color 0.12s ease;
       }
       .nsc-hb-btn svg { width: 12.5px; height: 12.5px; }
       .nsc-hb-btn:hover { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
       .nsc-hb-btn.is-leg:hover { background: rgba(245, 158, 11, 0.15); color: #d97706; }
+      .nsc-hb-btn.is-dislike:hover,
+      .nsc-hb-btn.is-dislike.is-active { background: rgba(255, 59, 48, 0.12); color: #ff3b30; }
       .nsc-hb-btn.is-pin:hover,
       .nsc-hb-btn.is-pin.is-active { background: rgba(255, 59, 48, 0.13); color: #ff3b30; }
       .nsc-hb-btn.is-active { background: var(--nsc-accent-soft); color: var(--nsc-accent); }

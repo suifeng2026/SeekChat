@@ -74,20 +74,26 @@
     const menu = el.querySelector(":scope > .comment-menu, .comment-menu");
     let domLikes = 0;
     let domLegs = 0;
+    let domDislikes = 0;
     let domUpvoted = false;
     let domLiked = false;
+    let domDisliked = false;
     let domPinned = Boolean(
       meta && meta.querySelector('.pined-comment-badge, .floor-link-wrapper use[href="#pin"]')
     );
     if (menu) {
       const likeMenu = menu.querySelector('.menu-item[title="点赞"]');
       const legMenu = menu.querySelector('.menu-item[title="加鸡腿"]');
+      const dislikeMenu = menu.querySelector('.menu-item[title="反对"]');
       const likeItem = likeMenu && likeMenu.querySelector("span");
       const legItem = legMenu && legMenu.querySelector("span");
+      const dislikeItem = dislikeMenu && dislikeMenu.querySelector("span");
       if (likeItem) domLikes = Number(likeItem.textContent.trim()) || 0;
       if (legItem) domLegs = Number(legItem.textContent.trim()) || 0;
+      if (dislikeItem) domDislikes = Number(dislikeItem.textContent.trim()) || 0;
       if (likeMenu && likeMenu.classList.contains("clicked")) domUpvoted = true;
       if (legMenu && legMenu.classList.contains("clicked")) domLiked = true;
+      if (dislikeMenu && dislikeMenu.classList.contains("clicked")) domDisliked = true;
       if (!domPinned) {
         domPinned = Array.from(menu.querySelectorAll(".menu-item")).some(
           (m) => (m.textContent || "").trim() === "取消置顶"
@@ -96,8 +102,10 @@
     }
     const likes = Math.max(domLikes, (tempMeta && tempMeta.likes) || 0);
     const legs = Math.max(domLegs, (tempMeta && tempMeta.legs) || 0);
+    const dislikes = Math.max(domDislikes, (tempMeta && tempMeta.dislikes) || 0);
     const upvoted = domUpvoted || Boolean(tempMeta && tempMeta.upvoted);
     const liked = domLiked || Boolean(tempMeta && tempMeta.liked);
+    const disliked = domDisliked || Boolean(tempMeta && tempMeta.disliked);
     const pinned = domPinned || Boolean(tempMeta && tempMeta.pinned);
 
     let replyToFloor = null;
@@ -133,8 +141,10 @@
       signatureHtml,
       likes,
       legs,
+      dislikes,
       upvoted,
       liked,
+      disliked,
       pinned,
       replyToFloor,
       children: [],
@@ -711,7 +721,7 @@
     return s;
   }
 
-  function renderReactionPills(reactionsEl, obj, isNativePage) {
+  function renderReactionPills(reactionsEl, obj, isNativePage, isOpCard = false) {
     if (!reactionsEl) return;
     reactionsEl.innerHTML = "";
     if (obj.likes > 0) {
@@ -735,6 +745,40 @@
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl);
+      });
+      reactionsEl.appendChild(p);
+    }
+    if (obj.dislikes > 0) {
+      const p = document.createElement("button");
+      p.type = "button";
+      p.className = "nsc-react-pill is-dislike" + (obj.disliked ? " is-voted" : "");
+      p.title = "点击踩（反对）";
+      p.innerHTML = `${ICONS.dislike}<span>${obj.dislikes}</span>`;
+      p.addEventListener("click", (e) => {
+        e.stopPropagation();
+        triggerReplyOrVote(obj, "反对", isNativePage, reactionsEl);
+      });
+      reactionsEl.appendChild(p);
+    }
+    const replyCnt = isOpCard
+      ? (state.currentRoom && state.currentRoom.flatComments ? state.currentRoom.flatComments.length : 0)
+      : (obj.children ? obj.children.length : 0);
+    if (replyCnt > 0) {
+      const p = document.createElement("button");
+      p.type = "button";
+      p.className = "nsc-react-pill is-reply";
+      p.title = isOpCard ? `共 ${replyCnt} 条评论` : `${replyCnt} 条楼中楼回复（点击展开/收起）`;
+      p.innerHTML = `${ICONS.reply}<span>${replyCnt}</span>`;
+      p.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (isOpCard) {
+          const firstReply = document.querySelector("#nsc-chat-messages .nsc-msg:not(.is-op-card)");
+          if (firstReply) firstReply.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+        const msgWrap = reactionsEl.closest(".nsc-msg");
+        const toggleBtn = msgWrap && msgWrap.querySelector(".nsc-thread-toggle");
+        if (toggleBtn) toggleBtn.click();
       });
       reactionsEl.appendChild(p);
     }
@@ -1105,6 +1149,16 @@
       triggerReplyOrVote(obj, "加鸡腿", isNativePage, reactionsEl, bar);
     });
 
+    const btnDislike = document.createElement("button");
+    btnDislike.type = "button";
+    btnDislike.className = "nsc-hb-btn is-dislike" + (obj.disliked ? " is-active" : "");
+    btnDislike.title = "踩（反对）";
+    btnDislike.innerHTML = ICONS.dislike;
+    btnDislike.addEventListener("click", (e) => {
+      e.stopPropagation();
+      triggerReplyOrVote(obj, "反对", isNativePage, reactionsEl, bar);
+    });
+
     const isMyPost = Boolean(state.currentUser && state.opAuthor && state.currentUser === state.opAuthor && !isOpCard && obj.floorId !== "0");
     let hasNativePin = false;
     if (isNativePage && !isOpCard && obj.floorId !== "0") {
@@ -1134,6 +1188,7 @@
 
     bar.appendChild(btnLike);
     bar.appendChild(btnLeg);
+    bar.appendChild(btnDislike);
     if (hasNativePin || isMyPost) {
       const btnPin = document.createElement("button");
       btnPin.type = "button";
@@ -1229,7 +1284,7 @@
 
     const reactionsEl = document.createElement("div");
     reactionsEl.className = "nsc-reactions";
-    renderReactionPills(reactionsEl, obj, isNativePage);
+    renderReactionPills(reactionsEl, obj, isNativePage, isOpCard);
 
     const hoverBar = buildHoverBar(obj, isNativePage, reactionsEl, false, isOpCard);
     meta.appendChild(hoverBar);
@@ -1321,23 +1376,35 @@
       if (!menu) return;
       const likeMenu = menu.querySelector('.menu-item[title="点赞"]');
       const legMenu = menu.querySelector('.menu-item[title="加鸡腿"]');
+      const dislikeMenu = menu.querySelector('.menu-item[title="反对"]');
       const nextLikes = likeMenu && likeMenu.querySelector("span") ? Number(likeMenu.querySelector("span").textContent.trim()) || 0 : obj.likes;
       const nextLegs = legMenu && legMenu.querySelector("span") ? Number(legMenu.querySelector("span").textContent.trim()) || 0 : obj.legs;
+      const nextDislikes = dislikeMenu && dislikeMenu.querySelector("span") ? Number(dislikeMenu.querySelector("span").textContent.trim()) || 0 : obj.dislikes;
       const nextUpvoted = Boolean(likeMenu && likeMenu.classList.contains("clicked"));
       const nextLiked = Boolean(legMenu && legMenu.classList.contains("clicked"));
+      const nextDisliked = Boolean(dislikeMenu && dislikeMenu.classList.contains("clicked"));
       const pinItem = findNativePinMenuItem(el);
       const nextPinned = Boolean(
         el.querySelector('.pined-comment-badge, .floor-link-wrapper use[href="#pin"]') ||
         (pinItem && (pinItem.textContent || "").trim() === "取消置顶")
       );
-      if (nextLikes !== obj.likes || nextLegs !== obj.legs || nextUpvoted !== obj.upvoted || nextLiked !== obj.liked) {
+      if (
+        nextLikes !== obj.likes ||
+        nextLegs !== obj.legs ||
+        nextDislikes !== obj.dislikes ||
+        nextUpvoted !== obj.upvoted ||
+        nextLiked !== obj.liked ||
+        nextDisliked !== obj.disliked
+      ) {
         obj.likes = Math.max(obj.likes, nextLikes);
         obj.legs = Math.max(obj.legs, nextLegs);
+        obj.dislikes = Math.max(obj.dislikes, nextDislikes);
         obj.upvoted = obj.upvoted || nextUpvoted;
         obj.liked = obj.liked || nextLiked;
+        obj.disliked = obj.disliked || nextDisliked;
         const floorNode = document.getElementById(`nsc-floor-${obj.floorId}`);
         const reactEl = floorNode && floorNode.querySelector(":scope > .nsc-msg-main > .nsc-reactions, :scope > .nsc-thread-body > .nsc-reactions");
-        if (reactEl) renderReactionPills(reactEl, obj, room.isNativePage);
+        if (reactEl) renderReactionPills(reactEl, obj, room.isNativePage, obj.floorId === "0");
       }
       if (nextPinned !== obj.pinned) {
         obj.pinned = nextPinned;
@@ -1352,7 +1419,7 @@
 
   async function triggerReplyOrVote(obj, actionTitle, isNativePage, reactionsEl, hoverBar) {
     const syncBarCnt = () => {
-      if (reactionsEl) renderReactionPills(reactionsEl, obj, isNativePage);
+      if (reactionsEl) renderReactionPills(reactionsEl, obj, isNativePage, obj.floorId === "0");
     };
 
     if (isNativePage) {
@@ -1364,16 +1431,20 @@
         );
         if (target) {
           target.click();
-          if (actionTitle === "点赞" || actionTitle === "加鸡腿") {
+          if (actionTitle === "点赞" || actionTitle === "加鸡腿" || actionTitle === "反对") {
             setTimeout(() => {
               const likeMenu = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"]');
               const legMenu = nativeLi.querySelector('.comment-menu .menu-item[title="加鸡腿"]');
+              const dislikeMenu = nativeLi.querySelector('.comment-menu .menu-item[title="反对"]');
               const likeSpan = likeMenu && likeMenu.querySelector("span");
               const legSpan = legMenu && legMenu.querySelector("span");
+              const dislikeSpan = dislikeMenu && dislikeMenu.querySelector("span");
               if (likeSpan) obj.likes = Number(likeSpan.textContent.trim()) || obj.likes;
               if (legSpan) obj.legs = Number(legSpan.textContent.trim()) || obj.legs;
+              if (dislikeSpan) obj.dislikes = Number(dislikeSpan.textContent.trim()) || obj.dislikes;
               if (likeMenu && likeMenu.classList.contains("clicked")) obj.upvoted = true;
               if (legMenu && legMenu.classList.contains("clicked")) obj.liked = true;
+              if (dislikeMenu && dislikeMenu.classList.contains("clicked")) obj.disliked = true;
               syncBarCnt();
             }, 350);
           } else if (actionTitle === "引用" || actionTitle === "回复") {
@@ -1406,8 +1477,16 @@
       }
     }
 
-    if ((actionTitle === "点赞" || actionTitle === "加鸡腿") && obj.commentId) {
-      const apiPath = actionTitle === "点赞" ? "/api/statistics/upvote" : "/api/statistics/like";
+    if ((actionTitle === "点赞" || actionTitle === "加鸡腿" || actionTitle === "反对") && obj.commentId) {
+      if (actionTitle === "反对" && !window.confirm("确定要踩（反对）该楼层吗？NodeSeek 将消耗 2 个鸡腿")) {
+        return;
+      }
+      const apiPath =
+        actionTitle === "点赞"
+          ? "/api/statistics/upvote"
+          : actionTitle === "加鸡腿"
+            ? "/api/statistics/like"
+            : "/api/statistics/dislike";
       try {
         const resp = await fetch(apiPath, {
           method: "POST",
@@ -1420,9 +1499,12 @@
           if (actionTitle === "点赞") {
             obj.upvoted = true;
             obj.likes = Number.isFinite(Number(resJson.current)) ? Number(resJson.current) : obj.likes + 1;
-          } else {
+          } else if (actionTitle === "加鸡腿") {
             obj.liked = true;
             obj.legs = Number.isFinite(Number(resJson.current)) ? Number(resJson.current) : obj.legs + 1;
+          } else {
+            obj.disliked = true;
+            obj.dislikes = Number.isFinite(Number(resJson.current)) ? Number(resJson.current) : obj.dislikes + 1;
           }
           syncBarCnt();
         }

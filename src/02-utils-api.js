@@ -48,9 +48,11 @@
         commentId: String(c.commentId || c.id || ""),
         likes: Number(c.upvoteCount) || 0,
         legs: Number(c.likeCount) || 0,
+        dislikes: Number(c.dislikeCount) || 0,
         pinned: Boolean(c.pined === true || c.pined === 1 || c.pinned === true || c.pinned === 1),
         upvoted: Boolean(c.upvoted),
         liked: Boolean(c.liked),
+        disliked: Boolean(c.disliked),
       });
     }
     return map;
