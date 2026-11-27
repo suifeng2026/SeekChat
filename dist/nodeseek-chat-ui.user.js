@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.23
+// @version      7.22.24
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -324,7 +324,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.23",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.24",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -3226,7 +3226,8 @@
       #nsc-np-editor-host .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
         z-index: 260 !important; max-height: 92px !important; overflow-y: auto !important;
-        padding: 6px 8px !important; flex-wrap: wrap !important; align-content: flex-start !important;
+        padding: 6px 8px !important; flex-wrap: wrap !important;
+        justify-content: flex-start !important; align-content: flex-start !important; gap: 2px !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
@@ -3250,9 +3251,15 @@
       }
       .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
       #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/017."],
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/018."],
+      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/019."],
       .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
       .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
       .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]),
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/017."],
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/018."],
+      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/019."],
       #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
       #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
       #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]) {
