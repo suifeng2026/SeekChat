@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.25
+// @version      7.22.26
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -63,6 +63,7 @@
     RULING_AUTO: "nsc_v7_ruling_auto",
     RULING_CACHE: "nsc_v7_ruling_cache",
     SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
+    PANE_COLLAPSED: "nsc_v7_pane_collapsed",
   };
 
   function isBrowsePath(pathname) {
@@ -163,19 +164,12 @@
     {
       id: "ac",
       label: "AC娘",
-      files: [
-        "01.png","02.png","03.png","04.png","05.png","06.png","07.png","08.png",
-        "09.png","10.png","11.png","12.png","13.png","14.png","15.png","16.png",
-        "17.png","18.png","19.png","20.png","21.png","22.png","23.png","24.png",
-        "25.png","26.png","27.png","28.png","29.png","30.png","31.png","32.png",
-      ],
+      files: Array.from({ length: 54 }, (_, i) => `${String(i + 1).padStart(2, "0")}.png`),
     },
     {
       id: "yct",
       label: "洋葱头",
-      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`).filter(
-        (f) => f !== "017.gif" && f !== "018.gif" && f !== "019.gif"
-      ),
+      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`),
     },
     {
       id: "xhj",
@@ -302,6 +296,7 @@
     hubStardustView: "list",
     workbenchSection: "theme",
     paneSkins: loadJson(LS.PANE_SKINS, {}),
+    paneCollapsed: loadJson(LS.PANE_COLLAPSED, { nav: false, list: false, right: false }),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
@@ -324,7 +319,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.25",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.26",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -2575,6 +2570,58 @@
         flex: 1 1 auto; min-width: 0; background: var(--nsc-bg-chat); backdrop-filter: blur(22px);
         display: flex; flex-direction: column; min-height: 0; position: relative;
       }
+      .nsc-pane-nav,
+      .nsc-pane-list,
+      .nsc-pane-right {
+        transition: width 0.16s ease, flex-basis 0.16s ease, opacity 0.14s ease, padding 0.16s ease;
+      }
+      #nsc-app-shell.is-nav-collapsed .nsc-pane-nav,
+      #nsc-app-shell.is-list-collapsed .nsc-pane-list,
+      #nsc-app-shell.is-right-collapsed .nsc-pane-right {
+        width: 0 !important; flex-basis: 0 !important; min-width: 0 !important;
+        padding-left: 0 !important; padding-right: 0 !important;
+        border-left-width: 0 !important; border-right-width: 0 !important;
+        opacity: 0; pointer-events: none;
+      }
+      .nsc-pane-divider {
+        width: 0; flex: 0 0 0; position: relative; z-index: 45; overflow: visible;
+      }
+      .nsc-pane-toggle {
+        position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%);
+        width: 14px; height: 42px; padding: 0; border-radius: 5px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card); color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;
+        opacity: 0.42; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transition: opacity 0.14s ease, color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+      }
+      .nsc-pane-toggle:hover,
+      .nsc-pane-toggle.is-collapsed {
+        opacity: 0.96; color: var(--nsc-accent); border-color: var(--nsc-accent);
+      }
+      .nsc-pane-divider.for-nav .nsc-pane-toggle.is-collapsed {
+        left: 2px; transform: translate(0, -50%);
+      }
+      #nsc-app-shell.is-nav-collapsed.is-list-collapsed .nsc-pane-divider.for-nav .nsc-pane-toggle {
+        top: 42%;
+      }
+      #nsc-app-shell.is-nav-collapsed.is-list-collapsed .nsc-pane-divider.for-list .nsc-pane-toggle {
+        top: 58%;
+      }
+      .nsc-pane-divider.for-list .nsc-pane-toggle.is-collapsed {
+        left: 2px; transform: translate(0, -50%);
+      }
+      .nsc-pane-divider.for-right .nsc-pane-toggle.is-collapsed {
+        left: auto; right: 2px; transform: translate(0, -50%);
+      }
+      #nsc-app-shell.is-list-collapsed .nsc-msg-main,
+      #nsc-app-shell.is-right-collapsed .nsc-msg-main {
+        max-width: min(86%, 920px);
+      }
+      #nsc-app-shell.is-list-collapsed .nsc-thread-wrap,
+      #nsc-app-shell.is-right-collapsed .nsc-thread-wrap {
+        width: min(94%, 820px);
+      }
       .nsc-chat-header {
         padding: 8px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
         display: flex; flex-direction: column; gap: 5px;
@@ -3215,7 +3262,7 @@
         padding: 7px 10px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板改为贴底悬浮层（最多约 2 行高度），AC娘仅显示前 32 个热门经典贴图 */
+      /* 表情面板：恢复全部贴图，放大至 40px，单行可视 + 下拉滚动 + 按容器宽度自适应铺满 */
       .nsc-composer-dock .exp-container.cur-sticker-group-null,
       .nsc-composer-dock .exp-container:empty,
       #nsc-np-editor-host .exp-container.cur-sticker-group-null,
@@ -3225,23 +3272,26 @@
       .nsc-composer-dock .exp-container,
       #nsc-np-editor-host .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
-        z-index: 260 !important; max-height: 92px !important; overflow-y: auto !important;
-        padding: 6px 8px !important; flex-wrap: wrap !important;
-        justify-content: flex-start !important; align-content: flex-start !important; gap: 0 !important;
+        z-index: 260 !important;
+        display: grid !important; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)) !important;
+        gap: 4px !important; justify-items: center !important; align-items: center !important;
+        padding: 6px 8px !important;
+        height: 60px !important; min-height: 60px !important; max-height: 60px !important;
+        overflow-y: auto !important; overflow-x: hidden !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
       }
       #nsc-np-editor-host .exp-container,
       #nsc-np-editor-host .nsc-u-app-pop {
-        top: 32px !important; bottom: auto !important; max-height: 136px !important;
+        top: 32px !important; bottom: auto !important;
       }
       .nsc-composer-dock .exp-container.cur-sticker-group-app,
       #nsc-np-editor-host .exp-container.cur-sticker-group-app {
         left: var(--nsc-app-pop-left, auto) !important;
         right: var(--nsc-app-pop-right, 12px) !important;
         width: fit-content !important; min-width: 0 !important; max-width: calc(100% - 12px) !important;
-        max-height: none !important; overflow: visible !important;
+        height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important;
         display: inline-flex !important; align-items: center !important; flex-wrap: nowrap !important;
         gap: 6px !important; padding: 5px 8px !important; border-radius: 12px !important;
       }
@@ -3249,40 +3299,32 @@
       #nsc-np-editor-host .exp-container.cur-sticker-group-app > * {
         margin: 0 !important; flex: 0 0 auto !important;
       }
-      .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/017."],
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/018."],
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/019."],
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/017."],
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/018."],
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/019."],
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]) {
-        display: none !important;
-      }
-      .nsc-composer-dock .exp-container img,
-      .nsc-composer-dock .exp-container video,
-      #nsc-np-editor-host .exp-container img,
-      #nsc-np-editor-host .exp-container video {
-        width: 34px !important; height: 34px !important; max-width: 34px !important; max-height: 34px !important;
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) img,
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) video,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) img,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) video {
+        width: 40px !important; height: 40px !important; max-width: 40px !important; max-height: 40px !important;
         object-fit: contain !important; display: block !important;
       }
-      .nsc-composer-dock .exp-container > *,
-      .nsc-composer-dock .exp-container .exp-list > *,
-      .nsc-composer-dock .exp-container span,
-      .nsc-composer-dock .exp-container button,
-      .nsc-composer-dock .exp-container a,
-      #nsc-np-editor-host .exp-container > *,
-      #nsc-np-editor-host .exp-container .exp-list > *,
-      #nsc-np-editor-host .exp-container span,
-      #nsc-np-editor-host .exp-container button,
-      #nsc-np-editor-host .exp-container a {
-        padding: 2px !important; margin: 2px !important; border-radius: 7px !important;
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) > *,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > * {
+        width: 46px !important; height: 46px !important; box-sizing: border-box !important;
+        padding: 3px !important; margin: 0 !important; border-radius: 7px !important; cursor: pointer !important;
+      }
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) > *:hover,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > *:hover {
+        background: var(--nsc-accent-soft) !important;
+      }
+      /* 阅读区回复框未聚焦/无内容时默认紧凑模式，聚焦或输入时恢复 6 行高度 */
+      #nsc-composer-dock.is-compact .mde-toolbar,
+      #nsc-composer-dock.is-compact .nsc-mde-toolbar,
+      #nsc-composer-dock.is-compact .topic-select,
+      #nsc-composer-dock.is-compact .nsc-composer-footer {
+        display: none !important;
+      }
+      #nsc-composer-dock.is-compact .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock.is-compact .nsc-fallback-textarea {
+        height: 36px !important; min-height: 36px !important; max-height: 36px !important;
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-mde-sep { width: 1px; height: 14px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px; }
@@ -3368,15 +3410,17 @@
       }
       .nsc-fb-exp-tab.is-active { color: var(--nsc-accent); background: var(--nsc-bg-card); }
       .nsc-fb-exp-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-        gap: 3px; padding: 6px 8px; max-height: 88px; overflow-y: auto;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+        gap: 4px; justify-items: center; align-items: center;
+        padding: 6px 8px; height: 60px; min-height: 60px; max-height: 60px;
+        overflow-y: auto; overflow-x: hidden;
       }
       .nsc-fb-exp-item {
-        width: 40px; height: 40px; padding: 3px; border: none; border-radius: 7px;
+        width: 46px; height: 46px; padding: 3px; border: none; border-radius: 7px;
         background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
       }
       .nsc-fb-exp-item:hover { background: var(--nsc-accent-soft); }
-      .nsc-fb-exp-item img { width: 32px; height: 32px; object-fit: contain; display: block; }
+      .nsc-fb-exp-item img { width: 40px; height: 40px; object-fit: contain; display: block; }
       .nsc-composer-footer,
       .nsc-composer-dock .topic-select,
       #nsc-np-editor-host .topic-select {
@@ -5069,6 +5113,7 @@
           </button>
         </div>
       </nav>
+      <div class="nsc-pane-divider for-nav"><button type="button" class="nsc-pane-toggle" id="nsc-pane-toggle-nav" title="收缩/展开左侧导航">‹</button></div>
 
       <aside class="nsc-pane-list">
         <div class="nsc-list-head">
@@ -5084,6 +5129,7 @@
         </div>
         <div class="nsc-topic-scroll" id="nsc-topic-scroll"></div>
       </aside>
+      <div class="nsc-pane-divider for-list"><button type="button" class="nsc-pane-toggle" id="nsc-pane-toggle-list" title="收缩/展开帖子列表">‹</button></div>
 
       <main class="nsc-pane-chat">
         <div class="nsc-chat-header">
@@ -5103,6 +5149,7 @@
           <div id="nsc-composer-body"></div>
         </div>
       </main>
+      <div class="nsc-pane-divider for-right"><button type="button" class="nsc-pane-toggle" id="nsc-pane-toggle-right" title="收缩/展开右侧信息区">›</button></div>
 
       <aside class="nsc-pane-right">
         <div class="nsc-right-user" id="nsc-right-user"></div>
@@ -5119,6 +5166,64 @@
 
     const frame = document.getElementById("nsk-frame");
     document.body.insertBefore(shell, frame);
+
+    const applyPaneCollapsedToDom = () => {
+      const pc = state.paneCollapsed || {};
+      const navCol = Boolean(pc.nav);
+      const listCol = Boolean(pc.list);
+      const rightCol = Boolean(pc.right);
+      shell.classList.toggle("is-nav-collapsed", navCol);
+      shell.classList.toggle("is-list-collapsed", listCol);
+      shell.classList.toggle("is-right-collapsed", rightCol);
+
+      const navBtn = shell.querySelector("#nsc-pane-toggle-nav");
+      const listBtn = shell.querySelector("#nsc-pane-toggle-list");
+      const rightBtn = shell.querySelector("#nsc-pane-toggle-right");
+      if (navBtn) {
+        navBtn.classList.toggle("is-collapsed", navCol);
+        navBtn.textContent = navCol ? "›" : "‹";
+        navBtn.title = navCol ? "展开左侧导航" : "收缩左侧导航";
+      }
+      if (listBtn) {
+        listBtn.classList.toggle("is-collapsed", listCol);
+        listBtn.textContent = listCol ? "›" : "‹";
+        listBtn.title = listCol ? "展开帖子列表" : "收缩帖子列表";
+      }
+      if (rightBtn) {
+        rightBtn.classList.toggle("is-collapsed", rightCol);
+        rightBtn.textContent = rightCol ? "‹" : "›";
+        rightBtn.title = rightCol ? "展开右侧信息区" : "收缩右侧信息区";
+      }
+    };
+    const bindPaneToggle = (sel, key) => {
+      const btn = shell.querySelector(sel);
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        state.paneCollapsed = { ...(state.paneCollapsed || {}), [key]: !(state.paneCollapsed && state.paneCollapsed[key]) };
+        saveJson(LS.PANE_COLLAPSED, state.paneCollapsed);
+        applyPaneCollapsedToDom();
+      });
+    };
+    bindPaneToggle("#nsc-pane-toggle-nav", "nav");
+    bindPaneToggle("#nsc-pane-toggle-list", "list");
+    bindPaneToggle("#nsc-pane-toggle-right", "right");
+    applyPaneCollapsedToDom();
+
+    const dockEl = shell.querySelector("#nsc-composer-dock");
+    if (dockEl) {
+      dockEl.classList.add("is-compact");
+      dockEl.addEventListener("pointerdown", () => syncComposerCompactState(true));
+      dockEl.addEventListener("focusin", () => syncComposerCompactState(true));
+      dockEl.addEventListener("focusout", () => {
+        setTimeout(() => syncComposerCompactState(false), 130);
+      });
+      document.addEventListener("pointerdown", (e) => {
+        if (!dockEl.isConnected || dockEl.style.display === "none") return;
+        const t = e.target;
+        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-nodeimage-backdrop"))) return;
+        setTimeout(() => syncComposerCompactState(false), 60);
+      });
+    }
 
     const lightbox = document.createElement("div");
     lightbox.id = "nsc-lightbox";
@@ -5899,6 +6004,70 @@
     return ta ? ta.value : "";
   }
 
+  function syncComposerCompactState(forceExpand = false) {
+    const dock = document.getElementById("nsc-composer-dock");
+    if (!dock) return;
+    const prevCompact = dock.classList.contains("is-compact");
+    if (forceExpand) {
+      dock.classList.remove("is-compact");
+      if (prevCompact) {
+        const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
+        const cm = nat ? getNativeCodeMirror(nat) : null;
+        if (cm && typeof cm.refresh === "function") requestAnimationFrame(() => cm.refresh());
+      }
+      return;
+    }
+
+    const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
+    const unified = dock.querySelector("#nsc-unified-composer");
+    let hasText = false;
+    let isNonWrite = false;
+
+    if (nat && nat.style.display !== "none") {
+      hasText = Boolean(getNativeEditorValue(nat).trim());
+      if (nat.classList.contains("fullscreen")) isNonWrite = true;
+      const exp = nat.querySelector(".exp-container");
+      if (exp && !exp.classList.contains("cur-sticker-group-null") && exp.children.length > 0) {
+        isNonWrite = true;
+      }
+      const prevTab = nat.querySelector(".tab-select.window_header .tab-option-item-1");
+      const splitTab = nat.querySelector(".tab-select.window_header .tab-option-item-2");
+      if (
+        (prevTab && prevTab.style && prevTab.style.borderBottomStyle === "solid") ||
+        (splitTab && splitTab.style && splitTab.style.borderBottomStyle === "solid")
+      ) {
+        isNonWrite = true;
+      }
+    } else if (unified && unified.style.display !== "none") {
+      const uTa = unified.querySelector("#nsc-unified-ta");
+      hasText = Boolean(uTa && uTa.value.trim());
+      if (unified.classList.contains("is-fullscreen")) isNonWrite = true;
+      const uBody = unified.querySelector(".nsc-u-body");
+      if (uBody && (uBody.classList.contains("is-preview-only") || uBody.classList.contains("is-split"))) {
+        isNonWrite = true;
+      }
+      if (unified.querySelector(".nsc-fb-exp-pop.is-open, .nsc-u-app-pop.is-open")) {
+        isNonWrite = true;
+      }
+    }
+
+    let focused = false;
+    try {
+      focused = dock.matches(":focus-within");
+    } catch (_) {}
+    if (!focused && nat && nat.style.display !== "none") {
+      const cm = getNativeCodeMirror(nat);
+      if (cm && typeof cm.hasFocus === "function" && cm.hasFocus()) focused = true;
+    }
+
+    const nextCompact = !hasText && !focused && !isNonWrite;
+    dock.classList.toggle("is-compact", nextCompact);
+    if (prevCompact !== nextCompact && nat) {
+      const cm = getNativeCodeMirror(nat);
+      if (cm && typeof cm.refresh === "function") requestAnimationFrame(() => cm.refresh());
+    }
+  }
+
   function setNativeEditorValue(editor, val) {
     const cm = getNativeCodeMirror(editor);
     if (cm && typeof cm.setValue === "function") {
@@ -5906,12 +6075,18 @@
       if (typeof cm.clearHistory === "function" && !val) {
         try { cm.clearHistory(); } catch (_) {}
       }
+      if (editor && editor.closest && editor.closest("#nsc-composer-dock")) {
+        syncComposerCompactState(Boolean(String(val || "").trim()));
+      }
       return;
     }
     const ta = editor && editor.querySelector(".CodeMirror textarea, textarea");
     if (ta) {
       ta.value = String(val || "");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    if (editor && editor.closest && editor.closest("#nsc-composer-dock")) {
+      syncComposerCompactState(Boolean(String(val || "").trim()));
     }
   }
 
@@ -5931,6 +6106,7 @@
   function insertTextToActiveComposer(snippet, { asLine = true } = {}) {
     const text = String(snippet || "");
     if (!text) return false;
+    syncComposerCompactState(true);
     const nativeEditor = document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)");
     if (nativeEditor && nativeEditor.style.display !== "none") {
       ensureNativeEditorWriteTab(nativeEditor);
@@ -6181,6 +6357,7 @@
     let snapTimer = 0;
     ta.addEventListener("input", () => {
       syncPreview();
+      if (box.closest("#nsc-composer-dock")) syncComposerCompactState(Boolean(ta.value.trim()));
       clearTimeout(snapTimer);
       snapTimer = setTimeout(() => pushSnap(ta.value), 260);
     });
@@ -6463,6 +6640,7 @@
       requestAnimationFrame(() => {
         const cm = getNativeCodeMirror(nativeEditor);
         if (cm && typeof cm.refresh === "function") cm.refresh();
+        syncComposerCompactState(false);
       });
       return;
     }
@@ -6486,6 +6664,7 @@
       uTa.value = (nextCtxKey && _composerDrafts.get(nextCtxKey)) || "";
       uTa.dispatchEvent(new Event("input", { bubbles: true }));
     }
+    syncComposerCompactState(false);
   }
 
   function positionAppPopover(editor) {
@@ -6631,7 +6810,22 @@
     }
     const dock = document.getElementById("nsc-composer-dock");
     if (dock) NodeImage.bindPasteAndDrop(dock, "chat", "#nsc-composer-status");
+    const cmInst = getNativeCodeMirror(editor);
+    if (cmInst && typeof cmInst.on === "function") {
+      cmInst.on("focus", () => {
+        if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
+      });
+      cmInst.on("blur", () => {
+        if (editor.closest("#nsc-composer-dock")) setTimeout(() => syncComposerCompactState(false), 130);
+      });
+      cmInst.on("change", () => {
+        if (editor.closest("#nsc-composer-dock") && cmInst.getValue().trim()) {
+          syncComposerCompactState(true);
+        }
+      });
+    }
     syncNativeEditorContextUi(editor);
+    if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(false);
   }
 
   let _lbGallery = [];

@@ -30,6 +30,7 @@
     RULING_AUTO: "nsc_v7_ruling_auto",
     RULING_CACHE: "nsc_v7_ruling_cache",
     SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
+    PANE_COLLAPSED: "nsc_v7_pane_collapsed",
   };
 
   function isBrowsePath(pathname) {
@@ -130,19 +131,12 @@
     {
       id: "ac",
       label: "AC娘",
-      files: [
-        "01.png","02.png","03.png","04.png","05.png","06.png","07.png","08.png",
-        "09.png","10.png","11.png","12.png","13.png","14.png","15.png","16.png",
-        "17.png","18.png","19.png","20.png","21.png","22.png","23.png","24.png",
-        "25.png","26.png","27.png","28.png","29.png","30.png","31.png","32.png",
-      ],
+      files: Array.from({ length: 54 }, (_, i) => `${String(i + 1).padStart(2, "0")}.png`),
     },
     {
       id: "yct",
       label: "洋葱头",
-      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`).filter(
-        (f) => f !== "017.gif" && f !== "018.gif" && f !== "019.gif"
-      ),
+      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`),
     },
     {
       id: "xhj",
@@ -269,6 +263,7 @@
     hubStardustView: "list",
     workbenchSection: "theme",
     paneSkins: loadJson(LS.PANE_SKINS, {}),
+    paneCollapsed: loadJson(LS.PANE_COLLAPSED, { nav: false, list: false, right: false }),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
@@ -291,7 +286,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.25",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.26",
       latest: "",
       installUrl: "",
       hasUpdate: false,

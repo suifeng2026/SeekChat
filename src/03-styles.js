@@ -433,6 +433,58 @@
         flex: 1 1 auto; min-width: 0; background: var(--nsc-bg-chat); backdrop-filter: blur(22px);
         display: flex; flex-direction: column; min-height: 0; position: relative;
       }
+      .nsc-pane-nav,
+      .nsc-pane-list,
+      .nsc-pane-right {
+        transition: width 0.16s ease, flex-basis 0.16s ease, opacity 0.14s ease, padding 0.16s ease;
+      }
+      #nsc-app-shell.is-nav-collapsed .nsc-pane-nav,
+      #nsc-app-shell.is-list-collapsed .nsc-pane-list,
+      #nsc-app-shell.is-right-collapsed .nsc-pane-right {
+        width: 0 !important; flex-basis: 0 !important; min-width: 0 !important;
+        padding-left: 0 !important; padding-right: 0 !important;
+        border-left-width: 0 !important; border-right-width: 0 !important;
+        opacity: 0; pointer-events: none;
+      }
+      .nsc-pane-divider {
+        width: 0; flex: 0 0 0; position: relative; z-index: 45; overflow: visible;
+      }
+      .nsc-pane-toggle {
+        position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%);
+        width: 14px; height: 42px; padding: 0; border-radius: 5px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card); color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;
+        opacity: 0.42; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transition: opacity 0.14s ease, color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+      }
+      .nsc-pane-toggle:hover,
+      .nsc-pane-toggle.is-collapsed {
+        opacity: 0.96; color: var(--nsc-accent); border-color: var(--nsc-accent);
+      }
+      .nsc-pane-divider.for-nav .nsc-pane-toggle.is-collapsed {
+        left: 2px; transform: translate(0, -50%);
+      }
+      #nsc-app-shell.is-nav-collapsed.is-list-collapsed .nsc-pane-divider.for-nav .nsc-pane-toggle {
+        top: 42%;
+      }
+      #nsc-app-shell.is-nav-collapsed.is-list-collapsed .nsc-pane-divider.for-list .nsc-pane-toggle {
+        top: 58%;
+      }
+      .nsc-pane-divider.for-list .nsc-pane-toggle.is-collapsed {
+        left: 2px; transform: translate(0, -50%);
+      }
+      .nsc-pane-divider.for-right .nsc-pane-toggle.is-collapsed {
+        left: auto; right: 2px; transform: translate(0, -50%);
+      }
+      #nsc-app-shell.is-list-collapsed .nsc-msg-main,
+      #nsc-app-shell.is-right-collapsed .nsc-msg-main {
+        max-width: min(86%, 920px);
+      }
+      #nsc-app-shell.is-list-collapsed .nsc-thread-wrap,
+      #nsc-app-shell.is-right-collapsed .nsc-thread-wrap {
+        width: min(94%, 820px);
+      }
       .nsc-chat-header {
         padding: 8px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
         display: flex; flex-direction: column; gap: 5px;
@@ -1073,7 +1125,7 @@
         padding: 7px 10px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板改为贴底悬浮层（最多约 2 行高度），AC娘仅显示前 32 个热门经典贴图 */
+      /* 表情面板：恢复全部贴图，放大至 40px，单行可视 + 下拉滚动 + 按容器宽度自适应铺满 */
       .nsc-composer-dock .exp-container.cur-sticker-group-null,
       .nsc-composer-dock .exp-container:empty,
       #nsc-np-editor-host .exp-container.cur-sticker-group-null,
@@ -1083,23 +1135,26 @@
       .nsc-composer-dock .exp-container,
       #nsc-np-editor-host .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
-        z-index: 260 !important; max-height: 92px !important; overflow-y: auto !important;
-        padding: 6px 8px !important; flex-wrap: wrap !important;
-        justify-content: flex-start !important; align-content: flex-start !important; gap: 0 !important;
+        z-index: 260 !important;
+        display: grid !important; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)) !important;
+        gap: 4px !important; justify-items: center !important; align-items: center !important;
+        padding: 6px 8px !important;
+        height: 60px !important; min-height: 60px !important; max-height: 60px !important;
+        overflow-y: auto !important; overflow-x: hidden !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
       }
       #nsc-np-editor-host .exp-container,
       #nsc-np-editor-host .nsc-u-app-pop {
-        top: 32px !important; bottom: auto !important; max-height: 136px !important;
+        top: 32px !important; bottom: auto !important;
       }
       .nsc-composer-dock .exp-container.cur-sticker-group-app,
       #nsc-np-editor-host .exp-container.cur-sticker-group-app {
         left: var(--nsc-app-pop-left, auto) !important;
         right: var(--nsc-app-pop-right, 12px) !important;
         width: fit-content !important; min-width: 0 !important; max-width: calc(100% - 12px) !important;
-        max-height: none !important; overflow: visible !important;
+        height: auto !important; min-height: 0 !important; max-height: none !important; overflow: visible !important;
         display: inline-flex !important; align-items: center !important; flex-wrap: nowrap !important;
         gap: 6px !important; padding: 5px 8px !important; border-radius: 12px !important;
       }
@@ -1107,40 +1162,32 @@
       #nsc-np-editor-host .exp-container.cur-sticker-group-app > * {
         margin: 0 !important; flex: 0 0 auto !important;
       }
-      .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-ac > *:nth-child(n+33),
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/017."],
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/018."],
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > img[src*="yct/019."],
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
-      .nsc-composer-dock .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/017."],
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/018."],
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > img[src*="yct/019."],
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/017."]),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/018."]),
-      #nsc-np-editor-host .exp-container.cur-sticker-group-yct > *:has(img[src*="yct/019."]) {
-        display: none !important;
-      }
-      .nsc-composer-dock .exp-container img,
-      .nsc-composer-dock .exp-container video,
-      #nsc-np-editor-host .exp-container img,
-      #nsc-np-editor-host .exp-container video {
-        width: 34px !important; height: 34px !important; max-width: 34px !important; max-height: 34px !important;
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) img,
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) video,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) img,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) video {
+        width: 40px !important; height: 40px !important; max-width: 40px !important; max-height: 40px !important;
         object-fit: contain !important; display: block !important;
       }
-      .nsc-composer-dock .exp-container > *,
-      .nsc-composer-dock .exp-container .exp-list > *,
-      .nsc-composer-dock .exp-container span,
-      .nsc-composer-dock .exp-container button,
-      .nsc-composer-dock .exp-container a,
-      #nsc-np-editor-host .exp-container > *,
-      #nsc-np-editor-host .exp-container .exp-list > *,
-      #nsc-np-editor-host .exp-container span,
-      #nsc-np-editor-host .exp-container button,
-      #nsc-np-editor-host .exp-container a {
-        padding: 2px !important; margin: 2px !important; border-radius: 7px !important;
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) > *,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > * {
+        width: 46px !important; height: 46px !important; box-sizing: border-box !important;
+        padding: 3px !important; margin: 0 !important; border-radius: 7px !important; cursor: pointer !important;
+      }
+      .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) > *:hover,
+      #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > *:hover {
+        background: var(--nsc-accent-soft) !important;
+      }
+      /* 阅读区回复框未聚焦/无内容时默认紧凑模式，聚焦或输入时恢复 6 行高度 */
+      #nsc-composer-dock.is-compact .mde-toolbar,
+      #nsc-composer-dock.is-compact .nsc-mde-toolbar,
+      #nsc-composer-dock.is-compact .topic-select,
+      #nsc-composer-dock.is-compact .nsc-composer-footer {
+        display: none !important;
+      }
+      #nsc-composer-dock.is-compact .md-editor:not(.fullscreen) .CodeMirror,
+      #nsc-composer-dock.is-compact .nsc-fallback-textarea {
+        height: 36px !important; min-height: 36px !important; max-height: 36px !important;
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-mde-sep { width: 1px; height: 14px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px; }
@@ -1226,15 +1273,17 @@
       }
       .nsc-fb-exp-tab.is-active { color: var(--nsc-accent); background: var(--nsc-bg-card); }
       .nsc-fb-exp-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-        gap: 3px; padding: 6px 8px; max-height: 88px; overflow-y: auto;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+        gap: 4px; justify-items: center; align-items: center;
+        padding: 6px 8px; height: 60px; min-height: 60px; max-height: 60px;
+        overflow-y: auto; overflow-x: hidden;
       }
       .nsc-fb-exp-item {
-        width: 40px; height: 40px; padding: 3px; border: none; border-radius: 7px;
+        width: 46px; height: 46px; padding: 3px; border: none; border-radius: 7px;
         background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
       }
       .nsc-fb-exp-item:hover { background: var(--nsc-accent-soft); }
-      .nsc-fb-exp-item img { width: 32px; height: 32px; object-fit: contain; display: block; }
+      .nsc-fb-exp-item img { width: 40px; height: 40px; object-fit: contain; display: block; }
       .nsc-composer-footer,
       .nsc-composer-dock .topic-select,
       #nsc-np-editor-host .topic-select {

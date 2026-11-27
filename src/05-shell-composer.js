@@ -183,6 +183,7 @@
           </button>
         </div>
       </nav>
+      <div class="nsc-pane-divider for-nav"><button type="button" class="nsc-pane-toggle" id="nsc-pane-toggle-nav" title="收缩/展开左侧导航">‹</button></div>
 
       <aside class="nsc-pane-list">
         <div class="nsc-list-head">
@@ -198,6 +199,7 @@
         </div>
         <div class="nsc-topic-scroll" id="nsc-topic-scroll"></div>
       </aside>
+      <div class="nsc-pane-divider for-list"><button type="button" class="nsc-pane-toggle" id="nsc-pane-toggle-list" title="收缩/展开帖子列表">‹</button></div>
 
       <main class="nsc-pane-chat">
         <div class="nsc-chat-header">
@@ -217,6 +219,7 @@
           <div id="nsc-composer-body"></div>
         </div>
       </main>
+      <div class="nsc-pane-divider for-right"><button type="button" class="nsc-pane-toggle" id="nsc-pane-toggle-right" title="收缩/展开右侧信息区">›</button></div>
 
       <aside class="nsc-pane-right">
         <div class="nsc-right-user" id="nsc-right-user"></div>
@@ -233,6 +236,64 @@
 
     const frame = document.getElementById("nsk-frame");
     document.body.insertBefore(shell, frame);
+
+    const applyPaneCollapsedToDom = () => {
+      const pc = state.paneCollapsed || {};
+      const navCol = Boolean(pc.nav);
+      const listCol = Boolean(pc.list);
+      const rightCol = Boolean(pc.right);
+      shell.classList.toggle("is-nav-collapsed", navCol);
+      shell.classList.toggle("is-list-collapsed", listCol);
+      shell.classList.toggle("is-right-collapsed", rightCol);
+
+      const navBtn = shell.querySelector("#nsc-pane-toggle-nav");
+      const listBtn = shell.querySelector("#nsc-pane-toggle-list");
+      const rightBtn = shell.querySelector("#nsc-pane-toggle-right");
+      if (navBtn) {
+        navBtn.classList.toggle("is-collapsed", navCol);
+        navBtn.textContent = navCol ? "›" : "‹";
+        navBtn.title = navCol ? "展开左侧导航" : "收缩左侧导航";
+      }
+      if (listBtn) {
+        listBtn.classList.toggle("is-collapsed", listCol);
+        listBtn.textContent = listCol ? "›" : "‹";
+        listBtn.title = listCol ? "展开帖子列表" : "收缩帖子列表";
+      }
+      if (rightBtn) {
+        rightBtn.classList.toggle("is-collapsed", rightCol);
+        rightBtn.textContent = rightCol ? "‹" : "›";
+        rightBtn.title = rightCol ? "展开右侧信息区" : "收缩右侧信息区";
+      }
+    };
+    const bindPaneToggle = (sel, key) => {
+      const btn = shell.querySelector(sel);
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        state.paneCollapsed = { ...(state.paneCollapsed || {}), [key]: !(state.paneCollapsed && state.paneCollapsed[key]) };
+        saveJson(LS.PANE_COLLAPSED, state.paneCollapsed);
+        applyPaneCollapsedToDom();
+      });
+    };
+    bindPaneToggle("#nsc-pane-toggle-nav", "nav");
+    bindPaneToggle("#nsc-pane-toggle-list", "list");
+    bindPaneToggle("#nsc-pane-toggle-right", "right");
+    applyPaneCollapsedToDom();
+
+    const dockEl = shell.querySelector("#nsc-composer-dock");
+    if (dockEl) {
+      dockEl.classList.add("is-compact");
+      dockEl.addEventListener("pointerdown", () => syncComposerCompactState(true));
+      dockEl.addEventListener("focusin", () => syncComposerCompactState(true));
+      dockEl.addEventListener("focusout", () => {
+        setTimeout(() => syncComposerCompactState(false), 130);
+      });
+      document.addEventListener("pointerdown", (e) => {
+        if (!dockEl.isConnected || dockEl.style.display === "none") return;
+        const t = e.target;
+        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-nodeimage-backdrop"))) return;
+        setTimeout(() => syncComposerCompactState(false), 60);
+      });
+    }
 
     const lightbox = document.createElement("div");
     lightbox.id = "nsc-lightbox";
@@ -1013,6 +1074,70 @@
     return ta ? ta.value : "";
   }
 
+  function syncComposerCompactState(forceExpand = false) {
+    const dock = document.getElementById("nsc-composer-dock");
+    if (!dock) return;
+    const prevCompact = dock.classList.contains("is-compact");
+    if (forceExpand) {
+      dock.classList.remove("is-compact");
+      if (prevCompact) {
+        const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
+        const cm = nat ? getNativeCodeMirror(nat) : null;
+        if (cm && typeof cm.refresh === "function") requestAnimationFrame(() => cm.refresh());
+      }
+      return;
+    }
+
+    const nat = dock.querySelector(".md-editor:not(.nsc-unified-editor)");
+    const unified = dock.querySelector("#nsc-unified-composer");
+    let hasText = false;
+    let isNonWrite = false;
+
+    if (nat && nat.style.display !== "none") {
+      hasText = Boolean(getNativeEditorValue(nat).trim());
+      if (nat.classList.contains("fullscreen")) isNonWrite = true;
+      const exp = nat.querySelector(".exp-container");
+      if (exp && !exp.classList.contains("cur-sticker-group-null") && exp.children.length > 0) {
+        isNonWrite = true;
+      }
+      const prevTab = nat.querySelector(".tab-select.window_header .tab-option-item-1");
+      const splitTab = nat.querySelector(".tab-select.window_header .tab-option-item-2");
+      if (
+        (prevTab && prevTab.style && prevTab.style.borderBottomStyle === "solid") ||
+        (splitTab && splitTab.style && splitTab.style.borderBottomStyle === "solid")
+      ) {
+        isNonWrite = true;
+      }
+    } else if (unified && unified.style.display !== "none") {
+      const uTa = unified.querySelector("#nsc-unified-ta");
+      hasText = Boolean(uTa && uTa.value.trim());
+      if (unified.classList.contains("is-fullscreen")) isNonWrite = true;
+      const uBody = unified.querySelector(".nsc-u-body");
+      if (uBody && (uBody.classList.contains("is-preview-only") || uBody.classList.contains("is-split"))) {
+        isNonWrite = true;
+      }
+      if (unified.querySelector(".nsc-fb-exp-pop.is-open, .nsc-u-app-pop.is-open")) {
+        isNonWrite = true;
+      }
+    }
+
+    let focused = false;
+    try {
+      focused = dock.matches(":focus-within");
+    } catch (_) {}
+    if (!focused && nat && nat.style.display !== "none") {
+      const cm = getNativeCodeMirror(nat);
+      if (cm && typeof cm.hasFocus === "function" && cm.hasFocus()) focused = true;
+    }
+
+    const nextCompact = !hasText && !focused && !isNonWrite;
+    dock.classList.toggle("is-compact", nextCompact);
+    if (prevCompact !== nextCompact && nat) {
+      const cm = getNativeCodeMirror(nat);
+      if (cm && typeof cm.refresh === "function") requestAnimationFrame(() => cm.refresh());
+    }
+  }
+
   function setNativeEditorValue(editor, val) {
     const cm = getNativeCodeMirror(editor);
     if (cm && typeof cm.setValue === "function") {
@@ -1020,12 +1145,18 @@
       if (typeof cm.clearHistory === "function" && !val) {
         try { cm.clearHistory(); } catch (_) {}
       }
+      if (editor && editor.closest && editor.closest("#nsc-composer-dock")) {
+        syncComposerCompactState(Boolean(String(val || "").trim()));
+      }
       return;
     }
     const ta = editor && editor.querySelector(".CodeMirror textarea, textarea");
     if (ta) {
       ta.value = String(val || "");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    if (editor && editor.closest && editor.closest("#nsc-composer-dock")) {
+      syncComposerCompactState(Boolean(String(val || "").trim()));
     }
   }
 
@@ -1045,6 +1176,7 @@
   function insertTextToActiveComposer(snippet, { asLine = true } = {}) {
     const text = String(snippet || "");
     if (!text) return false;
+    syncComposerCompactState(true);
     const nativeEditor = document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)");
     if (nativeEditor && nativeEditor.style.display !== "none") {
       ensureNativeEditorWriteTab(nativeEditor);
@@ -1295,6 +1427,7 @@
     let snapTimer = 0;
     ta.addEventListener("input", () => {
       syncPreview();
+      if (box.closest("#nsc-composer-dock")) syncComposerCompactState(Boolean(ta.value.trim()));
       clearTimeout(snapTimer);
       snapTimer = setTimeout(() => pushSnap(ta.value), 260);
     });
@@ -1577,6 +1710,7 @@
       requestAnimationFrame(() => {
         const cm = getNativeCodeMirror(nativeEditor);
         if (cm && typeof cm.refresh === "function") cm.refresh();
+        syncComposerCompactState(false);
       });
       return;
     }
@@ -1600,6 +1734,7 @@
       uTa.value = (nextCtxKey && _composerDrafts.get(nextCtxKey)) || "";
       uTa.dispatchEvent(new Event("input", { bubbles: true }));
     }
+    syncComposerCompactState(false);
   }
 
   function positionAppPopover(editor) {
@@ -1745,7 +1880,22 @@
     }
     const dock = document.getElementById("nsc-composer-dock");
     if (dock) NodeImage.bindPasteAndDrop(dock, "chat", "#nsc-composer-status");
+    const cmInst = getNativeCodeMirror(editor);
+    if (cmInst && typeof cmInst.on === "function") {
+      cmInst.on("focus", () => {
+        if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
+      });
+      cmInst.on("blur", () => {
+        if (editor.closest("#nsc-composer-dock")) setTimeout(() => syncComposerCompactState(false), 130);
+      });
+      cmInst.on("change", () => {
+        if (editor.closest("#nsc-composer-dock") && cmInst.getValue().trim()) {
+          syncComposerCompactState(true);
+        }
+      });
+    }
     syncNativeEditorContextUi(editor);
+    if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(false);
   }
 
   let _lbGallery = [];
