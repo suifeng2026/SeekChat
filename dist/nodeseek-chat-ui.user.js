@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.1
+// @version      7.9.2
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -94,7 +94,43 @@
     bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
     trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
     theme: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>`,
+    smile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
   };
+
+  const STICKER_GROUPS = [
+    {
+      id: "ac",
+      label: "AC娘",
+      files: [
+        "01.png","02.png","03.png","04.png","05.png","06.png","07.png","08.png","09.png","10.png",
+        "11.png","12.png","13.png","14.png","15.png","16.png","17.png","18.png","19.png","20.png",
+        "21.png","22.png","23.png","24.png","25.png","26.png","27.png","28.png","29.png","30.png",
+        "31.png","32.png","33.png","34.png","35.png","36.png","37.png","38.png","39.png","40.png",
+        "41.png","42.png","43.png","44.png","45.png","46.png","47.png","48.png","49.png","50.png",
+        "51.png","52.png","53.png","54.png",
+      ],
+    },
+    {
+      id: "yct",
+      label: "洋葱头",
+      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`),
+    },
+    {
+      id: "xhj",
+      label: "小黄鸡",
+      files: [
+        "001.png","002.png","003.png","004.gif","005.png","006.png","007.png","008.gif",
+        "009.gif","010.gif","011.png","012.gif","013.gif","014.gif","015.gif","016.gif",
+        "017.gif","018.gif","019.gif","020.gif","021.gif","022.png","023.gif","024.png",
+        "025.png","026.gif","027.gif","028.gif","029.gif","030.gif","031.png","032.png",
+      ],
+    },
+    {
+      id: "emoji",
+      label: "Fluent",
+      files: Array.from({ length: 49 }, (_, i) => `${String(i).padStart(2, "0")}.png`),
+    },
+  ];
 
   const CHANNELS = [
     { id: "home", name: "首页", icon: ICONS.home, path: "/", group: "browse" },
@@ -1080,14 +1116,54 @@
         padding: 8px 11px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板改为贴底悬浮层，彻底消除点击表情时的布局跳动与闪烁 */
+      /* 表情面板改为贴底悬浮层，缩小贴图网格，彻底消除点击表情时的布局跳动与闪烁 */
       .nsc-composer-dock .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 10px !important; right: 10px !important;
-        z-index: 260 !important; max-height: 210px !important; overflow-y: auto !important;
+        z-index: 260 !important; max-height: 205px !important; overflow-y: auto !important;
+        padding: 8px 10px !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
       }
+      .nsc-composer-dock .exp-container img,
+      .nsc-composer-dock .exp-container video {
+        width: 34px !important; height: 34px !important; max-width: 34px !important; max-height: 34px !important;
+        object-fit: contain !important; display: block !important;
+      }
+      .nsc-composer-dock .exp-container > *,
+      .nsc-composer-dock .exp-container .exp-list > *,
+      .nsc-composer-dock .exp-container span,
+      .nsc-composer-dock .exp-container button,
+      .nsc-composer-dock .exp-container a {
+        padding: 3px !important; margin: 2px !important; border-radius: 7px !important;
+      }
+      .nsc-mde-btn svg { width: 14px; height: 14px; }
+      .nsc-fb-exp-pop {
+        position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; z-index: 260;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+        display: none; flex-direction: column; overflow: hidden;
+      }
+      .nsc-fb-exp-pop.is-open { display: flex; }
+      .nsc-fb-exp-tabs {
+        display: flex; align-items: center; gap: 4px; padding: 5px 10px;
+        border-bottom: 1px solid var(--nsc-border); background: var(--nsc-hover);
+      }
+      .nsc-fb-exp-tab {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+      }
+      .nsc-fb-exp-tab.is-active { color: var(--nsc-accent); background: var(--nsc-bg-card); }
+      .nsc-fb-exp-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+        gap: 4px; padding: 8px 10px; max-height: 175px; overflow-y: auto;
+      }
+      .nsc-fb-exp-item {
+        width: 40px; height: 40px; padding: 3px; border: none; border-radius: 7px;
+        background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      }
+      .nsc-fb-exp-item:hover { background: var(--nsc-accent-soft); }
+      .nsc-fb-exp-item img { width: 32px; height: 32px; object-fit: contain; display: block; }
       .nsc-composer-footer,
       .nsc-composer-dock .topic-select {
         display: flex !important; align-items: center !important; justify-content: space-between !important;
@@ -2156,6 +2232,7 @@
               <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
               <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
               <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+              <button type="button" class="nsc-mde-btn" id="nsc-np-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
               <button type="button" class="nsc-nodeimage-btn" data-ni-btn="newpost" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>
             </div>
             <textarea class="nsc-newpost-ta" id="nsc-np-content" placeholder="支持 Markdown 语法，Ctrl + Enter 快捷发布..."></textarea>
@@ -2280,6 +2357,11 @@
     });
 
     initNodeImageUi(npBackdrop);
+    const npEditorEl = npBackdrop.querySelector(".nsc-newpost-editor");
+    if (npEditorEl) {
+      npEditorEl.style.position = "relative";
+      attachStickerPicker(npBackdrop.querySelector("#nsc-np-exp-btn"), npContent, npEditorEl);
+    }
 
     shell.querySelector("#nsc-feed-search").addEventListener("input", (e) => {
       state.searchKeyword = e.target.value.trim().toLowerCase();
@@ -2323,10 +2405,66 @@
   }
 
 
+  function attachStickerPicker(btnEl, textareaEl, hostEl) {
+    if (!btnEl || !textareaEl || !hostEl) return;
+    const pop = document.createElement("div");
+    pop.className = "nsc-fb-exp-pop";
+    let activeId = STICKER_GROUPS[0].id;
+    pop.innerHTML = `
+      <div class="nsc-fb-exp-tabs">
+        ${STICKER_GROUPS.map((g) => `<button type="button" class="nsc-fb-exp-tab ${g.id === activeId ? "is-active" : ""}" data-sg="${g.id}">${g.label}</button>`).join("")}
+      </div>
+      <div class="nsc-fb-exp-grid"></div>
+    `;
+    const grid = pop.querySelector(".nsc-fb-exp-grid");
+    const renderStickers = (gid) => {
+      activeId = gid;
+      pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => t.classList.toggle("is-active", t.dataset.sg === gid));
+      const grp = STICKER_GROUPS.find((g) => g.id === gid) || STICKER_GROUPS[0];
+      grid.innerHTML = "";
+      for (const file of grp.files) {
+        const codeNum = file.replace(/\.[^.]+$/, "");
+        const shortcode = `:${grp.id}${codeNum}:`;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "nsc-fb-exp-item";
+        b.title = shortcode;
+        b.innerHTML = `<img src="/static/image/sticker/${grp.id}/${file}" loading="lazy" alt="${shortcode}" />`;
+        b.addEventListener("click", () => {
+          const s = textareaEl.selectionStart || 0;
+          const e = textareaEl.selectionEnd || 0;
+          textareaEl.setRangeText(shortcode, s, e, "end");
+          textareaEl.dispatchEvent(new Event("input", { bubbles: true }));
+          pop.classList.remove("is-open");
+          textareaEl.focus({ preventScroll: true });
+        });
+        grid.appendChild(b);
+      }
+    };
+    pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => {
+      t.addEventListener("click", (e) => {
+        e.stopPropagation();
+        renderStickers(t.dataset.sg);
+      });
+    });
+    btnEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!grid.hasChildNodes()) renderStickers(activeId);
+      pop.classList.toggle("is-open");
+    });
+    document.addEventListener("click", (e) => {
+      if (!pop.contains(e.target) && e.target !== btnEl && !btnEl.contains(e.target)) {
+        pop.classList.remove("is-open");
+      }
+    });
+    hostEl.appendChild(pop);
+  }
+
   function buildFallbackComposer() {
     const box = document.createElement("div");
     box.className = "nsc-composer-box";
     box.id = "nsc-fallback-composer";
+    box.style.position = "relative";
     box.innerHTML = `
       <div class="nsc-mde-toolbar" style="border-radius:10px 10px 0 0;background:var(--nsc-hover);">
         <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
@@ -2336,6 +2474,7 @@
         <button type="button" class="nsc-mde-btn" data-wrap="\`" title="代码">&lt;/&gt;</button>
         <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
         <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+        <button type="button" class="nsc-mde-btn" id="nsc-fb-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
       </div>
       <textarea class="nsc-fallback-textarea" id="nsc-fallback-ta" placeholder="输入评论内容，支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布"></textarea>
       <div class="nsc-composer-footer">
@@ -2349,6 +2488,7 @@
     box.querySelector("#nsc-fb-ni-btn").addEventListener("click", () => openNodeImageModal("chat"));
     NodeImage.syncDots();
     const ta = box.querySelector("#nsc-fallback-ta");
+    attachStickerPicker(box.querySelector("#nsc-fb-exp-btn"), ta, box);
     box.querySelectorAll(".nsc-mde-btn").forEach((b) => {
       b.addEventListener("click", () => {
         const s = ta.selectionStart || 0;

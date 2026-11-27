@@ -67,7 +67,43 @@
     bell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
     trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
     theme: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>`,
+    smile: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
   };
+
+  const STICKER_GROUPS = [
+    {
+      id: "ac",
+      label: "AC娘",
+      files: [
+        "01.png","02.png","03.png","04.png","05.png","06.png","07.png","08.png","09.png","10.png",
+        "11.png","12.png","13.png","14.png","15.png","16.png","17.png","18.png","19.png","20.png",
+        "21.png","22.png","23.png","24.png","25.png","26.png","27.png","28.png","29.png","30.png",
+        "31.png","32.png","33.png","34.png","35.png","36.png","37.png","38.png","39.png","40.png",
+        "41.png","42.png","43.png","44.png","45.png","46.png","47.png","48.png","49.png","50.png",
+        "51.png","52.png","53.png","54.png",
+      ],
+    },
+    {
+      id: "yct",
+      label: "洋葱头",
+      files: Array.from({ length: 22 }, (_, i) => `${String(i + 1).padStart(3, "0")}.gif`),
+    },
+    {
+      id: "xhj",
+      label: "小黄鸡",
+      files: [
+        "001.png","002.png","003.png","004.gif","005.png","006.png","007.png","008.gif",
+        "009.gif","010.gif","011.png","012.gif","013.gif","014.gif","015.gif","016.gif",
+        "017.gif","018.gif","019.gif","020.gif","021.gif","022.png","023.gif","024.png",
+        "025.png","026.gif","027.gif","028.gif","029.gif","030.gif","031.png","032.png",
+      ],
+    },
+    {
+      id: "emoji",
+      label: "Fluent",
+      files: Array.from({ length: 49 }, (_, i) => `${String(i).padStart(2, "0")}.png`),
+    },
+  ];
 
   const CHANNELS = [
     { id: "home", name: "首页", icon: ICONS.home, path: "/", group: "browse" },

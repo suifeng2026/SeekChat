@@ -581,14 +581,54 @@
         padding: 8px 11px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板改为贴底悬浮层，彻底消除点击表情时的布局跳动与闪烁 */
+      /* 表情面板改为贴底悬浮层，缩小贴图网格，彻底消除点击表情时的布局跳动与闪烁 */
       .nsc-composer-dock .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 10px !important; right: 10px !important;
-        z-index: 260 !important; max-height: 210px !important; overflow-y: auto !important;
+        z-index: 260 !important; max-height: 205px !important; overflow-y: auto !important;
+        padding: 8px 10px !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
       }
+      .nsc-composer-dock .exp-container img,
+      .nsc-composer-dock .exp-container video {
+        width: 34px !important; height: 34px !important; max-width: 34px !important; max-height: 34px !important;
+        object-fit: contain !important; display: block !important;
+      }
+      .nsc-composer-dock .exp-container > *,
+      .nsc-composer-dock .exp-container .exp-list > *,
+      .nsc-composer-dock .exp-container span,
+      .nsc-composer-dock .exp-container button,
+      .nsc-composer-dock .exp-container a {
+        padding: 3px !important; margin: 2px !important; border-radius: 7px !important;
+      }
+      .nsc-mde-btn svg { width: 14px; height: 14px; }
+      .nsc-fb-exp-pop {
+        position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; z-index: 260;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+        display: none; flex-direction: column; overflow: hidden;
+      }
+      .nsc-fb-exp-pop.is-open { display: flex; }
+      .nsc-fb-exp-tabs {
+        display: flex; align-items: center; gap: 4px; padding: 5px 10px;
+        border-bottom: 1px solid var(--nsc-border); background: var(--nsc-hover);
+      }
+      .nsc-fb-exp-tab {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+      }
+      .nsc-fb-exp-tab.is-active { color: var(--nsc-accent); background: var(--nsc-bg-card); }
+      .nsc-fb-exp-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+        gap: 4px; padding: 8px 10px; max-height: 175px; overflow-y: auto;
+      }
+      .nsc-fb-exp-item {
+        width: 40px; height: 40px; padding: 3px; border: none; border-radius: 7px;
+        background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      }
+      .nsc-fb-exp-item:hover { background: var(--nsc-accent-soft); }
+      .nsc-fb-exp-item img { width: 32px; height: 32px; object-fit: contain; display: block; }
       .nsc-composer-footer,
       .nsc-composer-dock .topic-select {
         display: flex !important; align-items: center !important; justify-content: space-between !important;

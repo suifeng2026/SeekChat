@@ -285,6 +285,7 @@
               <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
               <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
               <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+              <button type="button" class="nsc-mde-btn" id="nsc-np-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
               <button type="button" class="nsc-nodeimage-btn" data-ni-btn="newpost" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>
             </div>
             <textarea class="nsc-newpost-ta" id="nsc-np-content" placeholder="支持 Markdown 语法，Ctrl + Enter 快捷发布..."></textarea>
@@ -409,6 +410,11 @@
     });
 
     initNodeImageUi(npBackdrop);
+    const npEditorEl = npBackdrop.querySelector(".nsc-newpost-editor");
+    if (npEditorEl) {
+      npEditorEl.style.position = "relative";
+      attachStickerPicker(npBackdrop.querySelector("#nsc-np-exp-btn"), npContent, npEditorEl);
+    }
 
     shell.querySelector("#nsc-feed-search").addEventListener("input", (e) => {
       state.searchKeyword = e.target.value.trim().toLowerCase();
@@ -452,10 +458,66 @@
   }
 
 
+  function attachStickerPicker(btnEl, textareaEl, hostEl) {
+    if (!btnEl || !textareaEl || !hostEl) return;
+    const pop = document.createElement("div");
+    pop.className = "nsc-fb-exp-pop";
+    let activeId = STICKER_GROUPS[0].id;
+    pop.innerHTML = `
+      <div class="nsc-fb-exp-tabs">
+        ${STICKER_GROUPS.map((g) => `<button type="button" class="nsc-fb-exp-tab ${g.id === activeId ? "is-active" : ""}" data-sg="${g.id}">${g.label}</button>`).join("")}
+      </div>
+      <div class="nsc-fb-exp-grid"></div>
+    `;
+    const grid = pop.querySelector(".nsc-fb-exp-grid");
+    const renderStickers = (gid) => {
+      activeId = gid;
+      pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => t.classList.toggle("is-active", t.dataset.sg === gid));
+      const grp = STICKER_GROUPS.find((g) => g.id === gid) || STICKER_GROUPS[0];
+      grid.innerHTML = "";
+      for (const file of grp.files) {
+        const codeNum = file.replace(/\.[^.]+$/, "");
+        const shortcode = `:${grp.id}${codeNum}:`;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "nsc-fb-exp-item";
+        b.title = shortcode;
+        b.innerHTML = `<img src="/static/image/sticker/${grp.id}/${file}" loading="lazy" alt="${shortcode}" />`;
+        b.addEventListener("click", () => {
+          const s = textareaEl.selectionStart || 0;
+          const e = textareaEl.selectionEnd || 0;
+          textareaEl.setRangeText(shortcode, s, e, "end");
+          textareaEl.dispatchEvent(new Event("input", { bubbles: true }));
+          pop.classList.remove("is-open");
+          textareaEl.focus({ preventScroll: true });
+        });
+        grid.appendChild(b);
+      }
+    };
+    pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => {
+      t.addEventListener("click", (e) => {
+        e.stopPropagation();
+        renderStickers(t.dataset.sg);
+      });
+    });
+    btnEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!grid.hasChildNodes()) renderStickers(activeId);
+      pop.classList.toggle("is-open");
+    });
+    document.addEventListener("click", (e) => {
+      if (!pop.contains(e.target) && e.target !== btnEl && !btnEl.contains(e.target)) {
+        pop.classList.remove("is-open");
+      }
+    });
+    hostEl.appendChild(pop);
+  }
+
   function buildFallbackComposer() {
     const box = document.createElement("div");
     box.className = "nsc-composer-box";
     box.id = "nsc-fallback-composer";
+    box.style.position = "relative";
     box.innerHTML = `
       <div class="nsc-mde-toolbar" style="border-radius:10px 10px 0 0;background:var(--nsc-hover);">
         <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
@@ -465,6 +527,7 @@
         <button type="button" class="nsc-mde-btn" data-wrap="\`" title="代码">&lt;/&gt;</button>
         <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
         <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+        <button type="button" class="nsc-mde-btn" id="nsc-fb-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
       </div>
       <textarea class="nsc-fallback-textarea" id="nsc-fallback-ta" placeholder="输入评论内容，支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布"></textarea>
       <div class="nsc-composer-footer">
@@ -478,6 +541,7 @@
     box.querySelector("#nsc-fb-ni-btn").addEventListener("click", () => openNodeImageModal("chat"));
     NodeImage.syncDots();
     const ta = box.querySelector("#nsc-fallback-ta");
+    attachStickerPicker(box.querySelector("#nsc-fb-exp-btn"), ta, box);
     box.querySelectorAll(".nsc-mde-btn").forEach((b) => {
       b.addEventListener("click", () => {
         const s = ta.selectionStart || 0;
