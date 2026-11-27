@@ -1105,6 +1105,21 @@
           body.innerHTML = `<div class="nsc-empty-state">暂无通知记录</div>`;
           return;
         }
+        const srvUnread = Number(state.unreadCounts[state.hubNotifSub === "at-me" ? "atMe" : "reply"]) || 0;
+        const visUnread = st.items.filter((x) => !x.viewed).length;
+        if (srvUnread > 0 && visUnread === 0) {
+          const hint = document.createElement("div");
+          hint.style.cssText =
+            "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;margin-bottom:8px;border-radius:9px;background:var(--nsc-accent-soft);font-size:12px;color:var(--nsc-accent);";
+          hint.innerHTML = `<span>服务端仍有 ${srvUnread} 条较早未读（超出列表展示范围）</span>`;
+          const clrBtn = document.createElement("button");
+          clrBtn.type = "button";
+          clrBtn.className = "nsc-mini-btn";
+          clrBtn.textContent = "全部标为已读";
+          clrBtn.addEventListener("click", () => markNotificationViewed(state.hubNotifSub, 0, true));
+          hint.appendChild(clrBtn);
+          body.appendChild(hint);
+        }
         st.items.forEach((it) => {
           const row = document.createElement("div");
           row.className = "nsc-hub-row" + (it.viewed ? " is-read" : "");

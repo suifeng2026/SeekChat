@@ -28,6 +28,7 @@
       }
 
       body.nsc-app-active.dark-layout {
+        color-scheme: dark;
         --nsc-bg-nav: rgba(42, 45, 53, 0.88);
         --nsc-bg-list: rgba(33, 36, 42, 0.94);
         --nsc-bg-chat: rgba(27, 29, 35, 0.96);
@@ -36,7 +37,7 @@
         --nsc-bubble-other: #2f333d;
         --nsc-bubble-self: #0a84ff;
         --nsc-bubble-self-text: #ffffff;
-        --nsc-bubble-op: #362f23;
+        --nsc-bubble-op: #342e23;
         --nsc-thread-bg: rgba(38, 41, 49, 0.92);
         --nsc-quote-bg: rgba(255, 255, 255, 0.075);
         --nsc-border: rgba(255, 255, 255, 0.105);
@@ -54,55 +55,84 @@
           #13151a !important;
       }
       body.nsc-app-active.dark-layout header {
-        background: rgba(30, 32, 38, 0.86) !important;
+        background: rgba(30, 32, 38, 0.88) !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
       }
+      body.nsc-app-active.dark-layout .nsc-bubble a { color: #64b5ff; }
+      body.nsc-app-active.dark-layout .nsc-bubble code:not(pre code) {
+        background: rgba(255, 255, 255, 0.10); color: #e5e7eb; padding: 1px 5px; border-radius: 5px;
+      }
+      body.nsc-app-active.dark-layout .CodeMirror-cursor { border-left-color: #f2f2f7 !important; }
+      body.nsc-app-active.dark-layout .CodeMirror-selected { background: rgba(10, 132, 255, 0.30) !important; }
+      body.nsc-app-active.dark-layout .nsc-msg.is-self .nsc-bubble,
+      body.nsc-app-active.dark-layout .nsc-thread-item.is-self-thread .nsc-thread-content {
+        background: linear-gradient(180deg, #1a8cff 0%, #006ee6 100%);
+      }
+      body.nsc-app-active.dark-layout .nsc-op-pill { background: rgba(255, 159, 10, 0.18); color: #ffb340; }
+      body.nsc-app-active.dark-layout .nsc-pin-pill { background: rgba(255, 69, 58, 0.18); color: #ff6961; }
+      body.nsc-app-active.dark-layout .nsc-react-pill.is-leg { color: #ffb340; }
+      body.nsc-app-active.dark-layout .nsc-react-pill.is-dislike { color: #ff6961; }
 
       body.nsc-app-active.nsc-theme-dusk {
-        --nsc-bg-nav: rgba(231, 219, 199, 0.90);
-        --nsc-bg-list: rgba(244, 236, 222, 0.95);
-        --nsc-bg-chat: rgba(238, 229, 212, 0.95);
-        --nsc-bg-right: rgba(244, 236, 222, 0.95);
-        --nsc-bg-card: #fbf6ec;
-        --nsc-bubble-other: #fbf6ec;
-        --nsc-bubble-self: #3568c4;
+        color-scheme: light;
+        --nsc-bg-nav: rgba(232, 221, 203, 0.92);
+        --nsc-bg-list: rgba(244, 236, 223, 0.96);
+        --nsc-bg-chat: rgba(239, 230, 214, 0.96);
+        --nsc-bg-right: rgba(244, 236, 223, 0.96);
+        --nsc-bg-card: #faf4e8;
+        --nsc-bubble-other: #faf4e8;
+        --nsc-bubble-self: #44689e;
         --nsc-bubble-self-text: #ffffff;
-        --nsc-bubble-op: #fdf0d5;
-        --nsc-thread-bg: rgba(227, 216, 197, 0.88);
-        --nsc-quote-bg: rgba(120, 88, 52, 0.08);
+        --nsc-bubble-op: #f9ebd0;
+        --nsc-thread-bg: rgba(228, 217, 198, 0.90);
+        --nsc-quote-bg: rgba(120, 88, 52, 0.085);
         --nsc-border: rgba(115, 86, 52, 0.14);
-        --nsc-text: #382f25;
-        --nsc-muted: #786958;
-        --nsc-accent: #c86d1f;
-        --nsc-accent-soft: rgba(200, 109, 31, 0.14);
+        --nsc-text: #3a3025;
+        --nsc-muted: #7b6b59;
+        --nsc-accent: #b8621c;
+        --nsc-accent-soft: rgba(184, 98, 28, 0.13);
         --nsc-green: #2f9e44;
         --nsc-hover: rgba(120, 88, 52, 0.075);
-        --nsc-active-item: rgba(200, 109, 31, 0.15);
-        --nsc-shadow: 0 22px 60px rgba(72, 48, 24, 0.16), 0 0 0 1px rgba(115, 86, 52, 0.12);
+        --nsc-active-item: rgba(184, 98, 28, 0.15);
+        --nsc-shadow: 0 22px 60px rgba(72, 48, 24, 0.15), 0 0 0 1px rgba(115, 86, 52, 0.12);
         background:
-          radial-gradient(ellipse at 20% 0%, rgba(245, 158, 11, 0.11), transparent 55%),
-          radial-gradient(ellipse at 85% 92%, rgba(217, 119, 6, 0.08), transparent 55%),
-          #ddd0ba !important;
-        color: #382f25 !important;
+          radial-gradient(ellipse at 20% 0%, rgba(245, 158, 11, 0.10), transparent 55%),
+          radial-gradient(ellipse at 85% 92%, rgba(217, 119, 6, 0.07), transparent 55%),
+          #ded1bc !important;
+        color: #3a3025 !important;
       }
       body.nsc-app-active.nsc-theme-dusk header {
-        background: rgba(236, 225, 206, 0.90) !important;
+        background: rgba(236, 225, 207, 0.92) !important;
         border-bottom: 1px solid rgba(115, 86, 52, 0.14) !important;
-        color: #382f25 !important;
+        color: #3a3025 !important;
+      }
+      body.nsc-app-active.nsc-theme-dusk #nsk-head a,
+      body.nsc-app-active.nsc-theme-dusk #nsk-head .title-text,
+      body.nsc-app-active.nsc-theme-dusk #nsk-head .color-theme-switcher {
+        color: #4a3d2f !important;
+      }
+      body.nsc-app-active.nsc-theme-dusk #nsk-head .search-box input {
+        background: rgba(250, 244, 232, 0.85) !important;
+        border-color: rgba(115, 86, 52, 0.18) !important;
+        color: #3a3025 !important;
       }
       body.nsc-app-active.nsc-theme-dusk .nsc-msg.is-self .nsc-bubble,
       body.nsc-app-active.nsc-theme-dusk .nsc-thread-item.is-self-thread .nsc-thread-content {
-        background: linear-gradient(180deg, #4378d6 0%, #2f62bf 100%);
-        box-shadow: 0 2px 8px rgba(47, 98, 191, 0.22);
+        background: linear-gradient(180deg, #5177ad 0%, #3d6094 100%);
+        box-shadow: 0 2px 8px rgba(61, 96, 148, 0.22);
       }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse { color: #b45309; }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse.is-active { background: #c86d1f; color: #fff; }
-      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(200, 109, 31, 0.14); color: #b45309; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse { color: #a85513; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse.is-active { background: #b8621c; color: #fff; box-shadow: 0 2px 8px rgba(184, 98, 28, 0.25); }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(184, 98, 28, 0.14); color: #a85513; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg { color: #c2497a; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg.is-active { background: linear-gradient(135deg, #d66793, #bf4777); }
+      body.nsc-app-active.nsc-theme-dusk .nsc-bubble a { color: #355c96; }
+      body.nsc-app-active.nsc-theme-dusk .nsc-lv-pill { background: rgba(68, 104, 158, 0.12); color: #3d6094; }
 
       #nsc-mode-switch-btn {
         font-family: var(--mac-font);
-        display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 11px; margin-left: 8px;
-        border-radius: 999px; border: 1px solid var(--nsc-border);
+        display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; margin-left: 8px;
+        border-radius: 7px; border: 1px solid var(--nsc-border);
         background: var(--nsc-accent-soft); color: var(--nsc-accent);
         font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
       }
@@ -358,26 +388,29 @@
       .nsc-chat-title-wrap { min-width: 0; flex: 1 1 200px; }
       .nsc-chat-title { font-size: 14.5px; font-weight: 700; color: var(--nsc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .nsc-chat-subtitle { font-size: 11px; color: var(--nsc-muted); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+      .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
       .nsc-pill-btn {
-        padding: 4px 10px; border-radius: 999px; border: 1px solid var(--nsc-border);
-        background: var(--nsc-bg-card); color: var(--nsc-text); font-size: 11px; font-weight: 500; cursor: pointer;
-        display: inline-flex; align-items: center; gap: 4px; transition: all 0.12s ease;
+        padding: 4px 8px; border-radius: 7px; border: 1px solid transparent;
+        background: transparent; color: var(--nsc-muted); font-size: 11.5px; font-weight: 500; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 4px; transition: background 0.12s ease, color 0.12s ease;
       }
-      .nsc-pill-btn svg { width: 12px; height: 12px; flex: 0 0 12px; }
-      .nsc-pill-btn:hover { border-color: var(--nsc-accent); color: var(--nsc-accent); }
-      .nsc-pill-btn.is-active { background: var(--nsc-accent); border-color: var(--nsc-accent); color: #fff; }
-      .nsc-pill-btn.is-collect.is-active { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.45); color: #d97706; }
+      .nsc-pill-btn svg { width: 12.5px; height: 12.5px; flex: 0 0 12.5px; }
+      .nsc-pill-btn:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-pill-btn.is-active { background: var(--nsc-accent-soft); color: var(--nsc-accent); font-weight: 600; }
+      .nsc-pill-btn.is-collect.is-active { background: rgba(245, 158, 11, 0.15); color: #d97706; font-weight: 600; }
+      .nsc-pill-btn.is-collect.is-active svg { fill: currentColor; }
 
       .nsc-floor-jump-box {
         display: inline-flex; align-items: center; border: 1px solid var(--nsc-border);
-        border-radius: 999px; background: var(--nsc-bg-card); padding: 1px 4px 1px 9px; gap: 3px;
+        border-radius: 7px; background: var(--nsc-hover); padding: 1px 3px 1px 8px; gap: 3px;
+        margin-right: 2px;
       }
-      .nsc-floor-jump-input { width: 46px; border: none; background: transparent; color: var(--nsc-text); font-size: 11px; outline: none; }
+      .nsc-floor-jump-input { width: 44px; border: none; background: transparent; color: var(--nsc-text); font-size: 11px; outline: none; }
       .nsc-floor-jump-btn {
-        border: none; background: var(--nsc-accent-soft); color: var(--nsc-accent);
-        font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 2px 8px; cursor: pointer;
+        border: none; background: transparent; color: var(--nsc-accent);
+        font-size: 11px; font-weight: 600; border-radius: 5px; padding: 2px 6px; cursor: pointer;
       }
+      .nsc-floor-jump-btn:hover { background: var(--nsc-accent-soft); }
 
       .nsc-chat-messages {
         flex: 1; overflow-y: auto; padding: 14px 18px 18px;
@@ -536,13 +569,13 @@
       .nsc-msg.is-self a.nsc-floor-ref { background: rgba(255,255,255,0.22); color: #fff !important; }
       a.nsc-floor-ref:hover { text-decoration: underline !important; }
 
-      /* TG 风格：赞/鸡腿/踩/评论有数据时直接显示紧凑 Reaction 药丸 */
-      .nsc-reactions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+      /* TG / macOS 风格：赞/鸡腿/踩/评论有数据时直接显示轻质紧凑徽章 */
+      .nsc-reactions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
       .nsc-reactions:empty { display: none; }
       .nsc-react-pill {
-        display: inline-flex; align-items: center; gap: 4px;
-        padding: 2px 8px; border-radius: 999px;
-        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card);
+        display: inline-flex; align-items: center; gap: 3.5px;
+        padding: 2px 7px; border-radius: 7px;
+        border: 1px solid transparent; background: var(--nsc-hover);
         color: var(--nsc-muted); font-size: 11px; font-weight: 600; cursor: pointer;
         transition: all 0.14s ease;
       }
@@ -786,8 +819,8 @@
       }
       .nsc-send-btn,
       .nsc-composer-dock .topic-select .submit.btn {
-        height: 23px !important; padding: 0 13px !important; font-size: 11.5px !important; font-weight: 600 !important;
-        border-radius: 999px !important; background: var(--nsc-accent) !important; color: #fff !important;
+        height: 23px !important; padding: 0 12px !important; font-size: 11.5px !important; font-weight: 600 !important;
+        border-radius: 7px !important; background: var(--nsc-accent) !important; color: #fff !important;
         border: none !important; cursor: pointer;
       }
       .nsc-send-btn:disabled { opacity: 0.5; cursor: wait; }
@@ -1063,11 +1096,11 @@
       .nsc-profile-btns button.danger { color: #ff3b30; border-color: rgba(255,59,48,0.35); }
 
       .nsc-newpost-btn {
-        border: none; border-radius: 999px;
+        border: none; border-radius: 7px;
         background: var(--nsc-accent); color: #fff;
-        font-size: 11.5px; font-weight: 600; padding: 3px 10px;
+        font-size: 11.5px; font-weight: 600; padding: 3px 9px;
         cursor: pointer; display: inline-flex; align-items: center; gap: 3px;
-        box-shadow: 0 2px 6px rgba(0, 122, 255, 0.25); transition: filter 0.14s ease;
+        box-shadow: 0 1px 4px rgba(0, 122, 255, 0.22); transition: filter 0.14s ease;
       }
       .nsc-newpost-btn:hover { filter: brightness(1.08); }
 

@@ -503,11 +503,11 @@
     });
     actionsEl.appendChild(jumpBox);
 
-    const addBtn = (text, active, onClick) => {
+    const addBtn = (text, active, onClick, iconHtml = "") => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "nsc-pill-btn" + (active ? " is-active" : "");
-      b.textContent = text;
+      b.innerHTML = `${iconHtml}<span>${text}</span>`;
       b.addEventListener("click", () => onClick(b));
       actionsEl.appendChild(b);
       return b;
@@ -534,8 +534,28 @@
     }
 
     if (room.opObj && state.currentUser && room.opObj.author === state.currentUser) {
-      addBtn("编辑主题", false, () => openEditModal(room.opObj, true));
+      addBtn("编辑主题", false, () => openEditModal(room.opObj, true), ICONS.edit);
     }
+
+    addBtn("只看楼主", state.onlyOp, (b) => {
+      state.onlyOp = !state.onlyOp;
+      state.onlyMember = "";
+      b.classList.toggle("is-active", state.onlyOp);
+      applyMessageFilters();
+    }, ICONS.opOnly);
+
+    addBtn(state.threadsCollapsed ? "展开楼中楼" : "收起楼中楼", state.threadsCollapsed, (b) => {
+      state.threadsCollapsed = !state.threadsCollapsed;
+      const lbl = b.querySelector("span");
+      if (lbl) lbl.textContent = state.threadsCollapsed ? "展开楼中楼" : "收起楼中楼";
+      b.classList.toggle("is-active", state.threadsCollapsed);
+      for (const w of msgsEl.querySelectorAll(".nsc-thread-wrap")) {
+        w.classList.toggle("is-collapsed", state.threadsCollapsed);
+      }
+      for (const t of msgsEl.querySelectorAll(".nsc-thread-toggle")) {
+        t.textContent = state.threadsCollapsed ? `展开 ${t.dataset.count} 条楼中楼` : `收起 ${t.dataset.count} 条楼中楼`;
+      }
+    }, ICONS.layers);
 
     const isCollected = state.collectedSet.has(String(room.pid));
     const colBtn = document.createElement("button");
@@ -546,25 +566,6 @@
     colBtn.title = isCollected ? "点击取消收藏该帖子" : "点击收藏该帖子";
     colBtn.addEventListener("click", () => togglePostCollection(room.pid, colBtn));
     actionsEl.appendChild(colBtn);
-
-    addBtn("只看楼主", state.onlyOp, (b) => {
-      state.onlyOp = !state.onlyOp;
-      state.onlyMember = "";
-      b.classList.toggle("is-active", state.onlyOp);
-      applyMessageFilters();
-    });
-
-    addBtn(state.threadsCollapsed ? "展开楼中楼" : "收起楼中楼", state.threadsCollapsed, (b) => {
-      state.threadsCollapsed = !state.threadsCollapsed;
-      b.textContent = state.threadsCollapsed ? "展开楼中楼" : "收起楼中楼";
-      b.classList.toggle("is-active", state.threadsCollapsed);
-      for (const w of msgsEl.querySelectorAll(".nsc-thread-wrap")) {
-        w.classList.toggle("is-collapsed", state.threadsCollapsed);
-      }
-      for (const t of msgsEl.querySelectorAll(".nsc-thread-toggle")) {
-        t.textContent = state.threadsCollapsed ? `展开 ${t.dataset.count} 条楼中楼` : `收起 ${t.dataset.count} 条楼中楼`;
-      }
-    });
 
     syncComposerMode(room.isNativePage);
 

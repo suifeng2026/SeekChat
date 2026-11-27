@@ -271,16 +271,10 @@
     store.error = null;
     if (state.activeChannel === kind) renderTopicList();
 
-    const endpoint = kind === "at-me" ? "/api/notification/at-me/list" : "/api/notification/reply-to-me/list";
-    try {
-      const resp = await fetch(endpoint, {
-        headers: { Accept: "application/json, text/plain, */*" },
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      const raw = Array.isArray(json.data) ? json.data : Array.isArray(json.notifications) ? json.notifications : [];
-      store.items = raw.map((it) => {
+    const endpointBase = kind === "at-me" ? "/api/notification/at-me/list" : "/api/notification/reply-to-me/list";
+    const countKey = kind === "at-me" ? "atMe" : "reply";
+    const mapItems = (raw) =>
+      raw.map((it) => {
         const uid = String(it.commenter_id || it.member_id || it.uid || "");
         const postId = String(it.post_id || "");
         const floorId = Number(it.floor_id) || 0;
@@ -298,6 +292,37 @@
           viewed: it.viewed === 1 || it.viewed === true,
         };
       });
+
+    try {
+      const merged = [];
+      const seenKeys = new Set();
+      for (let page = 1; page <= 3; page++) {
+        const resp = await fetch(`${endpointBase}${page > 1 ? `?page=${page}` : ""}`, {
+          headers: { Accept: "application/json, text/plain, */*" },
+          credentials: "include",
+        });
+        if (!resp.ok) {
+          if (page === 1) throw new Error(`HTTP ${resp.status}`);
+          break;
+        }
+        const json = await resp.json();
+        const raw = Array.isArray(json.data) ? json.data : Array.isArray(json.notifications) ? json.notifications : [];
+        if (raw.length === 0) break;
+        const pageItems = mapItems(raw);
+        let added = 0;
+        for (const it of pageItems) {
+          const k = `${it.id}:${it.postId}:${it.floorId}`;
+          if (!seenKeys.has(k)) {
+            seenKeys.add(k);
+            merged.push(it);
+            added++;
+          }
+        }
+        const localUnread = merged.filter((x) => !x.viewed).length;
+        const serverUnread = Number(state.unreadCounts[countKey]) || 0;
+        if (added === 0 || serverUnread === 0 || localUnread >= serverUnread || raw.length < 20) break;
+      }
+      store.items = merged;
       store.loaded = true;
     } catch (err) {
       store.error = err.message;
@@ -332,38 +357,44 @@
     }
 
     try {
-      const url = all ? `${api}?all=true` : api;
-      const payloads = all
-        ? [{}]
-        : kind === "at-me"
-          ? [{ atMe: [numId] }, { ids: [numId] }, { id: numId }]
-          : [{ replyToMe: [numId] }, { reply: [numId] }, { ids: [numId] }, { id: numId }];
-
       if (!all && !numId) return;
-
       let ok = false;
-      for (const body of payloads) {
-        const resp = await fetch(url, {
-          method: "POST",
-          credentials: "include",
-          headers: getNodeSeekPostHeaders(),
-          body: JSON.stringify(body),
-        });
-        const resJson = await resp.json().catch(() => null);
-        if (resp.ok && (!resJson || resJson.success !== false)) {
-          ok = true;
-          break;
+      if (all) {
+        const attempts = [
+          () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: { Accept: "application/json, text/plain, */*" } }),
+          () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: "{}" }),
+          () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ all: true }) }),
+        ];
+        for (const run of attempts) {
+          const resp = await run();
+          const resJson = await resp.json().catch(() => null);
+          if (resp.ok && (!resJson || resJson.success !== false)) {
+            ok = true;
+            break;
+          }
+        }
+      } else {
+        const payloads = kind === "at-me"
+          ? [{ atMe: [numId] }, { idList: [numId] }, { ids: [numId] }, { id: numId }]
+          : [{ replyToMe: [numId] }, { reply: [numId] }, { idList: [numId] }, { ids: [numId] }, { id: numId }];
+        for (const body of payloads) {
+          const resp = await fetch(api, {
+            method: "POST",
+            credentials: "include",
+            headers: getNodeSeekPostHeaders(),
+            body: JSON.stringify(body),
+          });
+          const resJson = await resp.json().catch(() => null);
+          if (resp.ok && (!resJson || resJson.success !== false)) {
+            ok = true;
+            break;
+          }
         }
       }
 
       if (ok) {
         setTimeout(async () => {
           await fetchUnreadCounts();
-          if (all) {
-            state.unreadCounts[countKey] = 0;
-            renderLeftNav();
-            syncUserCardNotifyBadge();
-          }
           if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
         }, 350);
       }
@@ -1206,6 +1237,21 @@
         return;
       }
       scrollEl.innerHTML = "";
+      const srvUnread = Number(state.unreadCounts[kind === "at-me" ? "atMe" : "reply"]) || 0;
+      const visibleUnread = list.filter((x) => !x.viewed).length;
+      if (srvUnread > 0 && visibleUnread === 0) {
+        const hint = document.createElement("div");
+        hint.style.cssText =
+          "display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 9px;margin:2px 2px 6px;border-radius:8px;background:var(--nsc-accent-soft);font-size:11px;color:var(--nsc-accent);";
+        hint.innerHTML = `<span>服务端仍有 ${srvUnread} 条较早未读</span>`;
+        const clrBtn = document.createElement("button");
+        clrBtn.type = "button";
+        clrBtn.className = "nsc-mini-btn";
+        clrBtn.textContent = "全部标为已读";
+        clrBtn.addEventListener("click", () => markNotificationViewed(kind, 0, true));
+        hint.appendChild(clrBtn);
+        scrollEl.appendChild(hint);
+      }
       list.forEach((it) => {
         const rowKey = `${kind}:${it.id}:${it.postId}:${it.floorId}`;
         const row = document.createElement("div");
