@@ -931,22 +931,28 @@
       }
       #nsc-ni-backdrop.is-open { display: flex; }
       .nsc-ni-modal {
-        width: min(560px, 94vw); max-height: 84vh;
+        width: min(820px, 94vw); max-height: 88vh;
         background: var(--nsc-bg-card); color: var(--nsc-text);
         border: 1px solid var(--nsc-border); border-radius: 16px;
         box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
         display: flex; flex-direction: column; overflow: hidden;
       }
       .nsc-ni-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-        gap: 8px; max-height: 300px; overflow-y: auto; padding: 2px;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px; max-height: 52vh; overflow-y: auto; padding: 4px;
       }
       .nsc-ni-card {
-        border: 1px solid var(--nsc-border); border-radius: 8px; overflow: hidden;
+        border: 1px solid var(--nsc-border); border-radius: 10px; overflow: hidden;
         background: var(--nsc-hover); display: flex; flex-direction: column;
+        transition: border-color 0.14s ease, box-shadow 0.14s ease;
       }
-      .nsc-ni-card img { width: 100%; height: 82px; object-fit: cover; cursor: pointer; display: block; }
-      .nsc-ni-card-ops { display: flex; justify-content: space-between; padding: 4px 6px; gap: 4px; font-size: 10.5px; }
+      .nsc-ni-card:hover { border-color: var(--nsc-accent); box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+      .nsc-ni-card img {
+        width: 100%; height: 138px; box-sizing: border-box; padding: 4px;
+        object-fit: contain; cursor: pointer; display: block;
+        background: rgba(128, 128, 128, 0.06); image-rendering: auto;
+      }
+      .nsc-ni-card-ops { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; gap: 6px; font-size: 11px; border-top: 1px solid var(--nsc-border); }
 
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }

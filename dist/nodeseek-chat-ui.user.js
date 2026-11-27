@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.0
+// @version      7.9.1
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -1430,22 +1430,28 @@
       }
       #nsc-ni-backdrop.is-open { display: flex; }
       .nsc-ni-modal {
-        width: min(560px, 94vw); max-height: 84vh;
+        width: min(820px, 94vw); max-height: 88vh;
         background: var(--nsc-bg-card); color: var(--nsc-text);
         border: 1px solid var(--nsc-border); border-radius: 16px;
         box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
         display: flex; flex-direction: column; overflow: hidden;
       }
       .nsc-ni-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-        gap: 8px; max-height: 300px; overflow-y: auto; padding: 2px;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px; max-height: 52vh; overflow-y: auto; padding: 4px;
       }
       .nsc-ni-card {
-        border: 1px solid var(--nsc-border); border-radius: 8px; overflow: hidden;
+        border: 1px solid var(--nsc-border); border-radius: 10px; overflow: hidden;
         background: var(--nsc-hover); display: flex; flex-direction: column;
+        transition: border-color 0.14s ease, box-shadow 0.14s ease;
       }
-      .nsc-ni-card img { width: 100%; height: 82px; object-fit: cover; cursor: pointer; display: block; }
-      .nsc-ni-card-ops { display: flex; justify-content: space-between; padding: 4px 6px; gap: 4px; font-size: 10.5px; }
+      .nsc-ni-card:hover { border-color: var(--nsc-accent); box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+      .nsc-ni-card img {
+        width: 100%; height: 138px; box-sizing: border-box; padding: 4px;
+        object-fit: contain; cursor: pointer; display: block;
+        background: rgba(128, 128, 128, 0.06); image-rendering: auto;
+      }
+      .nsc-ni-card-ops { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; gap: 6px; font-size: 11px; border-top: 1px solid var(--nsc-border); }
 
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
@@ -1794,14 +1800,20 @@
             card.innerHTML = `
               <img src="${directUrl}" loading="lazy" title="点击插入到编辑器" />
               <div class="nsc-ni-card-ops">
-                <button type="button" class="nsc-mini-btn" style="padding:1px 5px;font-size:10px;">插入</button>
-                <button type="button" class="nsc-mini-btn" style="padding:1px 5px;font-size:10px;color:#ff3b30;">删除</button>
+                <button type="button" class="nsc-mini-btn" style="padding:2px 8px;font-size:11px;">插入</button>
+                <div style="display:inline-flex;gap:4px;">
+                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;" title="放大查看">看图</button>
+                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;color:#ff3b30;">删除</button>
+                </div>
               </div>
             `;
             const insFn = () => { NodeImage.insertToTarget(niTargetMode, md); closeNi(); };
             card.querySelector("img").addEventListener("click", insFn);
             card.querySelectorAll("button")[0].addEventListener("click", insFn);
-            card.querySelectorAll("button")[1].addEventListener("click", async () => {
+            card.querySelectorAll("button")[1].addEventListener("click", () => {
+              if (typeof openLightbox === "function") openLightbox(directUrl);
+            });
+            card.querySelectorAll("button")[2].addEventListener("click", async () => {
               if (!im.image_id) return;
               await NodeImage.deleteImage(im.image_id);
               card.remove();
@@ -1823,6 +1835,10 @@
     }
     NodeImage.syncDots();
     niBackdrop.classList.add("is-open");
+    const gridEl = niBackdrop.querySelector("#nsc-ni-grid");
+    if (k && gridEl && !gridEl.hasChildNodes()) {
+      niBackdrop.querySelector("#nsc-ni-load-list").click();
+    }
     if (!k) {
       NodeImage.checkAuth().then((newK) => {
         if (newK && stEl) {

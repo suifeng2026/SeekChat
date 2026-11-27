@@ -333,14 +333,20 @@
             card.innerHTML = `
               <img src="${directUrl}" loading="lazy" title="点击插入到编辑器" />
               <div class="nsc-ni-card-ops">
-                <button type="button" class="nsc-mini-btn" style="padding:1px 5px;font-size:10px;">插入</button>
-                <button type="button" class="nsc-mini-btn" style="padding:1px 5px;font-size:10px;color:#ff3b30;">删除</button>
+                <button type="button" class="nsc-mini-btn" style="padding:2px 8px;font-size:11px;">插入</button>
+                <div style="display:inline-flex;gap:4px;">
+                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;" title="放大查看">看图</button>
+                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;color:#ff3b30;">删除</button>
+                </div>
               </div>
             `;
             const insFn = () => { NodeImage.insertToTarget(niTargetMode, md); closeNi(); };
             card.querySelector("img").addEventListener("click", insFn);
             card.querySelectorAll("button")[0].addEventListener("click", insFn);
-            card.querySelectorAll("button")[1].addEventListener("click", async () => {
+            card.querySelectorAll("button")[1].addEventListener("click", () => {
+              if (typeof openLightbox === "function") openLightbox(directUrl);
+            });
+            card.querySelectorAll("button")[2].addEventListener("click", async () => {
               if (!im.image_id) return;
               await NodeImage.deleteImage(im.image_id);
               card.remove();
@@ -362,6 +368,10 @@
     }
     NodeImage.syncDots();
     niBackdrop.classList.add("is-open");
+    const gridEl = niBackdrop.querySelector("#nsc-ni-grid");
+    if (k && gridEl && !gridEl.hasChildNodes()) {
+      niBackdrop.querySelector("#nsc-ni-load-list").click();
+    }
     if (!k) {
       NodeImage.checkAuth().then((newK) => {
         if (newK && stEl) {
