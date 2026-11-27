@@ -398,10 +398,12 @@
     });
     if (targets.length === 0) {
       renderRightBody();
+      renderUserHubIfOpen();
       return;
     }
     state.batchQuery = { running: true, done: 0, total: targets.length, stopRequested: false };
     renderRightBody();
+    renderUserHubIfOpen();
 
     for (const u of targets) {
       if (state.batchQuery.stopRequested) break;
@@ -409,6 +411,7 @@
       state.batchQuery.done += 1;
       if (state.batchQuery.done % 4 === 0 || state.batchQuery.done === state.batchQuery.total) {
         renderRightBody();
+        renderUserHubIfOpen();
       }
       if (!state.batchQuery.stopRequested && state.batchQuery.done < state.batchQuery.total) {
         await new Promise((r) => setTimeout(r, 260));
@@ -417,6 +420,7 @@
     state.batchQuery.running = false;
     state.batchQuery.stopRequested = false;
     renderRightBody();
+    renderUserHubIfOpen();
   }
 
   function renderUserListPane(container, listItems, storeObj, typeLabel, onRemove) {
@@ -1021,6 +1025,36 @@
           .btn, button[type="submit"] { border-radius: 8px !important; }
         `;
         (idoc.head || idoc.documentElement).appendChild(st);
+        if (state._settingAutoSection) {
+          const targetSec = String(state._settingAutoSection);
+          state._settingAutoSection = "";
+          const trySelectSection = () => {
+            const items = Array.from(idoc.querySelectorAll("#user-setting-panel .selector > div, .selector > div"));
+            const secEl = items.find((el) => (el.textContent || "").trim().includes(targetSec));
+            if (secEl) {
+              secEl.click();
+              const panel = idoc.getElementById("user-setting-panel");
+              if (panel && typeof panel.scrollIntoView === "function") {
+                panel.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+              return true;
+            }
+            return false;
+          };
+          if (!trySelectSection()) {
+            setTimeout(() => {
+              try {
+                if (!trySelectSection()) {
+                  const subbarTip = document.querySelector("#nsc-hub-subbar span");
+                  if (subbarTip) {
+                    subbarTip.textContent = `当前账号可能暂未达到「${targetSec}」所需社区等级，未检测到该入口`;
+                    subbarTip.style.color = "#f59e0b";
+                  }
+                }
+              } catch (_) {}
+            }, 450);
+          }
+        }
       } catch (_) {}
     });
     bodyEl.innerHTML = "";
@@ -1527,7 +1561,41 @@
 
     if (state.hubTab === "credit") {
       const st = state.hubData.credit;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 条鸡腿明细（第 ${st.page || 1} 页）</span>`;
+      const creditSubView = state.registry.hubSubViews && state.registry.hubSubViews.credit;
+      const isAnalytics = Boolean(creditSubView && state.hubCreditView === "analytics");
+
+      if (creditSubView) {
+        const seg = document.createElement("div");
+        seg.className = "nsc-seg-tabs";
+        [
+          { id: "list", label: "明细流水" },
+          { id: "analytics", label: "100页深度统计" },
+        ].forEach((m) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nsc-seg-btn" + ((isAnalytics ? "analytics" : "list") === m.id ? " is-active" : "");
+          b.textContent = m.label;
+          b.addEventListener("click", () => {
+            state.hubCreditView = m.id;
+            renderUserHub();
+          });
+          seg.appendChild(b);
+        });
+        subbar.appendChild(seg);
+      }
+
+      if (isAnalytics) {
+        if (typeof creditSubView.render === "function") creditSubView.render(body, subbar);
+        else if (typeof creditSubView === "function") creditSubView(body, subbar);
+        restoreHubScroll();
+        return;
+      }
+
+      const infoSpan = document.createElement("span");
+      infoSpan.style.cssText = "font-size:12px;color:var(--nsc-muted);";
+      infoSpan.textContent = `已加载 ${st.items.length} 条鸡腿明细（第 ${st.page || 1} 页）`;
+      subbar.appendChild(infoSpan);
+
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
@@ -1586,6 +1654,9 @@
 
     if (state.hubTab === "stardust") {
       const st = state.hubData.stardust;
+      const stardustSubView = state.registry.hubSubViews && state.registry.hubSubViews.stardust;
+      const isAnalytics = Boolean(stardustSubView && state.hubStardustView === "analytics");
+
       const seg = document.createElement("div");
       seg.className = "nsc-seg-tabs";
       [
@@ -1594,17 +1665,39 @@
       ].forEach((m) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (st.mode === m.id ? " is-active" : "");
+        b.className = "nsc-seg-btn" + (!isAnalytics && st.mode === m.id ? " is-active" : "");
         b.textContent = m.label;
-        b.addEventListener("click", () => loadHubStardust(true, m.id));
+        b.addEventListener("click", () => {
+          state.hubStardustView = "list";
+          loadHubStardust(true, m.id);
+        });
         seg.appendChild(b);
       });
+      if (stardustSubView) {
+        const ab = document.createElement("button");
+        ab.type = "button";
+        ab.className = "nsc-seg-btn" + (isAnalytics ? " is-active" : "");
+        ab.textContent = "全量分析";
+        ab.addEventListener("click", () => {
+          state.hubStardustView = "analytics";
+          renderUserHub();
+        });
+        seg.appendChild(ab);
+      }
+      subbar.appendChild(seg);
+
+      if (isAnalytics) {
+        if (typeof stardustSubView.render === "function") stardustSubView.render(body, subbar);
+        else if (typeof stardustSubView === "function") stardustSubView(body, subbar);
+        restoreHubScroll();
+        return;
+      }
+
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
       refBtn.textContent = st.loading ? "加载中..." : "刷新";
       refBtn.addEventListener("click", () => loadHubStardust(true));
-      subbar.appendChild(seg);
       subbar.appendChild(refBtn);
 
       if (st.loading && st.items.length === 0) {
@@ -1669,13 +1762,38 @@
         });
         seg.appendChild(b);
       });
+
+      const ops = document.createElement("div");
+      ops.style.cssText = "display:flex;align-items:center;gap:6px;";
+
+      const sortBtn = document.createElement("button");
+      sortBtn.type = "button";
+      sortBtn.className = "nsc-mini-btn" + (state._hubFansSortByActive ? " is-active" : "");
+      sortBtn.title = "按最后发言时间排序";
+      sortBtn.textContent = "排序";
+      sortBtn.addEventListener("click", () => {
+        state._hubFansSortByActive = !state._hubFansSortByActive;
+        renderUserHub();
+      });
+
+      const batchBtn = document.createElement("button");
+      batchBtn.type = "button";
+      batchBtn.className = "nsc-mini-btn" + (state.batchQuery.running ? " is-active" : "");
+      batchBtn.title = state.batchQuery.running ? "点击停止批量查询" : "一键查询当前列表全部用户的最后发言时间";
+      batchBtn.textContent = state.batchQuery.running ? `${state.batchQuery.done}/${state.batchQuery.total}` : "查询";
+      batchBtn.addEventListener("click", () => runBatchLastSpeakQuery(store.items));
+
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
       refBtn.textContent = store.loading ? "同步中..." : "刷新";
       refBtn.addEventListener("click", () => fetchFansOrFollow(subMode).then(() => renderUserHubIfOpen()));
+
+      ops.appendChild(sortBtn);
+      ops.appendChild(batchBtn);
+      ops.appendChild(refBtn);
       subbar.appendChild(seg);
-      subbar.appendChild(refBtn);
+      subbar.appendChild(ops);
 
       if (store.loading && store.items.length === 0) {
         body.innerHTML = `<div class="nsc-empty-state">正在同步列表...</div>`;
@@ -1685,27 +1803,66 @@
         body.innerHTML = `<div class="nsc-empty-state">暂无记录</div>`;
         return;
       }
+      let items = [...store.items];
+      if (state._hubFansSortByActive) {
+        items.sort((a, b) => {
+          const ta = (a.uid && state.lastSpeakCache[a.uid] && state.lastSpeakCache[a.uid].timestampMs) || 0;
+          const tb = (b.uid && state.lastSpeakCache[b.uid] && state.lastSpeakCache[b.uid].timestampMs) || 0;
+          return tb - ta;
+        });
+      }
       const grid = document.createElement("div");
       grid.className = "nsc-hub-fan-grid";
-      store.items.forEach((u) => {
+      items.forEach((u) => {
         const cachedSpeak = u.uid ? state.lastSpeakCache[u.uid] : null;
         const card = document.createElement("div");
         card.className = "nsc-hub-row";
         card.style.marginBottom = "0";
+        card.style.flexDirection = "column";
+        card.style.alignItems = "stretch";
+        card.style.gap = "6px";
+        const avatarSrc = u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png");
         card.innerHTML = `
-          <img src="${u.avatar || `/avatar/${u.uid}.png`}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
-          <div class="nsc-hub-row-main">
-            <div class="nsc-hub-row-title">${escHtml(u.name)}</div>
-            <div class="nsc-hub-row-sub">${cachedSpeak ? `发言: ${escHtml(cachedSpeak.timeStr)}` : `UID: ${escHtml(u.uid)}`}</div>
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            <img src="${escHtml(avatarSrc)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
+            <div class="nsc-hub-row-main">
+              <div class="nsc-hub-row-title">${escHtml(u.name)}</div>
+              <div class="nsc-hub-row-sub">${cachedSpeak ? `发言: ${escHtml(cachedSpeak.timeStr)}` : `UID: ${escHtml(u.uid)}`}</div>
+            </div>
+            <button type="button" class="nsc-eye-btn" title="查询最后发言时间">${ICONS.eye}</button>
+            <button type="button" class="nsc-icon-btn nsc-fan-pm" title="发私信">${ICONS.pm}</button>
           </div>
-          <button type="button" class="nsc-icon-btn" title="发私信">${ICONS.pm}</button>
+          ${cachedSpeak && cachedSpeak.title ? `<div class="nsc-last-speak-box" style="margin-left:0;" title="点击在聊天窗口打开该帖子"><div class="nsc-last-speak-title">${escHtml(cachedSpeak.title)}</div></div>` : ""}
         `;
-        card.querySelector("button").addEventListener("click", (e) => {
+        const eyeBtn = card.querySelector(".nsc-eye-btn");
+        eyeBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!u.uid || eyeBtn.classList.contains("is-loading")) return;
+          eyeBtn.classList.add("is-loading");
+          delete state.lastSpeakCache[u.uid];
+          await fetchUserLastSpeak(u.uid);
+          renderUserHubIfOpen();
+        });
+        card.querySelector(".nsc-fan-pm").addEventListener("click", (e) => {
           e.stopPropagation();
           closeHub();
           switchChannel("pm", false);
           openPmConversation(u);
         });
+        const speakBox = card.querySelector(".nsc-last-speak-box");
+        if (speakBox && cachedSpeak && cachedSpeak.postUrl) {
+          speakBox.addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeHub();
+            openPostInChat({
+              postId: cachedSpeak.postId,
+              url: cachedSpeak.postUrl,
+              title: cachedSpeak.title,
+              author: u.name,
+              avatar: u.avatar,
+            });
+          });
+        }
         card.addEventListener("click", () => openUserProfileModal(u));
         grid.appendChild(card);
       });

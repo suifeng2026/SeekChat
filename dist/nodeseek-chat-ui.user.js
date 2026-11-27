@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.21.2
+// @version      7.22.0
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -52,6 +52,7 @@
     RIGHT_CONFIG: "nsc_v7_right_config",
     CHAT_PREFS: "nsc_v7_chat_prefs",
     CUSTOM_STICKERS: "nsc_v7_custom_stickers",
+    CUSTOM_STYLE_NOTES: "nsc_v7_custom_style_notes",
   };
 
   function isBrowsePath(pathname) {
@@ -266,15 +267,21 @@
     hubNotifSub: "reply-me",
     _lastRenderedHubTab: "",
     _hubFansMode: "fans",
+    _hubFansSortByActive: false,
+    _settingAutoSection: "",
+    hubCreditView: "list",
+    hubStardustView: "list",
     workbenchSection: "theme",
     paneSkins: loadJson(LS.PANE_SKINS, {}),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
     customStickers: loadJson(LS.CUSTOM_STICKERS, []),
+    customStyleNotes: loadJson(LS.CUSTOM_STYLE_NOTES, null),
     registry: {
       themes: [],
       hubTabs: [],
+      hubSubViews: {},
       bubbleEnhancers: [],
       userActions: [],
       navItems: [],
@@ -284,7 +291,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.21.2",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.0",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -1083,6 +1090,34 @@
   function registerHubTab(tabSpec) {
     if (!tabSpec || !tabSpec.id || !tabSpec.label) return;
     upsertRegistryItem(state.registry.hubTabs, { order: 80, ...tabSpec }, (a, b) => (a.order ?? 80) - (b.order ?? 80));
+  }
+
+  function registerHubSubView(tabId, handler) {
+    if (!tabId || !handler) return;
+    state.registry.hubSubViews[tabId] = handler;
+  }
+
+  async function copyTextToClipboard(text) {
+    const val = String(text || "");
+    if (!val) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(val);
+        return true;
+      }
+    } catch (_) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = val;
+      ta.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0;";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return Boolean(ok);
+    } catch (_) {
+      return false;
+    }
   }
 
   function registerBubbleEnhancer(spec) {
@@ -3120,6 +3155,82 @@
         font-size: 11px; color: var(--nsc-text);
       }
       .nsc-base-sticker-chip img { width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
+
+      /* 个人中心统计分析面板、进度条、备忘录卡片与全量表格样式 */
+      .nsc-ana-banner {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+        padding: 11px 14px; border-radius: 12px; margin-bottom: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-ana-progress-track {
+        width: 100%; height: 6px; border-radius: 999px; background: var(--nsc-hover);
+        overflow: hidden; margin-top: 8px;
+      }
+      .nsc-ana-progress-fill {
+        height: 100%; border-radius: 999px; background: var(--nsc-accent);
+        transition: width 0.18s ease;
+      }
+      .nsc-ana-split {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 10px; margin-bottom: 12px;
+      }
+      .nsc-ana-card {
+        padding: 12px 14px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-ana-card-title {
+        font-size: 13px; font-weight: 700; color: var(--nsc-text);
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        margin-bottom: 9px;
+      }
+      .nsc-ana-bar-row {
+        display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: 12px;
+      }
+      .nsc-ana-bar-row:last-child { margin-bottom: 0; }
+      .nsc-ana-bar-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .nsc-ana-bar-track {
+        height: 7px; border-radius: 999px; background: var(--nsc-hover); overflow: hidden;
+      }
+      .nsc-ana-bar-fill {
+        height: 100%; border-radius: 999px; background: var(--nsc-accent); transition: width 0.22s ease;
+      }
+      .nsc-ana-table-wrap {
+        border: 1px solid var(--nsc-border); border-radius: 12px; overflow: hidden;
+        background: var(--nsc-bg-card);
+      }
+      .nsc-ana-table {
+        width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;
+      }
+      .nsc-ana-table th {
+        padding: 8px 11px; background: var(--nsc-hover); color: var(--nsc-muted);
+        font-weight: 600; border-bottom: 1px solid var(--nsc-border); white-space: nowrap;
+      }
+      .nsc-ana-table td {
+        padding: 8px 11px; border-bottom: 1px solid var(--nsc-border); color: var(--nsc-text);
+        vertical-align: middle;
+      }
+      .nsc-ana-table tbody tr:last-child td { border-bottom: none; }
+      .nsc-ana-table tbody tr:hover td { background: var(--nsc-hover); }
+      .nsc-ana-badge {
+        display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px;
+        font-size: 11px; font-weight: 600;
+      }
+      .nsc-ana-badge.in { background: rgba(52, 199, 89, 0.14); color: #16a34a; }
+      .nsc-ana-badge.out { background: rgba(255, 59, 48, 0.14); color: #ff3b30; }
+      .nsc-ana-badge.star { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
+      .nsc-ext-code {
+        width: 100%; box-sizing: border-box; min-height: 180px; padding: 10px 12px;
+        border-radius: 10px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-hover); color: var(--nsc-text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11.5px; line-height: 1.5; resize: vertical; outline: none;
+      }
+      .nsc-ext-code:focus { border-color: var(--nsc-accent); background: var(--nsc-bg-card); }
+      .nsc-ext-guide-box {
+        padding: 10px 12px; border-radius: 10px; margin-bottom: 10px;
+        background: var(--nsc-accent-soft); border: 1px solid rgba(0, 122, 255, 0.22);
+        font-size: 12px; color: var(--nsc-text); line-height: 1.55;
+      }
 
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
@@ -9264,10 +9375,12 @@
     });
     if (targets.length === 0) {
       renderRightBody();
+      renderUserHubIfOpen();
       return;
     }
     state.batchQuery = { running: true, done: 0, total: targets.length, stopRequested: false };
     renderRightBody();
+    renderUserHubIfOpen();
 
     for (const u of targets) {
       if (state.batchQuery.stopRequested) break;
@@ -9275,6 +9388,7 @@
       state.batchQuery.done += 1;
       if (state.batchQuery.done % 4 === 0 || state.batchQuery.done === state.batchQuery.total) {
         renderRightBody();
+        renderUserHubIfOpen();
       }
       if (!state.batchQuery.stopRequested && state.batchQuery.done < state.batchQuery.total) {
         await new Promise((r) => setTimeout(r, 260));
@@ -9283,6 +9397,7 @@
     state.batchQuery.running = false;
     state.batchQuery.stopRequested = false;
     renderRightBody();
+    renderUserHubIfOpen();
   }
 
   function renderUserListPane(container, listItems, storeObj, typeLabel, onRemove) {
@@ -9887,6 +10002,36 @@
           .btn, button[type="submit"] { border-radius: 8px !important; }
         `;
         (idoc.head || idoc.documentElement).appendChild(st);
+        if (state._settingAutoSection) {
+          const targetSec = String(state._settingAutoSection);
+          state._settingAutoSection = "";
+          const trySelectSection = () => {
+            const items = Array.from(idoc.querySelectorAll("#user-setting-panel .selector > div, .selector > div"));
+            const secEl = items.find((el) => (el.textContent || "").trim().includes(targetSec));
+            if (secEl) {
+              secEl.click();
+              const panel = idoc.getElementById("user-setting-panel");
+              if (panel && typeof panel.scrollIntoView === "function") {
+                panel.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+              return true;
+            }
+            return false;
+          };
+          if (!trySelectSection()) {
+            setTimeout(() => {
+              try {
+                if (!trySelectSection()) {
+                  const subbarTip = document.querySelector("#nsc-hub-subbar span");
+                  if (subbarTip) {
+                    subbarTip.textContent = `当前账号可能暂未达到「${targetSec}」所需社区等级，未检测到该入口`;
+                    subbarTip.style.color = "#f59e0b";
+                  }
+                }
+              } catch (_) {}
+            }, 450);
+          }
+        }
       } catch (_) {}
     });
     bodyEl.innerHTML = "";
@@ -10393,7 +10538,41 @@
 
     if (state.hubTab === "credit") {
       const st = state.hubData.credit;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 条鸡腿明细（第 ${st.page || 1} 页）</span>`;
+      const creditSubView = state.registry.hubSubViews && state.registry.hubSubViews.credit;
+      const isAnalytics = Boolean(creditSubView && state.hubCreditView === "analytics");
+
+      if (creditSubView) {
+        const seg = document.createElement("div");
+        seg.className = "nsc-seg-tabs";
+        [
+          { id: "list", label: "明细流水" },
+          { id: "analytics", label: "100页深度统计" },
+        ].forEach((m) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nsc-seg-btn" + ((isAnalytics ? "analytics" : "list") === m.id ? " is-active" : "");
+          b.textContent = m.label;
+          b.addEventListener("click", () => {
+            state.hubCreditView = m.id;
+            renderUserHub();
+          });
+          seg.appendChild(b);
+        });
+        subbar.appendChild(seg);
+      }
+
+      if (isAnalytics) {
+        if (typeof creditSubView.render === "function") creditSubView.render(body, subbar);
+        else if (typeof creditSubView === "function") creditSubView(body, subbar);
+        restoreHubScroll();
+        return;
+      }
+
+      const infoSpan = document.createElement("span");
+      infoSpan.style.cssText = "font-size:12px;color:var(--nsc-muted);";
+      infoSpan.textContent = `已加载 ${st.items.length} 条鸡腿明细（第 ${st.page || 1} 页）`;
+      subbar.appendChild(infoSpan);
+
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
@@ -10452,6 +10631,9 @@
 
     if (state.hubTab === "stardust") {
       const st = state.hubData.stardust;
+      const stardustSubView = state.registry.hubSubViews && state.registry.hubSubViews.stardust;
+      const isAnalytics = Boolean(stardustSubView && state.hubStardustView === "analytics");
+
       const seg = document.createElement("div");
       seg.className = "nsc-seg-tabs";
       [
@@ -10460,17 +10642,39 @@
       ].forEach((m) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (st.mode === m.id ? " is-active" : "");
+        b.className = "nsc-seg-btn" + (!isAnalytics && st.mode === m.id ? " is-active" : "");
         b.textContent = m.label;
-        b.addEventListener("click", () => loadHubStardust(true, m.id));
+        b.addEventListener("click", () => {
+          state.hubStardustView = "list";
+          loadHubStardust(true, m.id);
+        });
         seg.appendChild(b);
       });
+      if (stardustSubView) {
+        const ab = document.createElement("button");
+        ab.type = "button";
+        ab.className = "nsc-seg-btn" + (isAnalytics ? " is-active" : "");
+        ab.textContent = "全量分析";
+        ab.addEventListener("click", () => {
+          state.hubStardustView = "analytics";
+          renderUserHub();
+        });
+        seg.appendChild(ab);
+      }
+      subbar.appendChild(seg);
+
+      if (isAnalytics) {
+        if (typeof stardustSubView.render === "function") stardustSubView.render(body, subbar);
+        else if (typeof stardustSubView === "function") stardustSubView(body, subbar);
+        restoreHubScroll();
+        return;
+      }
+
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
       refBtn.textContent = st.loading ? "加载中..." : "刷新";
       refBtn.addEventListener("click", () => loadHubStardust(true));
-      subbar.appendChild(seg);
       subbar.appendChild(refBtn);
 
       if (st.loading && st.items.length === 0) {
@@ -10535,13 +10739,38 @@
         });
         seg.appendChild(b);
       });
+
+      const ops = document.createElement("div");
+      ops.style.cssText = "display:flex;align-items:center;gap:6px;";
+
+      const sortBtn = document.createElement("button");
+      sortBtn.type = "button";
+      sortBtn.className = "nsc-mini-btn" + (state._hubFansSortByActive ? " is-active" : "");
+      sortBtn.title = "按最后发言时间排序";
+      sortBtn.textContent = "排序";
+      sortBtn.addEventListener("click", () => {
+        state._hubFansSortByActive = !state._hubFansSortByActive;
+        renderUserHub();
+      });
+
+      const batchBtn = document.createElement("button");
+      batchBtn.type = "button";
+      batchBtn.className = "nsc-mini-btn" + (state.batchQuery.running ? " is-active" : "");
+      batchBtn.title = state.batchQuery.running ? "点击停止批量查询" : "一键查询当前列表全部用户的最后发言时间";
+      batchBtn.textContent = state.batchQuery.running ? `${state.batchQuery.done}/${state.batchQuery.total}` : "查询";
+      batchBtn.addEventListener("click", () => runBatchLastSpeakQuery(store.items));
+
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-mini-btn";
       refBtn.textContent = store.loading ? "同步中..." : "刷新";
       refBtn.addEventListener("click", () => fetchFansOrFollow(subMode).then(() => renderUserHubIfOpen()));
+
+      ops.appendChild(sortBtn);
+      ops.appendChild(batchBtn);
+      ops.appendChild(refBtn);
       subbar.appendChild(seg);
-      subbar.appendChild(refBtn);
+      subbar.appendChild(ops);
 
       if (store.loading && store.items.length === 0) {
         body.innerHTML = `<div class="nsc-empty-state">正在同步列表...</div>`;
@@ -10551,27 +10780,66 @@
         body.innerHTML = `<div class="nsc-empty-state">暂无记录</div>`;
         return;
       }
+      let items = [...store.items];
+      if (state._hubFansSortByActive) {
+        items.sort((a, b) => {
+          const ta = (a.uid && state.lastSpeakCache[a.uid] && state.lastSpeakCache[a.uid].timestampMs) || 0;
+          const tb = (b.uid && state.lastSpeakCache[b.uid] && state.lastSpeakCache[b.uid].timestampMs) || 0;
+          return tb - ta;
+        });
+      }
       const grid = document.createElement("div");
       grid.className = "nsc-hub-fan-grid";
-      store.items.forEach((u) => {
+      items.forEach((u) => {
         const cachedSpeak = u.uid ? state.lastSpeakCache[u.uid] : null;
         const card = document.createElement("div");
         card.className = "nsc-hub-row";
         card.style.marginBottom = "0";
+        card.style.flexDirection = "column";
+        card.style.alignItems = "stretch";
+        card.style.gap = "6px";
+        const avatarSrc = u.avatar || (u.uid ? `/avatar/${u.uid}.png` : "/static/image/favicon/android-chrome-192x192.png");
         card.innerHTML = `
-          <img src="${u.avatar || `/avatar/${u.uid}.png`}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
-          <div class="nsc-hub-row-main">
-            <div class="nsc-hub-row-title">${escHtml(u.name)}</div>
-            <div class="nsc-hub-row-sub">${cachedSpeak ? `发言: ${escHtml(cachedSpeak.timeStr)}` : `UID: ${escHtml(u.uid)}`}</div>
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            <img src="${escHtml(avatarSrc)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex:0 0 36px;" />
+            <div class="nsc-hub-row-main">
+              <div class="nsc-hub-row-title">${escHtml(u.name)}</div>
+              <div class="nsc-hub-row-sub">${cachedSpeak ? `发言: ${escHtml(cachedSpeak.timeStr)}` : `UID: ${escHtml(u.uid)}`}</div>
+            </div>
+            <button type="button" class="nsc-eye-btn" title="查询最后发言时间">${ICONS.eye}</button>
+            <button type="button" class="nsc-icon-btn nsc-fan-pm" title="发私信">${ICONS.pm}</button>
           </div>
-          <button type="button" class="nsc-icon-btn" title="发私信">${ICONS.pm}</button>
+          ${cachedSpeak && cachedSpeak.title ? `<div class="nsc-last-speak-box" style="margin-left:0;" title="点击在聊天窗口打开该帖子"><div class="nsc-last-speak-title">${escHtml(cachedSpeak.title)}</div></div>` : ""}
         `;
-        card.querySelector("button").addEventListener("click", (e) => {
+        const eyeBtn = card.querySelector(".nsc-eye-btn");
+        eyeBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!u.uid || eyeBtn.classList.contains("is-loading")) return;
+          eyeBtn.classList.add("is-loading");
+          delete state.lastSpeakCache[u.uid];
+          await fetchUserLastSpeak(u.uid);
+          renderUserHubIfOpen();
+        });
+        card.querySelector(".nsc-fan-pm").addEventListener("click", (e) => {
           e.stopPropagation();
           closeHub();
           switchChannel("pm", false);
           openPmConversation(u);
         });
+        const speakBox = card.querySelector(".nsc-last-speak-box");
+        if (speakBox && cachedSpeak && cachedSpeak.postUrl) {
+          speakBox.addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeHub();
+            openPostInChat({
+              postId: cachedSpeak.postId,
+              url: cachedSpeak.postUrl,
+              title: cachedSpeak.title,
+              author: u.name,
+              avatar: u.avatar,
+            });
+          });
+        }
         card.addEventListener("click", () => openUserProfileModal(u));
         grid.appendChild(card);
       });
@@ -10857,6 +11125,1070 @@
   });
 
   // ==========================================================================
+  // Module: plugins/core-hub-analytics.js
+  // ==========================================================================
+  // 个人中心统计分析插件：鸡腿 100 页统计 / 全量星辰账本分析器
+  (function initHubAnalyticsPlugin() {
+    const CREDIT_MAX_PAGES = 100;
+    const STARDUST_PAGE_SIZE = 50;
+    const STARDUST_BATCH_CONCURRENCY = 5;
+
+    // =========================================================================
+    // 1. 鸡腿 100 页账簿统计
+    // =========================================================================
+    function extractCreditRows(json) {
+      if (!json || json.success === false) return [];
+      if (Array.isArray(json.data)) return json.data;
+      if (json.data && Array.isArray(json.data.list)) return json.data.list;
+      if (json.data && Array.isArray(json.data.records)) return json.data.records;
+      if (Array.isArray(json.list)) return json.list;
+      if (Array.isArray(json.records)) return json.records;
+      return [];
+    }
+
+    function aggregateCreditStats(items) {
+      const stats = {
+        totalGain: 0,
+        totalSpend: 0,
+        net: 0,
+        replyReward: 0,
+        replyCount: 0,
+        postReward: 0,
+        postCount: 0,
+        signReward: 0,
+        signDays: 0,
+        avgSign: "0",
+        signAmounts: {},
+        feedReceived: 0,
+        feedSent: 0,
+        otherGain: 0,
+        feeders: {},
+      };
+
+      for (const item of items || []) {
+        const val = Number(
+          Array.isArray(item)
+            ? item[0]
+            : (item && (item.amount ?? item.change ?? item.delta))
+        );
+        const reason = String(
+          Array.isArray(item)
+            ? (item[2] ?? "")
+            : ((item && (item.reason ?? item.description ?? item.note)) ?? "")
+        ).trim();
+
+        if (Number.isNaN(val)) continue;
+
+        if (val > 0) {
+          stats.totalGain += val;
+          if (reason.includes("回帖")) {
+            stats.replyReward += val;
+            stats.replyCount += 1;
+          } else if (reason.includes("发帖")) {
+            stats.postReward += val;
+            stats.postCount += 1;
+          } else if (reason.includes("签到")) {
+            stats.signReward += val;
+            stats.signDays += 1;
+            stats.signAmounts[val] = (stats.signAmounts[val] || 0) + 1;
+          } else if (reason.includes("投喂")) {
+            stats.feedReceived += val;
+            const m = reason.match(/^被(.+?)投喂鸡腿$/);
+            const sender = m ? m[1] : reason;
+            stats.feeders[sender] = (stats.feeders[sender] || 0) + val;
+          } else {
+            stats.otherGain += val;
+          }
+        } else {
+          stats.totalSpend += Math.abs(val);
+          if (reason.includes("投喂")) {
+            stats.feedSent += Math.abs(val);
+          }
+        }
+      }
+
+      stats.net = stats.totalGain - stats.totalSpend;
+      stats.avgSign = stats.signDays > 0 ? (stats.signReward / stats.signDays).toFixed(2) : "0";
+      return stats;
+    }
+
+    function findCachedUidByName(name) {
+      if (!name || !state.userCache) return "";
+      for (const [uid, info] of Object.entries(state.userCache)) {
+        if (info && info.name === name) return String(uid);
+      }
+      return "";
+    }
+
+    const creditEngine = createFeedEngine({
+      key: "hub-credit-100p",
+      mutexGroup: "nodeseek-heavy-scan",
+      delayMs: 150,
+      async fetchPage({ page, signal }) {
+        const resp = await fetch(`/api/account/credit/page-${page}`, {
+          credentials: "include",
+          signal,
+        });
+        if (!resp.ok) return { rows: [], hasMore: false };
+        const json = await resp.json().catch(() => null);
+        if (!json || json.success === false) return { rows: [], hasMore: false };
+        const rows = extractCreditRows(json);
+        if (!rows || rows.length === 0) return { rows: [], hasMore: false };
+        return { rows, hasMore: rows.length >= 15 };
+      },
+      onUpdate() {
+        if (state.hubTab === "credit" && state.hubCreditView === "analytics") {
+          renderUserHubIfOpen();
+        }
+      },
+    });
+
+    function renderCreditAnalytics(body, subbar) {
+      const snap = creditEngine.getState();
+      const items = snap.items || [];
+      const donePages = snap.progress ? snap.progress.done : snap.page;
+      const totalPages = (snap.progress && snap.progress.total) || CREDIT_MAX_PAGES;
+      const pct = totalPages > 0 ? Math.min(100, Math.round((donePages / totalPages) * 100)) : 0;
+
+      const banner = document.createElement("div");
+      banner.className = "nsc-ana-banner";
+
+      const leftInfo = document.createElement("div");
+      leftInfo.style.cssText = "flex:1;min-width:220px;";
+      const statusTitle = snap.running
+        ? `正在拉取第 ${donePages} / ${totalPages} 页...（已获取 ${items.length} 条明细）`
+        : items.length > 0
+          ? `已汇总 ${snap.page} 页 · 共 ${items.length} 条明细`
+          : "点击右侧按钮拉取最多 100 页鸡腿账簿明细并生成统计报告";
+      leftInfo.innerHTML = `
+        <div style="font-size:13px;font-weight:700;color:var(--nsc-text);">${escHtml(statusTitle)}</div>
+        ${snap.error ? `<div style="font-size:11.5px;color:#ff3b30;margin-top:4px;">${escHtml(snap.error)}</div>` : ""}
+        ${snap.running ? `
+          <div class="nsc-ana-progress-track">
+            <div class="nsc-ana-progress-fill" style="width:${pct}%;"></div>
+          </div>
+        ` : ""}
+      `;
+
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+      if (snap.running) {
+        const stopBtn = document.createElement("button");
+        stopBtn.type = "button";
+        stopBtn.className = "nsc-checkin-btn";
+        stopBtn.style.color = "#ff3b30";
+        stopBtn.textContent = "停止";
+        stopBtn.addEventListener("click", () => creditEngine.abort());
+        actions.appendChild(stopBtn);
+      } else {
+        const startBtn = document.createElement("button");
+        startBtn.type = "button";
+        startBtn.className = "nsc-checkin-btn primary";
+        startBtn.textContent = items.length > 0 ? "重新统计" : "开始 100 页统计";
+        startBtn.addEventListener("click", () => {
+          creditEngine.runBatch({ maxPages: CREDIT_MAX_PAGES, delayMs: 150 });
+        });
+        actions.appendChild(startBtn);
+      }
+
+      banner.appendChild(leftInfo);
+      banner.appendChild(actions);
+      body.appendChild(banner);
+
+      if (items.length === 0) {
+        if (!snap.running) {
+          const empty = document.createElement("div");
+          empty.className = "nsc-empty-state";
+          empty.textContent = "尚未拉取统计数据，点击「开始 100 页统计」即可在后台快速汇总。";
+          body.appendChild(empty);
+        }
+        return;
+      }
+
+      const stats = aggregateCreditStats(items);
+      const netColor = stats.net >= 0 ? "#16a34a" : "#ff3b30";
+      const netText = stats.net >= 0 ? `+${stats.net}` : String(stats.net);
+
+      const kpi = document.createElement("div");
+      kpi.className = "nsc-hub-kpi-grid";
+      kpi.innerHTML = `
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">总计获得鸡腿</div>
+          <div class="nsc-hub-kpi-val" style="color:#16a34a;">+${stats.totalGain}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">总计消耗鸡腿</div>
+          <div class="nsc-hub-kpi-val" style="color:#ff3b30;">-${stats.totalSpend}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">净增鸡腿</div>
+          <div class="nsc-hub-kpi-val" style="color:${netColor};">${escHtml(netText)}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">回帖奖励 (${stats.replyCount}次)</div>
+          <div class="nsc-hub-kpi-val">+${stats.replyReward}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">发帖奖励 (${stats.postCount}次)</div>
+          <div class="nsc-hub-kpi-val">+${stats.postReward}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">签到累计 (${stats.signDays}天 · 均${escHtml(stats.avgSign)})</div>
+          <div class="nsc-hub-kpi-val">+${stats.signReward}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">被投喂总计</div>
+          <div class="nsc-hub-kpi-val" style="color:#16a34a;">+${stats.feedReceived}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">投喂支出总计</div>
+          <div class="nsc-hub-kpi-val" style="color:#ff3b30;">-${stats.feedSent}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">其他收入</div>
+          <div class="nsc-hub-kpi-val">+${stats.otherGain}</div>
+        </div>
+      `;
+      body.appendChild(kpi);
+
+      const split = document.createElement("div");
+      split.className = "nsc-ana-split";
+
+      // 左卡片：签到手气分布
+      const signCard = document.createElement("div");
+      signCard.className = "nsc-ana-card";
+      const signEntries = Object.entries(stats.signAmounts).sort((a, b) => Number(b[0]) - Number(a[0]));
+      const maxSignTimes = signEntries.reduce((mx, [, t]) => Math.max(mx, t), 1);
+
+      let signBodyHtml = "";
+      if (signEntries.length === 0) {
+        signBodyHtml = `<div style="font-size:12px;color:var(--nsc-muted);padding:12px 0;">暂无签到记录</div>`;
+      } else {
+        signBodyHtml = signEntries.map(([legs, times]) => {
+          const sharePct = stats.signDays > 0 ? ((times / stats.signDays) * 100).toFixed(1) : "0.0";
+          const barPct = Math.max(4, Math.round((times / maxSignTimes) * 100));
+          return `
+            <div class="nsc-ana-bar-row">
+              <div class="nsc-ana-bar-top">
+                <span style="font-weight:600;color:var(--nsc-text);">+${escHtml(legs)} 鸡腿</span>
+                <span style="color:var(--nsc-muted);font-variant-numeric:tabular-nums;">${times} 天 (${sharePct}%)</span>
+              </div>
+              <div class="nsc-ana-bar-track">
+                <div class="nsc-ana-bar-fill" style="width:${barPct}%;"></div>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      signCard.innerHTML = `
+        <div class="nsc-ana-card-title">
+          <span>🎲 签到手气分布</span>
+          <span style="font-size:11.5px;font-weight:500;color:var(--nsc-muted);">共 ${stats.signDays} 天 · 均 ${escHtml(stats.avgSign)}/天</span>
+        </div>
+        <div>${signBodyHtml}</div>
+      `;
+
+      // 右卡片：投喂大佬排行榜
+      const feederCard = document.createElement("div");
+      feederCard.className = "nsc-ana-card";
+      const sortedFeeders = Object.entries(stats.feeders).sort((a, b) => b[1] - a[1]);
+      const topFeeders = sortedFeeders.slice(0, 20);
+
+      feederCard.innerHTML = `
+        <div class="nsc-ana-card-title">
+          <span>🏆 投喂大佬排行榜</span>
+          <span style="font-size:11.5px;font-weight:500;color:var(--nsc-muted);">共 ${sortedFeeders.length} 位${sortedFeeders.length > 20 ? " (Top 20)" : ""}</span>
+        </div>
+        <div class="nsc-ana-feeder-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+      `;
+
+      const feederListEl = feederCard.querySelector(".nsc-ana-feeder-list");
+      if (topFeeders.length === 0) {
+        feederListEl.innerHTML = `<div style="font-size:12px;color:var(--nsc-muted);padding:12px 0;">暂无投喂收入记录</div>`;
+      } else {
+        topFeeders.forEach(([user, count], idx) => {
+          const rank = idx + 1;
+          const rankLabel = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+          const row = document.createElement("div");
+          row.className = "nsc-hub-row";
+          row.style.marginBottom = "0";
+          row.style.padding = "7px 10px";
+          row.title = "点击查看资料或复制用户名";
+          row.innerHTML = `
+            <span style="width:28px;text-align:center;font-weight:700;font-size:12px;flex:0 0 28px;">${rankLabel}</span>
+            <div class="nsc-hub-row-main">
+              <div class="nsc-hub-row-title">${escHtml(user)}</div>
+            </div>
+            <span class="nsc-hub-delta pos" data-feeder-amt>+${count} 🍗</span>
+          `;
+          row.addEventListener("click", async () => {
+            const cachedUid = findCachedUidByName(user);
+            if (cachedUid && typeof openUserProfileModal === "function") {
+              openUserProfileModal({ uid: cachedUid, name: user });
+              return;
+            }
+            const ok = await copyTextToClipboard(user);
+            if (ok) {
+              const badge = row.querySelector("[data-feeder-amt]");
+              if (badge) {
+                const orig = badge.textContent;
+                badge.textContent = "已复制用户名";
+                setTimeout(() => {
+                  badge.textContent = orig;
+                }, 1400);
+              }
+            }
+          });
+          feederListEl.appendChild(row);
+        });
+      }
+
+      split.appendChild(signCard);
+      split.appendChild(feederCard);
+      body.appendChild(split);
+    }
+
+    registerHubSubView("credit", {
+      render(body, subbar) {
+        renderCreditAnalytics(body, subbar);
+      },
+    });
+
+    // =========================================================================
+    // 2. 全量星辰账本分析器
+    // =========================================================================
+    const stardustUi = {
+      filter: "all",
+      search: "",
+      page: 1,
+      resolveSeq: 0,
+      failedUids: new Set(),
+      myUid: null,
+    };
+
+    function formatExactTime(val) {
+      if (!val) return "-";
+      const d = typeof val === "number"
+        ? new Date(val > 1e11 ? val : val * 1000)
+        : new Date(val);
+      if (Number.isNaN(d.getTime())) return String(val);
+
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function extractAmount(r) {
+      const priorityKeys = [
+        "diff", "amount", "stardust", "stardusts", "count", "delta", "value", "points",
+        "num", "quantity", "change", "trade_stardust", "credit", "score", "gain",
+      ];
+      for (const k of priorityKeys) {
+        if (r[k] !== undefined && r[k] !== null && r[k] !== "") {
+          const num = parseFloat(String(r[k]).replace(/[^\d.-]/g, ""));
+          if (!Number.isNaN(num) && num !== 0) return num;
+        }
+      }
+
+      const ignoreKeys = new Set([
+        "id", "_id", "member_id", "peer_id", "ref_id", "post_id", "comment_id",
+        "created_at", "updated_at", "timestamp", "time", "status", "code",
+        "floor", "balance", "remain", "type",
+      ]);
+      for (const [k, v] of Object.entries(r)) {
+        if (!ignoreKeys.has(k)) {
+          if (typeof v === "number" && v !== 0) return v;
+          if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) {
+            const parsed = parseFloat(v.trim());
+            if (!Number.isNaN(parsed) && parsed !== 0) return parsed;
+          }
+        }
+      }
+      return 0;
+    }
+
+    function extractBalance(r) {
+      const keys = [
+        "balance", "current_balance", "remain", "remain_stardust", "after_balance",
+        "user_balance", "stardust_balance", "current_stardust", "after", "current",
+        "user_stardust", "total", "cur_balance", "post_balance", "remained", "available",
+        "total_stardust",
+      ];
+      for (const k of keys) {
+        if (r[k] !== undefined && r[k] !== null && r[k] !== "") {
+          const num = parseFloat(String(r[k]).replace(/[^\d.-]/g, ""));
+          if (!Number.isNaN(num) && num >= 0) return num;
+        }
+      }
+      return null;
+    }
+
+    function stardustRecordKey(r) {
+      const rawCreatedAt = typeof r.created_at === "number"
+        ? (r.created_at > 1e11 ? r.created_at : r.created_at * 1000)
+        : new Date(r.created_at).getTime();
+      return r.id || `${rawCreatedAt || 0}_${r.peer_id || ""}_${r.member_id || ""}`;
+    }
+
+    function normalizeStardustRecords(rawRows, selfUid) {
+      const uidNum = Number(selfUid) || 0;
+      const list = (rawRows || []).map((r) => {
+        const rawCreatedAt = typeof r.created_at === "number"
+          ? (r.created_at > 1e11 ? r.created_at : r.created_at * 1000)
+          : new Date(r.created_at).getTime();
+        const mId = r.member_id ? parseInt(r.member_id, 10) : 0;
+        const pId = r.peer_id ? parseInt(r.peer_id, 10) : 0;
+        const rawType = String(r.type || "").toLowerCase();
+        const refId = parseInt(r.ref_id || r.refId || 0, 10);
+
+        const extractedNum = extractAmount(r);
+        const isUpvote = (refId === 10) || rawType.includes("upvote") || rawType.includes("like") || Boolean(r.comment_id);
+
+        let category = "transfer_out";
+        let finalAmount = 0;
+
+        if (isUpvote) {
+          category = "upvote_in";
+          finalAmount = extractedNum > 0 ? extractedNum : 1;
+        } else {
+          if (extractedNum > 0 || rawType.includes("in") || rawType.includes("receive") || (uidNum > 0 && mId !== uidNum && mId > 0)) {
+            category = "transfer_in";
+            finalAmount = Math.abs(extractedNum || 1);
+          } else if (extractedNum < 0 || rawType.includes("out") || rawType.includes("send") || rawType.includes("pay")) {
+            category = "transfer_out";
+            finalAmount = -Math.abs(extractedNum || 1);
+          } else {
+            category = (mId === uidNum && pId) ? "transfer_out" : "transfer_in";
+            finalAmount = category === "transfer_out" ? -1 : 1;
+          }
+        }
+
+        const targetUid = (pId && pId !== uidNum)
+          ? pId
+          : ((mId && mId !== uidNum) ? mId : (pId || mId || null));
+
+        return {
+          id: stardustRecordKey(r),
+          rawCreatedAt: rawCreatedAt || 0,
+          amount: finalAmount,
+          targetUid: targetUid ? String(targetUid) : "",
+          memo: r.memo || r.reason || r.description || r.note || "",
+          balance: extractBalance(r),
+          category,
+          time: formatExactTime(r.created_at),
+        };
+      });
+
+      list.sort((a, b) => b.rawCreatedAt - a.rawCreatedAt);
+      return list;
+    }
+
+    function getResolvedStardustUserName(uid) {
+      const key = String(uid || "");
+      if (!key) return "";
+      const cached = state.userCache && state.userCache[key];
+      if (cached && cached.name && cached.name !== "Seeker") {
+        return cached.name;
+      }
+      return "";
+    }
+
+    function getDisplayUserHandle(uid) {
+      const name = getResolvedStardustUserName(uid);
+      return name ? `@${name}` : `@UID:${uid}`;
+    }
+
+    function getBalanceFallback() {
+      const uid = stardustUi.myUid || state.currentUserId;
+      if (uid && state.userCache && state.userCache[String(uid)]) {
+        const parsed = Number(state.userCache[String(uid)].stars);
+        if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+      }
+      try {
+        const card = document.querySelector("#nsk-right-panel-container .user-card, .nsc-right-user .user-card");
+        const text = card ? card.innerText : "";
+        const m = text.match(/星辰\s*[:：]?\s*([0-9]+)/);
+        if (m && m[1]) {
+          const num = parseInt(m[1], 10);
+          if (!Number.isNaN(num) && num > 0) return num;
+        }
+      } catch (_) {}
+      return 0;
+    }
+
+    function computeStardustSummary(records) {
+      let totalIncome = 0;
+      let totalExpense = 0;
+      let upvoteInCount = 0;
+      let upvoteInStardust = 0;
+      let transferOutCount = 0;
+      let transferOutStardust = 0;
+      let transferInCount = 0;
+      let transferInStardust = 0;
+
+      for (const item of records) {
+        if (item.category === "upvote_in") {
+          upvoteInCount += 1;
+          upvoteInStardust += item.amount;
+          totalIncome += item.amount;
+        } else if (item.category === "transfer_in") {
+          transferInCount += 1;
+          transferInStardust += item.amount;
+          totalIncome += item.amount;
+        } else if (item.category === "transfer_out") {
+          const absVal = Math.abs(item.amount);
+          transferOutCount += 1;
+          transferOutStardust += absVal;
+          totalExpense += absVal;
+        }
+      }
+
+      const netCalculated = totalIncome - totalExpense;
+      const displayBal = netCalculated > 0 ? netCalculated : (getBalanceFallback() || netCalculated);
+
+      return {
+        displayBal,
+        totalIncome,
+        totalExpense,
+        upvoteInCount,
+        upvoteInStardust,
+        transferOutCount,
+        transferOutStardust,
+        transferInCount,
+        transferInStardust,
+      };
+    }
+
+    async function ensureStardustUid(signal) {
+      detectCurrentUser();
+      if (state.currentUserId) {
+        stardustUi.myUid = Number(state.currentUserId);
+        return stardustUi.myUid;
+      }
+      if (stardustUi.myUid) return stardustUi.myUid;
+
+      const resp = await fetch("/api/account/getInfo", { credentials: "include", signal });
+      if (resp.ok) {
+        const data = await resp.json().catch(() => null);
+        if (data && data.success && data.detail) {
+          const parsed = parseInt(data.detail.member_id || data.detail.id || data.detail.uid, 10);
+          if (parsed) {
+            stardustUi.myUid = parsed;
+            state.currentUserId = parsed;
+            if (data.detail.member_name) state.currentUser = data.detail.member_name;
+            return parsed;
+          }
+        }
+      }
+      throw new Error("未能识别当前登录 UID，请先登录或刷新页面");
+    }
+
+    const stardustEngine = createFeedEngine({
+      key: "hub-stardust-full",
+      mutexGroup: "nodeseek-heavy-scan",
+      delayMs: 300,
+      keyOf: stardustRecordKey,
+      async fetchPage({ cursor, signal }) {
+        const uid = await ensureStardustUid(signal);
+        let url = `/api/stardust/list?count=1000&member_id=${encodeURIComponent(String(uid))}`;
+        if (cursor) url += `&before_id=${encodeURIComponent(String(cursor))}`;
+
+        const resp = await fetch(url, { credentials: "include", signal });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json().catch(() => null);
+        if (!data || data.success === false || !Array.isArray(data.records) || data.records.length === 0) {
+          return { rows: [], nextCursor: null, hasMore: false };
+        }
+        return {
+          rows: data.records || [],
+          nextCursor: data.cursor,
+          hasMore: Boolean(data.exist_more && data.cursor),
+        };
+      },
+      onUpdate() {
+        if (state.hubTab === "stardust" && state.hubStardustView === "analytics") {
+          renderUserHubIfOpen();
+        }
+      },
+    });
+
+    async function resolveVisibleStardustUids(uids) {
+      const seq = ++stardustUi.resolveSeq;
+      const missing = Array.from(new Set(uids.filter((id) => (
+        id && !getResolvedStardustUserName(id) && !stardustUi.failedUids.has(String(id))
+      ))));
+      if (missing.length === 0) return;
+
+      for (const uid of missing) {
+        if (seq !== stardustUi.resolveSeq) return;
+        if (state.hubTab !== "stardust" || state.hubStardustView !== "analytics") return;
+        const bd = document.getElementById("nsc-hub-backdrop");
+        if (!bd || !bd.classList.contains("is-open")) return;
+
+        await fetchUserProfile(String(uid), "");
+        if (seq !== stardustUi.resolveSeq) return;
+        if (state.hubTab !== "stardust" || state.hubStardustView !== "analytics") return;
+
+        const name = getResolvedStardustUserName(uid);
+        if (!name) {
+          stardustUi.failedUids.add(String(uid));
+        } else {
+          document.querySelectorAll(`[data-nsc-sd-uid="${CSS.escape(String(uid))}"]`).forEach((el) => {
+            el.textContent = `@${name}`;
+          });
+        }
+        await new Promise((r) => setTimeout(r, 90));
+      }
+    }
+
+    function buildMarkdownTable(list) {
+      if (!list || list.length === 0) return "*(暂无相关记录)*\n\n";
+
+      let md = "| 时间 | 类型 | 数额 | 对方 UID | 明细信息 (@对方用户名 / 变动后余额 / 留言) |\n";
+      md += "| :--- | :--- | :--- | :--- | :--- |\n";
+
+      for (const item of list) {
+        let typeLabel = "星辰流水";
+        if (item.category === "upvote_in") typeLabel = "💖 收到点赞";
+        else if (item.category === "transfer_out") typeLabel = "💸 送出转账";
+        else if (item.category === "transfer_in") typeLabel = "💰 收到转账";
+
+        const amountLabel = item.amount > 0 ? `+${item.amount}` : String(item.amount);
+        const uidLabel = item.targetUid
+          ? `[UID: ${item.targetUid}](https://www.nodeseek.com/space/${item.targetUid}#/general)`
+          : "-";
+
+        const detailParts = [];
+        if (item.targetUid) {
+          const handle = getDisplayUserHandle(item.targetUid);
+          detailParts.push(`[${handle}](https://www.nodeseek.com/space/${item.targetUid}#/general)`);
+        }
+        if (item.balance !== null && item.balance !== undefined) {
+          detailParts.push(`余额: ${item.balance}`);
+        }
+        if (item.memo) {
+          detailParts.push(`留言: ${String(item.memo).replace(/\|/g, "/")}`);
+        }
+
+        const detailLabel = detailParts.length > 0 ? detailParts.join(" · ") : "-";
+        md += `| ${item.time} | ${typeLabel} | ${amountLabel} | ${uidLabel} | ${detailLabel} |\n`;
+      }
+      md += "\n";
+      return md;
+    }
+
+    function buildUserSummaryTable(list, actionText) {
+      if (!list || list.length === 0) return "";
+
+      const userMap = new Map();
+      for (const item of list) {
+        if (!item.targetUid) continue;
+        if (!userMap.has(item.targetUid)) {
+          userMap.set(item.targetUid, {
+            uid: item.targetUid,
+            name: getDisplayUserHandle(item.targetUid),
+            count: 0,
+            totalAmount: 0,
+          });
+        }
+        const stat = userMap.get(item.targetUid);
+        stat.count += 1;
+        stat.totalAmount += Math.abs(item.amount);
+      }
+
+      const sortedUsers = Array.from(userMap.values()).sort(
+        (a, b) => b.count - a.count || b.totalAmount - a.totalAmount
+      );
+      if (sortedUsers.length === 0) return "";
+
+      let md = `### 👑 贡献者统计排行 (小计共 ${sortedUsers.length} 位用户)\n\n`;
+      md += `| 排名 | 用户 (@昵称) | 对方 UID | ${actionText}次数 | 累计星辰 |\n`;
+      md += "| :--- | :--- | :--- | :--- | :--- |\n";
+
+      sortedUsers.forEach((u, index) => {
+        const rank = index + 1;
+        const rankIcon = rank === 1 ? "🥇 1" : rank === 2 ? "🥈 2" : rank === 3 ? "🥉 3" : String(rank);
+        md += `| ${rankIcon} | [${u.name}](https://www.nodeseek.com/space/${u.uid}#/general) | [UID: ${u.uid}](https://www.nodeseek.com/space/${u.uid}#/general) | **${u.count} 次** | **${u.totalAmount}** |\n`;
+      });
+      md += "\n";
+      return md;
+    }
+
+    async function exportStardustMarkdown(records, btnEl) {
+      if (!records || records.length === 0) return;
+      const origText = btnEl ? btnEl.textContent : "📋 导出 Markdown (含小计)";
+
+      const distinctUids = Array.from(new Set(records.map((r) => r.targetUid).filter(Boolean)));
+      const uncachedUids = distinctUids.filter((uid) => !getResolvedStardustUserName(uid));
+
+      if (uncachedUids.length > 0) {
+        if (btnEl) btnEl.disabled = true;
+        let done = 0;
+        const total = uncachedUids.length;
+        for (let i = 0; i < total; i += STARDUST_BATCH_CONCURRENCY) {
+          const batch = uncachedUids.slice(i, i + STARDUST_BATCH_CONCURRENCY);
+          await Promise.all(batch.map((uid) => fetchUserProfile(String(uid), "")));
+          done += batch.length;
+          if (btnEl) {
+            btnEl.textContent = `⏳ 正在解析全量昵称 (${done}/${total})...`;
+          }
+          await new Promise((r) => setTimeout(r, 60));
+        }
+        if (btnEl) btnEl.disabled = false;
+      }
+
+      const upvoteInList = records.filter((r) => r.category === "upvote_in");
+      const transferOutList = records.filter((r) => r.category === "transfer_out");
+      const transferInList = records.filter((r) => r.category === "transfer_in");
+      const summary = computeStardustSummary(records);
+
+      let fullMd = ":::: tabs\n";
+
+      fullMd += "::: tab-item 💖 收到的点赞\n";
+      fullMd += buildUserSummaryTable(upvoteInList, "获赠点赞");
+      fullMd += "### 📜 点赞明细记录\n\n";
+      fullMd += buildMarkdownTable(upvoteInList);
+      fullMd += ":::\n";
+
+      fullMd += "::: tab-item 💸 送出的转账\n";
+      fullMd += buildUserSummaryTable(transferOutList, "转出");
+      fullMd += "### 📜 送出转账明细\n\n";
+      fullMd += buildMarkdownTable(transferOutList);
+      fullMd += ":::\n";
+
+      fullMd += "::: tab-item 💰 收到的转账\n";
+      fullMd += buildUserSummaryTable(transferInList, "转入");
+      fullMd += "### 📜 收到转账明细\n\n";
+      fullMd += buildMarkdownTable(transferInList);
+      fullMd += ":::\n";
+
+      fullMd += "::: tab-item 🎁 全部流水\n";
+      fullMd += "### 📊 账本总览汇总\n\n";
+      fullMd += `- **当前星辰余额**: ${summary.displayBal}\n`;
+      fullMd += `- **真实总流水**: ${records.length} 条\n`;
+      fullMd += `- **累计收入**: +${summary.totalIncome}\n`;
+      fullMd += `- **累计支出**: -${summary.totalExpense}\n`;
+      fullMd += `- **收到点赞**: ${summary.upvoteInCount} 次 (+${summary.upvoteInStardust})\n`;
+      fullMd += `- **送出转账**: ${summary.transferOutCount} 笔 (-${summary.transferOutStardust})\n`;
+      fullMd += `- **收到转账**: ${summary.transferInCount} 笔 (+${summary.transferInStardust})\n\n`;
+      fullMd += "### 📜 全部流水明细\n\n";
+      fullMd += buildMarkdownTable(records);
+      fullMd += ":::\n";
+
+      fullMd += "::::\n";
+
+      const ok = await copyTextToClipboard(fullMd);
+      if (btnEl) {
+        btnEl.textContent = ok ? "✅ 已复制全量 MD" : "❌ 复制失败";
+        setTimeout(() => {
+          btnEl.textContent = origText;
+        }, 2500);
+      }
+
+      document.querySelectorAll("[data-nsc-sd-uid]").forEach((el) => {
+        const u = el.getAttribute("data-nsc-sd-uid");
+        const name = getResolvedStardustUserName(u);
+        if (name) el.textContent = `@${name}`;
+      });
+    }
+
+    function renderStardustTableSection(hostEl, records) {
+      const kw = stardustUi.search.trim().toLowerCase();
+      const filtered = records.filter((item) => {
+        if (stardustUi.filter !== "all" && item.category !== stardustUi.filter) return false;
+        if (kw) {
+          const uidStr = String(item.targetUid || "");
+          const nameStr = getResolvedStardustUserName(item.targetUid).toLowerCase();
+          const memoStr = String(item.memo || "").toLowerCase();
+          const timeStr = String(item.time || "").toLowerCase();
+          return (
+            uidStr.includes(kw) ||
+            nameStr.includes(kw) ||
+            memoStr.includes(kw) ||
+            timeStr.includes(kw)
+          );
+        }
+        return true;
+      });
+
+      const totalItems = filtered.length;
+      const totalPages = Math.ceil(totalItems / STARDUST_PAGE_SIZE) || 1;
+      if (stardustUi.page > totalPages) stardustUi.page = totalPages;
+      if (stardustUi.page < 1) stardustUi.page = 1;
+
+      const startIdx = (stardustUi.page - 1) * STARDUST_PAGE_SIZE;
+      const pageRecords = filtered.slice(startIdx, startIdx + STARDUST_PAGE_SIZE);
+
+      hostEl.innerHTML = "";
+
+      if (pageRecords.length === 0) {
+        hostEl.innerHTML = `<div class="nsc-empty-state">未找到符合条件的星辰流水记录</div>`;
+        return;
+      }
+
+      const wrap = document.createElement("div");
+      wrap.className = "nsc-ana-table-wrap";
+
+      const visibleUids = [];
+      const rowsHtml = pageRecords.map((item) => {
+        const amountHtml = item.amount > 0
+          ? `<span style="color:#16a34a;font-weight:700;">+${item.amount}</span>`
+          : item.amount < 0
+            ? `<span style="color:#ff3b30;font-weight:700;">${item.amount}</span>`
+            : `<span>0</span>`;
+
+        let badgeHtml = `<span class="nsc-ana-badge out">💸 送出转账</span>`;
+        if (item.category === "upvote_in") {
+          badgeHtml = `<span class="nsc-ana-badge in">💖 收到点赞</span>`;
+        } else if (item.category === "transfer_in") {
+          badgeHtml = `<span class="nsc-ana-badge star">💰 收到转账</span>`;
+        }
+
+        let uidCellHtml = "-";
+        const detailParts = [];
+        if (item.targetUid) {
+          visibleUids.push(item.targetUid);
+          const handle = getDisplayUserHandle(item.targetUid);
+          const spaceUrl = `https://www.nodeseek.com/space/${encodeURIComponent(item.targetUid)}#/general`;
+          uidCellHtml = `<a href="${spaceUrl}" target="_blank" rel="noopener noreferrer" data-sd-profile="${escHtml(item.targetUid)}" style="color:var(--nsc-accent);text-decoration:none;font-family:ui-monospace,monospace;">UID: ${escHtml(item.targetUid)}</a>`;
+          detailParts.push(`<a href="${spaceUrl}" target="_blank" rel="noopener noreferrer" data-sd-profile="${escHtml(item.targetUid)}" data-nsc-sd-uid="${escHtml(item.targetUid)}" style="color:var(--nsc-accent);font-weight:600;text-decoration:none;">${escHtml(handle)}</a>`);
+        }
+        if (item.balance !== null && item.balance !== undefined) {
+          detailParts.push(`<span class="nsc-badge-read">余额: ${escHtml(String(item.balance))}</span>`);
+        }
+        if (item.memo) {
+          detailParts.push(`<span style="color:var(--nsc-text);">📝 ${escHtml(item.memo)}</span>`);
+        }
+
+        return `
+          <tr>
+            <td style="font-family:ui-monospace,monospace;font-size:11.5px;color:var(--nsc-muted);white-space:nowrap;">${escHtml(item.time)}</td>
+            <td>${badgeHtml}</td>
+            <td>${amountHtml}</td>
+            <td>${uidCellHtml}</td>
+            <td style="line-height:1.5;">${detailParts.length > 0 ? detailParts.join(" ") : "-"}</td>
+          </tr>
+        `;
+      }).join("");
+
+      wrap.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="nsc-ana-table">
+            <thead>
+              <tr>
+                <th style="width:155px;">时间 (精确秒级)</th>
+                <th style="width:105px;">类型</th>
+                <th style="width:74px;">数额</th>
+                <th style="width:96px;">对方 UID</th>
+                <th>明细信息 (@对方用户名 / 变动后余额 / 转账留言)</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      `;
+
+      wrap.querySelectorAll("[data-sd-profile]").forEach((lnk) => {
+        lnk.addEventListener("click", (e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+          const uid = lnk.getAttribute("data-sd-profile");
+          if (uid && typeof openUserProfileModal === "function") {
+            e.preventDefault();
+            const resolved = getResolvedStardustUserName(uid);
+            openUserProfileModal({ uid, name: resolved || `用户 #${uid}` });
+          }
+        });
+      });
+
+      const pager = document.createElement("div");
+      pager.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px 2px;font-size:12px;color:var(--nsc-muted);";
+      pager.innerHTML = `
+        <span>第 ${stardustUi.page} / ${totalPages} 页 (共 ${totalItems} 条)</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button type="button" class="nsc-mini-btn" data-sd-page="prev" ${stardustUi.page <= 1 ? "disabled" : ""}>上一页</button>
+          <button type="button" class="nsc-mini-btn" data-sd-page="next" ${stardustUi.page >= totalPages ? "disabled" : ""}>下一页</button>
+        </div>
+      `;
+      pager.querySelector('[data-sd-page="prev"]').addEventListener("click", () => {
+        if (stardustUi.page > 1) {
+          stardustUi.page -= 1;
+          renderStardustTableSection(hostEl, records);
+        }
+      });
+      pager.querySelector('[data-sd-page="next"]').addEventListener("click", () => {
+        if (stardustUi.page < totalPages) {
+          stardustUi.page += 1;
+          renderStardustTableSection(hostEl, records);
+        }
+      });
+
+      hostEl.appendChild(wrap);
+      hostEl.appendChild(pager);
+
+      resolveVisibleStardustUids(visibleUids);
+    }
+
+    function renderStardustAnalytics(body, subbar) {
+      const snap = stardustEngine.getState();
+      const rawItems = snap.items || [];
+      const selfUid = stardustUi.myUid || state.currentUserId || 0;
+      const records = normalizeStardustRecords(rawItems, selfUid);
+
+      const banner = document.createElement("div");
+      banner.className = "nsc-ana-banner";
+
+      const topRow = document.createElement("div");
+      topRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%;";
+
+      const statusBox = document.createElement("div");
+      statusBox.style.cssText = "min-width:200px;flex:1;";
+      const statusText = snap.running
+        ? `正在拉取第 ${snap.page + 1} 批（已去重 ${records.length} 条流水）...`
+        : records.length > 0
+          ? `已就绪 · 全量共 ${records.length} 条流水（按时间倒序）`
+          : "点击「开始全量拉取」获取个人完整星辰收支账本";
+      statusBox.innerHTML = `
+        <div style="font-size:13px;font-weight:700;color:var(--nsc-text);">${escHtml(statusText)}</div>
+        ${snap.error ? `<div style="font-size:11.5px;color:#ff3b30;margin-top:3px;">${escHtml(snap.error)}</div>` : ""}
+      `;
+
+      const btnGroup = document.createElement("div");
+      btnGroup.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+
+      if (snap.running) {
+        const stopBtn = document.createElement("button");
+        stopBtn.type = "button";
+        stopBtn.className = "nsc-checkin-btn";
+        stopBtn.style.color = "#ff3b30";
+        stopBtn.textContent = "停止";
+        stopBtn.addEventListener("click", () => stardustEngine.abort());
+        btnGroup.appendChild(stopBtn);
+      } else {
+        const fetchBtn = document.createElement("button");
+        fetchBtn.type = "button";
+        fetchBtn.className = "nsc-checkin-btn primary";
+        fetchBtn.textContent = records.length > 0 ? "🔄 重新抓取" : "开始全量拉取";
+        fetchBtn.addEventListener("click", () => {
+          stardustUi.page = 1;
+          stardustEngine.runBatch({ maxPages: 200, delayMs: 300 });
+        });
+        btnGroup.appendChild(fetchBtn);
+      }
+
+      const exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.className = "nsc-checkin-btn";
+      exportBtn.textContent = "📋 导出 Markdown (含小计)";
+      exportBtn.disabled = records.length === 0 || snap.running;
+      exportBtn.addEventListener("click", () => exportStardustMarkdown(records, exportBtn));
+      btnGroup.appendChild(exportBtn);
+
+      topRow.appendChild(statusBox);
+      topRow.appendChild(btnGroup);
+      banner.appendChild(topRow);
+
+      // 筛选栏与搜索框
+      const filterRow = document.createElement("div");
+      filterRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;width:100%;padding-top:8px;border-top:1px dashed var(--nsc-border);";
+
+      const seg = document.createElement("div");
+      seg.className = "nsc-seg-tabs";
+      const filterDefs = [
+        { id: "all", label: "全部" },
+        { id: "upvote_in", label: "收到点赞" },
+        { id: "transfer_out", label: "送出转账" },
+        { id: "transfer_in", label: "收到转账" },
+      ];
+      const tableHost = document.createElement("div");
+
+      filterDefs.forEach((f) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "nsc-seg-btn" + (stardustUi.filter === f.id ? " is-active" : "");
+        b.textContent = f.label;
+        b.addEventListener("click", () => {
+          stardustUi.filter = f.id;
+          stardustUi.page = 1;
+          seg.querySelectorAll(".nsc-seg-btn").forEach((el) => el.classList.remove("is-active"));
+          b.classList.add("is-active");
+          if (records.length > 0) renderStardustTableSection(tableHost, records);
+        });
+        seg.appendChild(b);
+      });
+
+      const searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "搜索 UID / 用户名 / 留言 / 时间...";
+      searchInput.value = stardustUi.search;
+      searchInput.style.cssText = "height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--nsc-border);background:var(--nsc-hover);color:var(--nsc-text);font-size:12px;outline:none;min-width:210px;";
+      searchInput.addEventListener("input", () => {
+        stardustUi.search = searchInput.value;
+        stardustUi.page = 1;
+        if (records.length > 0) renderStardustTableSection(tableHost, records);
+      });
+
+      filterRow.appendChild(seg);
+      filterRow.appendChild(searchInput);
+      banner.appendChild(filterRow);
+      body.appendChild(banner);
+
+      if (records.length === 0) {
+        if (!snap.running) {
+          const empty = document.createElement("div");
+          empty.className = "nsc-empty-state";
+          empty.textContent = "尚未拉取星辰账本数据，点击「开始全量拉取」即可完整核算收支与点赞。";
+          body.appendChild(empty);
+        }
+        return;
+      }
+
+      const summary = computeStardustSummary(records);
+      const kpi = document.createElement("div");
+      kpi.className = "nsc-hub-kpi-grid";
+      kpi.innerHTML = `
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">核算余额</div>
+          <div class="nsc-hub-kpi-val" style="color:var(--nsc-accent);">${escHtml(String(summary.displayBal))}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">总流水</div>
+          <div class="nsc-hub-kpi-val">${records.length} 条</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">累计收入</div>
+          <div class="nsc-hub-kpi-val" style="color:#16a34a;">+${summary.totalIncome}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">累计支出</div>
+          <div class="nsc-hub-kpi-val" style="color:#ff3b30;">-${summary.totalExpense}</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">收到点赞</div>
+          <div class="nsc-hub-kpi-val" style="color:#16a34a;">${summary.upvoteInCount} 次 (+${summary.upvoteInStardust})</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">送出转账</div>
+          <div class="nsc-hub-kpi-val" style="color:#ff3b30;">${summary.transferOutCount} 笔 (-${summary.transferOutStardust})</div>
+        </div>
+        <div class="nsc-hub-kpi">
+          <div class="nsc-hub-kpi-lbl">收到转账</div>
+          <div class="nsc-hub-kpi-val" style="color:var(--nsc-accent);">${summary.transferInCount} 笔 (+${summary.transferInStardust})</div>
+        </div>
+      `;
+      body.appendChild(kpi);
+      body.appendChild(tableHost);
+
+      renderStardustTableSection(tableHost, records);
+    }
+
+    registerHubSubView("stardust", {
+      render(body, subbar) {
+        renderStardustAnalytics(body, subbar);
+      },
+    });
+  })();
+
+  // ==========================================================================
   // Module: plugins/core-workbench-base.js
   // ==========================================================================
   // 官方内置基座配置中心插件：主题中心 / 四区皮肤透明度基座 / 组件调序基座 / 排版与自定义表情基座 / 插槽探测
@@ -10866,8 +12198,88 @@
       { id: "skin", label: "分区皮肤" },
       { id: "layout", label: "组件调序" },
       { id: "chat", label: "排版与回复" },
+      { id: "ext", label: "原版扩展" },
       { id: "slots", label: "扩展插槽" },
     ];
+
+    const DEFAULT_STYLE_PRESETS = [
+      {
+        id: "preset_kawaii_border",
+        title: "原版论坛 · 萌系半透明封边（官方扩展预设）",
+        note: "包含白色圆角头像投影、斜纹滚动条、自定义指针、全屏背景图与 #nsk-body-left 封边；切回原版论坛时依然生效。",
+        code: `/* ============================================================
+   1. 组件基础样式：统一图标与按钮风格
+   ============================================================ */
+.avatar { border: 3px solid #fff !important; } /* 给头像增加一圈白色边框，更醒目 */
+.avatar + .icon { display: none !important; } /* 隐藏掉头像旁边的小等级图标，让画面更简洁 */
+.avatar-normal, .sorter, .btn { box-shadow: 1px 1px 3px #000 !important; } /* 给头像、排序栏、按钮加上淡淡的黑色投影，看起来有立体感 */
+.avatar-normal { border-radius: 20px; } /* 设置头像为圆角矩形 */
+
+/* ============================================================
+   2. 滚动条美化：让滚动条不再是原生那种丑丑的样子
+   ============================================================ */
+::-webkit-scrollbar { width: 8px; height: 8px; } /* 设置滚动条的厚度 */
+::-webkit-scrollbar-track { background-color: rgba(200, 200, 200, 0.2); border-radius: 2em; } /* 设置滚动条轨道的颜色为浅灰半透明，并带圆角 */
+::-webkit-scrollbar-thumb {
+    background-color: #ccc; /* 设置滑块本身的颜色 */
+    background-image: -webkit-linear-gradient(45deg, rgba(255,255,255,0.4) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0.4) 75%, transparent 75%, transparent); /* 给滑块加上漂亮的斜纹装饰 */
+    border-radius: 2em; /* 滑块两端变圆润 */
+}
+
+/* ============================================================
+   3. 自定义鼠标指针：让点击交互更有趣
+   ============================================================ */
+body { cursor: url('https://npm.elemecdn.com/kang-static/Hexo/img/default.cur'), auto !important; } /* 设置页面空白处的默认鼠标箭头 */
+a, button, img, .transition { cursor: url('https://npm.elemecdn.com/kang-static/Hexo/img/pointer.cur'), auto !important; } /* 设置鼠标移到链接、按钮、图片等可点击物体上的指针 */
+
+/* ============================================================
+   4. 页面背景与透明度布局：核心视觉美化
+   ============================================================ */
+body::before {
+    content: "";
+    position: fixed; /* 把背景图固定住，页面滚动时背景不动 */
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: -1; /* 把背景图放到最底层，确保不遮挡文字 */
+    background: #f0f0f0 url(https://cdn.nodeimage.com/i/qAdktUUKq1wrLwlSuYIbhHDiZtf3lXCp.png) center/cover no-repeat; /* 设置自动拉伸的随机背景图 */
+}
+
+#nsk-body, header { background-color: rgba(255, 255, 255, 0.7) !important; } /* 设置主体内容区和顶栏为 70% 透明的白色，隐约透出背景 */
+footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更透一点，只有 15% 透明度 */
+
+/* ============================================================
+   5. 帖子列表：自定义可爱封边 (带调试指南)
+   ============================================================ */
+#nsk-body-left {
+    background: rgba(255, 255, 255, 0.2) !important; /* 背景更通透 (0.2透明度) */
+    /* backdrop-filter: blur(10px); */ /* 注释掉以防与 Pro 脚本的弹窗层级及渲染冲突 */
+    border-radius: 20px; /* 设置帖子区域的大圆角 */
+    
+    /* 1. 图案厚度：数值越大，边框图案越宽 (觉得太窄就改大这里) */
+    border: 25px solid transparent; 
+    
+    /* 2. 图片设置：55为切片数值，若图案被切断，微调此数字 (每次增减 5-10) */
+    border-image: url('https://cdn.nodeimage.com/i/wXSGm50JBUZj8j3wobqzgleqht7Fa2uq.png') 55 round;
+    
+    /* 3. 偏移距离：图案离帖子内容的距离 (如果图案压到字了，就把 10 改大) */
+    border-image-outset: 10px;
+    
+    /* 设置内容与边缘的空隙 */
+    padding: 10px;
+    margin-right: 15px;
+}`,
+      },
+    ];
+
+    function getStyleNotes() {
+      if (state.customStyleNotes === null) {
+        state.customStyleNotes = DEFAULT_STYLE_PRESETS.map((p) => ({ ...p }));
+        saveJson(LS.CUSTOM_STYLE_NOTES, state.customStyleNotes);
+      }
+      return Array.isArray(state.customStyleNotes) ? state.customStyleNotes : [];
+    }
+
+    let selectedExtId = "";
+    let showExtGuideBox = false;
 
     function buildRangeControl({ label, min, max, step, value, unit = "", onLive, onCommit }) {
       const row = document.createElement("div");
@@ -11295,6 +12707,168 @@
       body.appendChild(stkBox);
     }
 
+    function renderExtSection(body) {
+      const notes = getStyleNotes();
+      if (notes.length > 0 && !notes.some((n) => n.id === selectedExtId)) {
+        selectedExtId = notes[0].id;
+      }
+      const cur = notes.find((n) => n.id === selectedExtId) || null;
+
+      const intro = document.createElement("div");
+      intro.className = "nsc-base-section";
+      intro.innerHTML = `
+        <div class="nsc-base-title">
+          <span>原版论坛扩展样式备忘录（自定义 style 预设与引导）</span>
+          <div style="display:inline-flex;gap:6px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-new">+ 新建备忘</button>
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-restore">恢复官方预设</button>
+          </div>
+        </div>
+        <div class="nsc-base-sub">
+          用于收藏和切换 NodeSeek 原站「设置 → 论坛扩展 → 自定义style」CSS 代码（切换回原版论坛模式时同样生效）。
+          注：NodeSeek 对「论坛扩展」功能存在社区等级限制，部分未达对应等级的账号可能无法在设置页看到该入口。
+        </div>
+        <div id="nsc-ext-tabs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"></div>
+      `;
+
+      intro.querySelector("#nsc-ext-new").addEventListener("click", () => {
+        const nid = `memo_${Date.now().toString(36)}`;
+        notes.push({
+          id: nid,
+          title: `自定义扩展 #${notes.length + 1}`,
+          note: "",
+          code: "/* 在此粘贴原版论坛自定义 CSS 代码 */\n",
+        });
+        state.customStyleNotes = notes;
+        selectedExtId = nid;
+        showExtGuideBox = false;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        renderUserHubIfOpen();
+      });
+
+      intro.querySelector("#nsc-ext-restore").addEventListener("click", () => {
+        const preset = DEFAULT_STYLE_PRESETS[0];
+        const idx = notes.findIndex((n) => n.id === preset.id);
+        if (idx >= 0) notes[idx] = { ...preset };
+        else notes.unshift({ ...preset });
+        state.customStyleNotes = notes;
+        selectedExtId = preset.id;
+        showExtGuideBox = false;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        renderUserHubIfOpen();
+      });
+
+      const tabsEl = intro.querySelector("#nsc-ext-tabs");
+      if (notes.length === 0) {
+        tabsEl.innerHTML = `<span style="font-size:11.5px;color:var(--nsc-muted);">暂无扩展备忘，点击右上角「+ 新建备忘」或「恢复官方预设」。</span>`;
+      } else {
+        notes.forEach((n) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nsc-pill-btn" + (cur && cur.id === n.id ? " is-active" : "");
+          b.textContent = n.title || "未命名扩展";
+          b.addEventListener("click", () => {
+            selectedExtId = n.id;
+            showExtGuideBox = false;
+            renderUserHubIfOpen();
+          });
+          tabsEl.appendChild(b);
+        });
+      }
+      body.appendChild(intro);
+
+      if (!cur) return;
+
+      const edBox = document.createElement("div");
+      edBox.className = "nsc-base-section";
+      edBox.innerHTML = `
+        <div class="nsc-base-title">
+          <input type="text" id="nsc-ext-title" class="nsc-search-input" value="${escHtml(cur.title || "")}" placeholder="扩展名称..." style="flex:1;max-width:360px;height:28px;font-weight:600;" />
+          <div style="display:inline-flex;gap:6px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-save">保存备忘</button>
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-del" style="color:#ff3b30;">删除</button>
+            <button type="button" class="nsc-send-btn" id="nsc-ext-apply" style="height:26px;">复制并前往配置</button>
+          </div>
+        </div>
+        ${cur.note ? `<div class="nsc-base-sub">${escHtml(cur.note)}</div>` : ""}
+        <div id="nsc-ext-guide-slot"></div>
+        <textarea id="nsc-ext-code" class="nsc-ext-code" spellcheck="false" placeholder="在此编写或粘贴自定义 CSS..."></textarea>
+        <div id="nsc-ext-msg" style="font-size:11.5px;color:var(--nsc-muted);margin-top:6px;">提示：保存后将持久化至本地备忘录，点击「复制并前往配置」一键复制代码并引导跳转至设置页。</div>
+      `;
+
+      const titleInp = edBox.querySelector("#nsc-ext-title");
+      const codeTa = edBox.querySelector("#nsc-ext-code");
+      const msgEl = edBox.querySelector("#nsc-ext-msg");
+      const guideSlot = edBox.querySelector("#nsc-ext-guide-slot");
+      codeTa.value = cur.code || "";
+
+      const renderGuide = () => {
+        if (!showExtGuideBox) {
+          guideSlot.innerHTML = "";
+          return;
+        }
+        guideSlot.innerHTML = `
+          <div class="nsc-ext-guide-box">
+            <div style="font-weight:700;margin-bottom:4px;">CSS 代码已复制到剪贴板</div>
+            <div>请点击下方确认按钮进入个人设置，在左侧选择「<strong>论坛扩展</strong>」，将代码粘贴到「<strong>自定义style</strong>」输入框后点击绿色「<strong>确定</strong>」即可生效（该入口受站点社区等级限制，未达等级时原版设置页不会显示该项）。</div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button type="button" class="nsc-send-btn" id="nsc-ext-go-setting">确认前往「论坛扩展」配置 ↗</button>
+              <button type="button" class="nsc-mini-btn" id="nsc-ext-hide-guide">暂不跳转</button>
+            </div>
+          </div>
+        `;
+        guideSlot.querySelector("#nsc-ext-go-setting").addEventListener("click", () => {
+          showExtGuideBox = false;
+          state._settingAutoSection = "论坛扩展";
+          if (typeof openUserHubModal === "function") openUserHubModal("setting");
+        });
+        guideSlot.querySelector("#nsc-ext-hide-guide").addEventListener("click", () => {
+          showExtGuideBox = false;
+          renderGuide();
+        });
+      };
+      renderGuide();
+
+      edBox.querySelector("#nsc-ext-save").addEventListener("click", () => {
+        cur.title = titleInp.value.trim() || "未命名扩展";
+        cur.code = codeTa.value;
+        state.customStyleNotes = notes;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        msgEl.textContent = "已保存至扩展备忘录";
+        msgEl.style.color = "var(--nsc-green)";
+        renderUserHubIfOpen();
+      });
+
+      edBox.querySelector("#nsc-ext-del").addEventListener("click", () => {
+        const idx = notes.findIndex((n) => n.id === cur.id);
+        if (idx >= 0) notes.splice(idx, 1);
+        state.customStyleNotes = notes;
+        selectedExtId = notes[0] ? notes[0].id : "";
+        showExtGuideBox = false;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        renderUserHubIfOpen();
+      });
+
+      edBox.querySelector("#nsc-ext-apply").addEventListener("click", async () => {
+        cur.title = titleInp.value.trim() || cur.title;
+        cur.code = codeTa.value;
+        state.customStyleNotes = notes;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        const copied = await copyTextToClipboard(cur.code);
+        if (copied) {
+          showExtGuideBox = true;
+          renderGuide();
+          msgEl.textContent = "已复制代码，请确认下方引导前往设置";
+          msgEl.style.color = "var(--nsc-accent)";
+        } else {
+          msgEl.textContent = "自动复制失败，请手动全选文本框内容复制";
+          msgEl.style.color = "#ff3b30";
+        }
+      });
+
+      body.appendChild(edBox);
+    }
+
     function renderSlotsSection(body) {
       const manifest = typeof NSC_DISCOVERED_MODULES !== "undefined" ? NSC_DISCOVERED_MODULES : { mode: "unknown", themes: [], plugins: [] };
       const reg = state.registry;
@@ -11352,6 +12926,7 @@
         else if (sec === "skin") renderSkinSection(body);
         else if (sec === "layout") renderLayoutSection(body);
         else if (sec === "chat") renderChatAndComposerSection(body);
+        else if (sec === "ext") renderExtSection(body);
         else renderSlotsSection(body);
       },
     });
@@ -11360,7 +12935,7 @@
   // ==========================================================================
   // Build Manifest
   // ==========================================================================
-  const NSC_DISCOVERED_MODULES = {"mode":"release","themes":["themes/mac-default.js"],"plugins":["plugins/core-workbench-base.js"]};
+  const NSC_DISCOVERED_MODULES = {"mode":"release","themes":["themes/mac-default.js"],"plugins":["plugins/core-hub-analytics.js","plugins/core-workbench-base.js"]};
 
   // ==========================================================================
   // Module: 09-main.js

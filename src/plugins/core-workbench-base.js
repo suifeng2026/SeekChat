@@ -5,8 +5,88 @@
       { id: "skin", label: "分区皮肤" },
       { id: "layout", label: "组件调序" },
       { id: "chat", label: "排版与回复" },
+      { id: "ext", label: "原版扩展" },
       { id: "slots", label: "扩展插槽" },
     ];
+
+    const DEFAULT_STYLE_PRESETS = [
+      {
+        id: "preset_kawaii_border",
+        title: "原版论坛 · 萌系半透明封边（官方扩展预设）",
+        note: "包含白色圆角头像投影、斜纹滚动条、自定义指针、全屏背景图与 #nsk-body-left 封边；切回原版论坛时依然生效。",
+        code: `/* ============================================================
+   1. 组件基础样式：统一图标与按钮风格
+   ============================================================ */
+.avatar { border: 3px solid #fff !important; } /* 给头像增加一圈白色边框，更醒目 */
+.avatar + .icon { display: none !important; } /* 隐藏掉头像旁边的小等级图标，让画面更简洁 */
+.avatar-normal, .sorter, .btn { box-shadow: 1px 1px 3px #000 !important; } /* 给头像、排序栏、按钮加上淡淡的黑色投影，看起来有立体感 */
+.avatar-normal { border-radius: 20px; } /* 设置头像为圆角矩形 */
+
+/* ============================================================
+   2. 滚动条美化：让滚动条不再是原生那种丑丑的样子
+   ============================================================ */
+::-webkit-scrollbar { width: 8px; height: 8px; } /* 设置滚动条的厚度 */
+::-webkit-scrollbar-track { background-color: rgba(200, 200, 200, 0.2); border-radius: 2em; } /* 设置滚动条轨道的颜色为浅灰半透明，并带圆角 */
+::-webkit-scrollbar-thumb {
+    background-color: #ccc; /* 设置滑块本身的颜色 */
+    background-image: -webkit-linear-gradient(45deg, rgba(255,255,255,0.4) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0.4) 75%, transparent 75%, transparent); /* 给滑块加上漂亮的斜纹装饰 */
+    border-radius: 2em; /* 滑块两端变圆润 */
+}
+
+/* ============================================================
+   3. 自定义鼠标指针：让点击交互更有趣
+   ============================================================ */
+body { cursor: url('https://npm.elemecdn.com/kang-static/Hexo/img/default.cur'), auto !important; } /* 设置页面空白处的默认鼠标箭头 */
+a, button, img, .transition { cursor: url('https://npm.elemecdn.com/kang-static/Hexo/img/pointer.cur'), auto !important; } /* 设置鼠标移到链接、按钮、图片等可点击物体上的指针 */
+
+/* ============================================================
+   4. 页面背景与透明度布局：核心视觉美化
+   ============================================================ */
+body::before {
+    content: "";
+    position: fixed; /* 把背景图固定住，页面滚动时背景不动 */
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: -1; /* 把背景图放到最底层，确保不遮挡文字 */
+    background: #f0f0f0 url(https://cdn.nodeimage.com/i/qAdktUUKq1wrLwlSuYIbhHDiZtf3lXCp.png) center/cover no-repeat; /* 设置自动拉伸的随机背景图 */
+}
+
+#nsk-body, header { background-color: rgba(255, 255, 255, 0.7) !important; } /* 设置主体内容区和顶栏为 70% 透明的白色，隐约透出背景 */
+footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更透一点，只有 15% 透明度 */
+
+/* ============================================================
+   5. 帖子列表：自定义可爱封边 (带调试指南)
+   ============================================================ */
+#nsk-body-left {
+    background: rgba(255, 255, 255, 0.2) !important; /* 背景更通透 (0.2透明度) */
+    /* backdrop-filter: blur(10px); */ /* 注释掉以防与 Pro 脚本的弹窗层级及渲染冲突 */
+    border-radius: 20px; /* 设置帖子区域的大圆角 */
+    
+    /* 1. 图案厚度：数值越大，边框图案越宽 (觉得太窄就改大这里) */
+    border: 25px solid transparent; 
+    
+    /* 2. 图片设置：55为切片数值，若图案被切断，微调此数字 (每次增减 5-10) */
+    border-image: url('https://cdn.nodeimage.com/i/wXSGm50JBUZj8j3wobqzgleqht7Fa2uq.png') 55 round;
+    
+    /* 3. 偏移距离：图案离帖子内容的距离 (如果图案压到字了，就把 10 改大) */
+    border-image-outset: 10px;
+    
+    /* 设置内容与边缘的空隙 */
+    padding: 10px;
+    margin-right: 15px;
+}`,
+      },
+    ];
+
+    function getStyleNotes() {
+      if (state.customStyleNotes === null) {
+        state.customStyleNotes = DEFAULT_STYLE_PRESETS.map((p) => ({ ...p }));
+        saveJson(LS.CUSTOM_STYLE_NOTES, state.customStyleNotes);
+      }
+      return Array.isArray(state.customStyleNotes) ? state.customStyleNotes : [];
+    }
+
+    let selectedExtId = "";
+    let showExtGuideBox = false;
 
     function buildRangeControl({ label, min, max, step, value, unit = "", onLive, onCommit }) {
       const row = document.createElement("div");
@@ -434,6 +514,168 @@
       body.appendChild(stkBox);
     }
 
+    function renderExtSection(body) {
+      const notes = getStyleNotes();
+      if (notes.length > 0 && !notes.some((n) => n.id === selectedExtId)) {
+        selectedExtId = notes[0].id;
+      }
+      const cur = notes.find((n) => n.id === selectedExtId) || null;
+
+      const intro = document.createElement("div");
+      intro.className = "nsc-base-section";
+      intro.innerHTML = `
+        <div class="nsc-base-title">
+          <span>原版论坛扩展样式备忘录（自定义 style 预设与引导）</span>
+          <div style="display:inline-flex;gap:6px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-new">+ 新建备忘</button>
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-restore">恢复官方预设</button>
+          </div>
+        </div>
+        <div class="nsc-base-sub">
+          用于收藏和切换 NodeSeek 原站「设置 → 论坛扩展 → 自定义style」CSS 代码（切换回原版论坛模式时同样生效）。
+          注：NodeSeek 对「论坛扩展」功能存在社区等级限制，部分未达对应等级的账号可能无法在设置页看到该入口。
+        </div>
+        <div id="nsc-ext-tabs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"></div>
+      `;
+
+      intro.querySelector("#nsc-ext-new").addEventListener("click", () => {
+        const nid = `memo_${Date.now().toString(36)}`;
+        notes.push({
+          id: nid,
+          title: `自定义扩展 #${notes.length + 1}`,
+          note: "",
+          code: "/* 在此粘贴原版论坛自定义 CSS 代码 */\n",
+        });
+        state.customStyleNotes = notes;
+        selectedExtId = nid;
+        showExtGuideBox = false;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        renderUserHubIfOpen();
+      });
+
+      intro.querySelector("#nsc-ext-restore").addEventListener("click", () => {
+        const preset = DEFAULT_STYLE_PRESETS[0];
+        const idx = notes.findIndex((n) => n.id === preset.id);
+        if (idx >= 0) notes[idx] = { ...preset };
+        else notes.unshift({ ...preset });
+        state.customStyleNotes = notes;
+        selectedExtId = preset.id;
+        showExtGuideBox = false;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        renderUserHubIfOpen();
+      });
+
+      const tabsEl = intro.querySelector("#nsc-ext-tabs");
+      if (notes.length === 0) {
+        tabsEl.innerHTML = `<span style="font-size:11.5px;color:var(--nsc-muted);">暂无扩展备忘，点击右上角「+ 新建备忘」或「恢复官方预设」。</span>`;
+      } else {
+        notes.forEach((n) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nsc-pill-btn" + (cur && cur.id === n.id ? " is-active" : "");
+          b.textContent = n.title || "未命名扩展";
+          b.addEventListener("click", () => {
+            selectedExtId = n.id;
+            showExtGuideBox = false;
+            renderUserHubIfOpen();
+          });
+          tabsEl.appendChild(b);
+        });
+      }
+      body.appendChild(intro);
+
+      if (!cur) return;
+
+      const edBox = document.createElement("div");
+      edBox.className = "nsc-base-section";
+      edBox.innerHTML = `
+        <div class="nsc-base-title">
+          <input type="text" id="nsc-ext-title" class="nsc-search-input" value="${escHtml(cur.title || "")}" placeholder="扩展名称..." style="flex:1;max-width:360px;height:28px;font-weight:600;" />
+          <div style="display:inline-flex;gap:6px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-save">保存备忘</button>
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-del" style="color:#ff3b30;">删除</button>
+            <button type="button" class="nsc-send-btn" id="nsc-ext-apply" style="height:26px;">复制并前往配置</button>
+          </div>
+        </div>
+        ${cur.note ? `<div class="nsc-base-sub">${escHtml(cur.note)}</div>` : ""}
+        <div id="nsc-ext-guide-slot"></div>
+        <textarea id="nsc-ext-code" class="nsc-ext-code" spellcheck="false" placeholder="在此编写或粘贴自定义 CSS..."></textarea>
+        <div id="nsc-ext-msg" style="font-size:11.5px;color:var(--nsc-muted);margin-top:6px;">提示：保存后将持久化至本地备忘录，点击「复制并前往配置」一键复制代码并引导跳转至设置页。</div>
+      `;
+
+      const titleInp = edBox.querySelector("#nsc-ext-title");
+      const codeTa = edBox.querySelector("#nsc-ext-code");
+      const msgEl = edBox.querySelector("#nsc-ext-msg");
+      const guideSlot = edBox.querySelector("#nsc-ext-guide-slot");
+      codeTa.value = cur.code || "";
+
+      const renderGuide = () => {
+        if (!showExtGuideBox) {
+          guideSlot.innerHTML = "";
+          return;
+        }
+        guideSlot.innerHTML = `
+          <div class="nsc-ext-guide-box">
+            <div style="font-weight:700;margin-bottom:4px;">CSS 代码已复制到剪贴板</div>
+            <div>请点击下方确认按钮进入个人设置，在左侧选择「<strong>论坛扩展</strong>」，将代码粘贴到「<strong>自定义style</strong>」输入框后点击绿色「<strong>确定</strong>」即可生效（该入口受站点社区等级限制，未达等级时原版设置页不会显示该项）。</div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button type="button" class="nsc-send-btn" id="nsc-ext-go-setting">确认前往「论坛扩展」配置 ↗</button>
+              <button type="button" class="nsc-mini-btn" id="nsc-ext-hide-guide">暂不跳转</button>
+            </div>
+          </div>
+        `;
+        guideSlot.querySelector("#nsc-ext-go-setting").addEventListener("click", () => {
+          showExtGuideBox = false;
+          state._settingAutoSection = "论坛扩展";
+          if (typeof openUserHubModal === "function") openUserHubModal("setting");
+        });
+        guideSlot.querySelector("#nsc-ext-hide-guide").addEventListener("click", () => {
+          showExtGuideBox = false;
+          renderGuide();
+        });
+      };
+      renderGuide();
+
+      edBox.querySelector("#nsc-ext-save").addEventListener("click", () => {
+        cur.title = titleInp.value.trim() || "未命名扩展";
+        cur.code = codeTa.value;
+        state.customStyleNotes = notes;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        msgEl.textContent = "已保存至扩展备忘录";
+        msgEl.style.color = "var(--nsc-green)";
+        renderUserHubIfOpen();
+      });
+
+      edBox.querySelector("#nsc-ext-del").addEventListener("click", () => {
+        const idx = notes.findIndex((n) => n.id === cur.id);
+        if (idx >= 0) notes.splice(idx, 1);
+        state.customStyleNotes = notes;
+        selectedExtId = notes[0] ? notes[0].id : "";
+        showExtGuideBox = false;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        renderUserHubIfOpen();
+      });
+
+      edBox.querySelector("#nsc-ext-apply").addEventListener("click", async () => {
+        cur.title = titleInp.value.trim() || cur.title;
+        cur.code = codeTa.value;
+        state.customStyleNotes = notes;
+        saveJson(LS.CUSTOM_STYLE_NOTES, notes);
+        const copied = await copyTextToClipboard(cur.code);
+        if (copied) {
+          showExtGuideBox = true;
+          renderGuide();
+          msgEl.textContent = "已复制代码，请确认下方引导前往设置";
+          msgEl.style.color = "var(--nsc-accent)";
+        } else {
+          msgEl.textContent = "自动复制失败，请手动全选文本框内容复制";
+          msgEl.style.color = "#ff3b30";
+        }
+      });
+
+      body.appendChild(edBox);
+    }
+
     function renderSlotsSection(body) {
       const manifest = typeof NSC_DISCOVERED_MODULES !== "undefined" ? NSC_DISCOVERED_MODULES : { mode: "unknown", themes: [], plugins: [] };
       const reg = state.registry;
@@ -491,6 +733,7 @@
         else if (sec === "skin") renderSkinSection(body);
         else if (sec === "layout") renderLayoutSection(body);
         else if (sec === "chat") renderChatAndComposerSection(body);
+        else if (sec === "ext") renderExtSection(body);
         else renderSlotsSection(body);
       },
     });

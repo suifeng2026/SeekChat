@@ -1740,6 +1740,82 @@
       }
       .nsc-base-sticker-chip img { width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
 
+      /* 个人中心统计分析面板、进度条、备忘录卡片与全量表格样式 */
+      .nsc-ana-banner {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+        padding: 11px 14px; border-radius: 12px; margin-bottom: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-ana-progress-track {
+        width: 100%; height: 6px; border-radius: 999px; background: var(--nsc-hover);
+        overflow: hidden; margin-top: 8px;
+      }
+      .nsc-ana-progress-fill {
+        height: 100%; border-radius: 999px; background: var(--nsc-accent);
+        transition: width 0.18s ease;
+      }
+      .nsc-ana-split {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 10px; margin-bottom: 12px;
+      }
+      .nsc-ana-card {
+        padding: 12px 14px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-ana-card-title {
+        font-size: 13px; font-weight: 700; color: var(--nsc-text);
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        margin-bottom: 9px;
+      }
+      .nsc-ana-bar-row {
+        display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: 12px;
+      }
+      .nsc-ana-bar-row:last-child { margin-bottom: 0; }
+      .nsc-ana-bar-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .nsc-ana-bar-track {
+        height: 7px; border-radius: 999px; background: var(--nsc-hover); overflow: hidden;
+      }
+      .nsc-ana-bar-fill {
+        height: 100%; border-radius: 999px; background: var(--nsc-accent); transition: width 0.22s ease;
+      }
+      .nsc-ana-table-wrap {
+        border: 1px solid var(--nsc-border); border-radius: 12px; overflow: hidden;
+        background: var(--nsc-bg-card);
+      }
+      .nsc-ana-table {
+        width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;
+      }
+      .nsc-ana-table th {
+        padding: 8px 11px; background: var(--nsc-hover); color: var(--nsc-muted);
+        font-weight: 600; border-bottom: 1px solid var(--nsc-border); white-space: nowrap;
+      }
+      .nsc-ana-table td {
+        padding: 8px 11px; border-bottom: 1px solid var(--nsc-border); color: var(--nsc-text);
+        vertical-align: middle;
+      }
+      .nsc-ana-table tbody tr:last-child td { border-bottom: none; }
+      .nsc-ana-table tbody tr:hover td { background: var(--nsc-hover); }
+      .nsc-ana-badge {
+        display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px;
+        font-size: 11px; font-weight: 600;
+      }
+      .nsc-ana-badge.in { background: rgba(52, 199, 89, 0.14); color: #16a34a; }
+      .nsc-ana-badge.out { background: rgba(255, 59, 48, 0.14); color: #ff3b30; }
+      .nsc-ana-badge.star { background: var(--nsc-accent-soft); color: var(--nsc-accent); }
+      .nsc-ext-code {
+        width: 100%; box-sizing: border-box; min-height: 180px; padding: 10px 12px;
+        border-radius: 10px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-hover); color: var(--nsc-text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11.5px; line-height: 1.5; resize: vertical; outline: none;
+      }
+      .nsc-ext-code:focus { border-color: var(--nsc-accent); background: var(--nsc-bg-card); }
+      .nsc-ext-guide-box {
+        padding: 10px 12px; border-radius: 10px; margin-bottom: 10px;
+        background: var(--nsc-accent-soft); border: 1px solid rgba(0, 122, 255, 0.22);
+        font-size: 12px; color: var(--nsc-text); line-height: 1.55;
+      }
+
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
         100% { box-shadow: 0 0 0 0 transparent; }

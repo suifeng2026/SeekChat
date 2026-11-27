@@ -22,6 +22,7 @@
     RIGHT_CONFIG: "nsc_v7_right_config",
     CHAT_PREFS: "nsc_v7_chat_prefs",
     CUSTOM_STICKERS: "nsc_v7_custom_stickers",
+    CUSTOM_STYLE_NOTES: "nsc_v7_custom_style_notes",
   };
 
   function isBrowsePath(pathname) {
@@ -236,15 +237,21 @@
     hubNotifSub: "reply-me",
     _lastRenderedHubTab: "",
     _hubFansMode: "fans",
+    _hubFansSortByActive: false,
+    _settingAutoSection: "",
+    hubCreditView: "list",
+    hubStardustView: "list",
     workbenchSection: "theme",
     paneSkins: loadJson(LS.PANE_SKINS, {}),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
     customStickers: loadJson(LS.CUSTOM_STICKERS, []),
+    customStyleNotes: loadJson(LS.CUSTOM_STYLE_NOTES, null),
     registry: {
       themes: [],
       hubTabs: [],
+      hubSubViews: {},
       bubbleEnhancers: [],
       userActions: [],
       navItems: [],
@@ -254,7 +261,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.21.2",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.0",
       latest: "",
       hasUpdate: false,
       checking: false,

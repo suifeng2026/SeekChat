@@ -776,6 +776,34 @@
     upsertRegistryItem(state.registry.hubTabs, { order: 80, ...tabSpec }, (a, b) => (a.order ?? 80) - (b.order ?? 80));
   }
 
+  function registerHubSubView(tabId, handler) {
+    if (!tabId || !handler) return;
+    state.registry.hubSubViews[tabId] = handler;
+  }
+
+  async function copyTextToClipboard(text) {
+    const val = String(text || "");
+    if (!val) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(val);
+        return true;
+      }
+    } catch (_) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = val;
+      ta.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0;";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return Boolean(ok);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function registerBubbleEnhancer(spec) {
     if (!spec || !spec.id || typeof spec.run !== "function") return;
     upsertRegistryItem(state.registry.bubbleEnhancers, { priority: 50, ...spec }, (a, b) => (a.priority ?? 50) - (b.priority ?? 50));
