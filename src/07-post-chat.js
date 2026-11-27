@@ -407,7 +407,7 @@
     const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (!node.nodeValue || !/(\d{1,4}#|#\d{1,4})/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
-        if (node.parentElement && node.parentElement.closest("a, pre, code, script, style")) {
+        if (node.parentElement && node.parentElement.closest("a, pre, code, script, style, .nsc-sd-card, .nsc-vote-card")) {
           return NodeFilter.FILTER_REJECT;
         }
         return NodeFilter.FILTER_ACCEPT;
@@ -1268,6 +1268,7 @@
         bq.classList.toggle("is-expanded");
       });
     }
+    enhanceNsApps(bubble);
     linkifyFloorReferences(bubble);
     enhanceMagicTabs(bubble);
     enhanceCodeBlocks(bubble);
@@ -1323,6 +1324,7 @@
         ti.querySelector(".nsc-msg-author").addEventListener("click", () => openUserProfileModal(ch));
         ti.querySelector(".nsc-floor-tag").addEventListener("click", () => jumpToFloor(ch.floorId));
         const tc = ti.querySelector(".nsc-thread-content");
+        enhanceNsApps(tc);
         linkifyFloorReferences(tc);
         enhanceMagicTabs(tc);
         enhanceCodeBlocks(tc);

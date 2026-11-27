@@ -97,6 +97,57 @@
     return json;
   }
 
+  async function computeDynamicSign(method, absUrl, bodyText = "") {
+    try {
+      if (!(window.crypto && window.crypto.subtle)) return "";
+      const raw = [
+        String(method || "GET").toUpperCase(),
+        String(absUrl || ""),
+        navigator.userAgent || "",
+        String(bodyText || ""),
+      ].join("\n\n");
+      const digest = await window.crypto.subtle.digest("SHA-1", new TextEncoder().encode(raw));
+      return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  async function signedApiFetchJson(path, { method = "GET", bodyObj = null } = {}) {
+    const absUrl = new URL(path, location.origin).href;
+    const upperMethod = String(method || "GET").toUpperCase();
+    const hasBody = upperMethod !== "GET" && bodyObj !== null && bodyObj !== undefined;
+    const bodyText = hasBody ? JSON.stringify(bodyObj) : "";
+    const sign = await computeDynamicSign(upperMethod, absUrl, bodyText);
+    const headers = upperMethod === "GET"
+      ? {
+          Accept: "application/json, text/plain, */*",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(sign ? { "x-dynamic-sign": sign } : {}),
+        }
+      : {
+          ...getNodeSeekPostHeaders(),
+          Accept: "application/json, text/plain, */*",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(sign ? { "x-dynamic-sign": sign } : {}),
+        };
+    const resp = await fetch(absUrl, {
+      method: upperMethod,
+      credentials: "include",
+      cache: "no-store",
+      headers,
+      ...(hasBody ? { body: bodyText } : {}),
+    });
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok || !json || json.success === false) {
+      const msg = (json && json.message) || (resp.status === 401 ? "请先登录后操作" : `HTTP ${resp.status}`);
+      const err = new Error(msg);
+      err.status = resp.status;
+      throw err;
+    }
+    return json;
+  }
+
   function genCsrfToken(len = 16) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let out = "";

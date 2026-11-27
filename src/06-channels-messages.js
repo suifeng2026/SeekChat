@@ -754,6 +754,7 @@
       });
       const pmBubble = wrap.querySelector(".nsc-bubble");
       if (pmBubble) {
+        enhanceNsApps(pmBubble);
         enhanceCodeBlocks(pmBubble);
         processBubbleImages(pmBubble);
       }

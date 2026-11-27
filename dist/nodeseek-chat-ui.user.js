@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
+// @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.19.1
-// @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
-// @author       JeikCode Assistant
+// @version      7.20.0
+// @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
+// @author       80hou
 // @match        https://www.nodeseek.com/*
 // @match        https://nodeseek.com/*
 // @run-at       document-start
@@ -119,6 +119,8 @@
     copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
     check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    stardust: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 5.3L19.5 10l-5.3 2.2L12 17.5l-2.2-5.3L4.5 10l5.3-1.7L12 3z"/><path d="M19 16l.9 2.1L22 19l-2.1.9L19 22l-.9-2.1L16 19l2.1-.9L19 16z"/></svg>`,
+    refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -246,7 +248,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.19.0",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.20.0",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -364,6 +366,57 @@
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok || json.success === false) {
       throw new Error(json.message || `HTTP ${resp.status}`);
+    }
+    return json;
+  }
+
+  async function computeDynamicSign(method, absUrl, bodyText = "") {
+    try {
+      if (!(window.crypto && window.crypto.subtle)) return "";
+      const raw = [
+        String(method || "GET").toUpperCase(),
+        String(absUrl || ""),
+        navigator.userAgent || "",
+        String(bodyText || ""),
+      ].join("\n\n");
+      const digest = await window.crypto.subtle.digest("SHA-1", new TextEncoder().encode(raw));
+      return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  async function signedApiFetchJson(path, { method = "GET", bodyObj = null } = {}) {
+    const absUrl = new URL(path, location.origin).href;
+    const upperMethod = String(method || "GET").toUpperCase();
+    const hasBody = upperMethod !== "GET" && bodyObj !== null && bodyObj !== undefined;
+    const bodyText = hasBody ? JSON.stringify(bodyObj) : "";
+    const sign = await computeDynamicSign(upperMethod, absUrl, bodyText);
+    const headers = upperMethod === "GET"
+      ? {
+          Accept: "application/json, text/plain, */*",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(sign ? { "x-dynamic-sign": sign } : {}),
+        }
+      : {
+          ...getNodeSeekPostHeaders(),
+          Accept: "application/json, text/plain, */*",
+          "X-Requested-With": "XMLHttpRequest",
+          ...(sign ? { "x-dynamic-sign": sign } : {}),
+        };
+    const resp = await fetch(absUrl, {
+      method: upperMethod,
+      credentials: "include",
+      cache: "no-store",
+      headers,
+      ...(hasBody ? { body: bodyText } : {}),
+    });
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok || !json || json.success === false) {
+      const msg = (json && json.message) || (resp.status === 401 ? "请先登录后操作" : `HTTP ${resp.status}`);
+      const err = new Error(msg);
+      err.status = resp.status;
+      throw err;
     }
     return json;
   }
@@ -2284,6 +2337,176 @@
         box-shadow: var(--nsc-shadow) !important;
       }
 
+      /* macOS 风格 nsapp:// 星辰收款卡与投票卡片 */
+      .nsc-sd-card,
+      .nsc-vote-card {
+        margin: 8px 0; padding: 12px 14px; border-radius: 14px; box-sizing: border-box;
+        background: var(--nsc-bg-card); color: var(--nsc-text); text-align: left;
+        border: 1px solid var(--nsc-border);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+        font-family: var(--mac-font);
+      }
+      body.nsc-app-active.dark-layout .nsc-sd-card,
+      body.nsc-app-active.dark-layout .nsc-vote-card {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+      .nsc-sd-card { width: min(100%, 352px); }
+      .nsc-vote-card { width: min(100%, 400px); padding: 13px 15px; }
+      .nsc-sd-card a,
+      .nsc-vote-card a { color: var(--nsc-accent) !important; text-decoration: none; }
+      .nsc-sd-card a:hover,
+      .nsc-vote-card a:hover { text-decoration: underline; }
+
+      .nsc-sd-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .nsc-sd-peer { display: flex; align-items: center; gap: 9px; min-width: 0; cursor: pointer; }
+      .nsc-bubble img.nsc-sd-avatar,
+      .nsc-thread-content img.nsc-sd-avatar {
+        width: 38px !important; height: 38px !important;
+        max-width: 38px !important; max-height: 38px !important;
+        margin: 0 !important; border-radius: 10px !important;
+        object-fit: cover !important; cursor: pointer !important;
+        flex: 0 0 38px; border: 1px solid var(--nsc-border);
+      }
+      .nsc-sd-peer-info { min-width: 0; }
+      .nsc-sd-name-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+      .nsc-sd-name {
+        font-size: 13px; font-weight: 700; color: var(--nsc-text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 148px;
+      }
+      .nsc-sd-tag {
+        font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 5px;
+        background: rgba(245, 158, 11, 0.14); color: #d97706;
+      }
+      body.dark-layout .nsc-sd-tag { background: rgba(255, 159, 10, 0.20); color: #ffb340; }
+      .nsc-sd-ref { font-size: 11px; color: var(--nsc-muted); margin-top: 2px; }
+      .nsc-sd-amount-pill {
+        display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px;
+        border-radius: 999px; font-size: 13px; font-weight: 700; flex: 0 0 auto;
+        background: linear-gradient(135deg, rgba(0, 122, 255, 0.12), rgba(88, 86, 214, 0.14));
+        color: var(--nsc-accent); border: 1px solid rgba(0, 122, 255, 0.20);
+      }
+      .nsc-sd-amount-pill svg { width: 13.5px; height: 13.5px; }
+      body.dark-layout .nsc-sd-amount-pill {
+        background: linear-gradient(135deg, rgba(10, 132, 255, 0.22), rgba(94, 92, 230, 0.24));
+        color: #7cc0ff; border-color: rgba(10, 132, 255, 0.34);
+      }
+      body.nsc-theme-dusk .nsc-sd-amount-pill {
+        background: linear-gradient(135deg, rgba(184, 98, 28, 0.14), rgba(68, 104, 158, 0.14));
+        border-color: rgba(184, 98, 28, 0.26);
+      }
+      .nsc-sd-amount-pill.is-invalid { background: var(--nsc-hover); color: var(--nsc-muted); border-color: var(--nsc-border); }
+      .nsc-sd-desc {
+        margin-top: 9px; padding: 7px 10px; border-radius: 9px;
+        background: var(--nsc-hover); font-size: 12.5px; line-height: 1.48; color: var(--nsc-text);
+      }
+      .nsc-sd-foot {
+        margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--nsc-border);
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      }
+      .nsc-sd-status {
+        display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+        font-size: 11px; color: var(--nsc-muted); min-width: 0;
+      }
+      .nsc-sd-state { font-weight: 600; color: var(--nsc-muted); }
+      .nsc-sd-state.is-paid { color: var(--nsc-green); }
+      .nsc-sd-link { font-size: 11px; font-weight: 600; }
+      .nsc-sd-refresh {
+        width: 22px; height: 22px; padding: 0; border-radius: 6px;
+        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+        flex: 0 0 22px; transition: all 0.12s ease;
+      }
+      .nsc-sd-refresh svg { width: 12px; height: 12px; }
+      .nsc-sd-refresh:hover { background: var(--nsc-hover); color: var(--nsc-accent); border-color: var(--nsc-border); }
+      @keyframes nscSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      .nsc-sd-refresh.is-spinning svg { animation: nscSpin 0.8s linear infinite; }
+      .nsc-sd-pay-btn {
+        height: 27px; padding: 0 11px; border-radius: 8px; border: none;
+        background: var(--nsc-accent); color: #fff; font-size: 11.5px; font-weight: 600;
+        cursor: pointer; transition: filter 0.12s ease, opacity 0.12s ease;
+        font-family: var(--mac-font);
+      }
+      .nsc-sd-pay-btn:hover:not(:disabled) { filter: brightness(1.08); }
+      .nsc-sd-pay-btn.is-paid {
+        background: var(--nsc-accent-soft); color: var(--nsc-accent);
+        border: 1px solid rgba(0, 122, 255, 0.26);
+      }
+      .nsc-sd-pay-btn.is-done,
+      .nsc-sd-pay-btn:disabled {
+        background: var(--nsc-hover); color: var(--nsc-muted);
+        border: 1px solid var(--nsc-border); cursor: default;
+      }
+
+      .nsc-vote-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+      .nsc-vote-title-wrap { min-width: 0; flex: 1; }
+      .nsc-vote-title { font-size: 13.5px; font-weight: 700; line-height: 1.42; color: var(--nsc-text); }
+      .nsc-vote-badges { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+      .nsc-vote-badge {
+        font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+        background: var(--nsc-hover); color: var(--nsc-muted); border: 1px solid var(--nsc-border);
+      }
+      .nsc-vote-id { font-size: 10.5px; color: var(--nsc-muted); font-weight: 500; }
+      .nsc-vote-body { display: flex; flex-direction: column; gap: 6px; }
+      .nsc-vote-opt {
+        width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+        border-radius: 10px; border: 1px solid var(--nsc-border); background: var(--nsc-hover);
+        color: var(--nsc-text); font-size: 12.5px; font-weight: 500; text-align: left;
+        cursor: pointer; transition: all 0.13s ease; font-family: var(--mac-font);
+      }
+      .nsc-vote-opt:hover:not(:disabled) { border-color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-vote-opt.is-selected { border-color: var(--nsc-accent); background: var(--nsc-accent-soft); font-weight: 600; }
+      .nsc-vote-opt:disabled { opacity: 0.68; cursor: default; }
+      .nsc-vote-indicator {
+        width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%;
+        border: 1.5px solid var(--nsc-muted); background: var(--nsc-bg-card);
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: all 0.13s ease;
+      }
+      .nsc-vote-opt.is-multi .nsc-vote-indicator { border-radius: 5px; }
+      .nsc-vote-opt.is-selected .nsc-vote-indicator {
+        border-color: var(--nsc-accent); background: var(--nsc-accent); color: #fff;
+      }
+      .nsc-vote-indicator svg { width: 11px; height: 11px; }
+      .nsc-vote-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; display: block; }
+      .nsc-vote-opt-text { flex: 1; min-width: 0; line-height: 1.4; word-break: break-word; }
+
+      .nsc-vote-res-row {
+        padding: 7px 10px; border-radius: 10px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-hover);
+      }
+      .nsc-vote-res-row.is-mine { border-color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-vote-res-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; font-weight: 500; }
+      .nsc-vote-res-row.is-mine .nsc-vote-opt-text { font-weight: 600; }
+      .nsc-vote-res-meta {
+        display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
+        font-size: 11px; color: var(--nsc-muted); font-weight: 600;
+      }
+      .nsc-vote-mine-tag {
+        font-size: 10px; padding: 0 5px; border-radius: 5px;
+        background: var(--nsc-accent); color: #fff; font-weight: 600;
+      }
+      .nsc-vote-bar-track {
+        height: 6px; border-radius: 999px; background: rgba(128, 128, 128, 0.16);
+        overflow: hidden; margin-top: 6px;
+      }
+      .nsc-vote-bar-fill {
+        height: 100%; border-radius: 999px; background: rgba(128, 128, 128, 0.44);
+        transition: width 0.25s ease;
+      }
+      .nsc-vote-bar-fill.is-mine { background: var(--nsc-accent); }
+
+      .nsc-vote-foot {
+        margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--nsc-border);
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      }
+      .nsc-vote-note { font-size: 11px; color: var(--nsc-muted); line-height: 1.4; }
+      .nsc-vote-note.is-error { color: #ff3b30; font-weight: 600; }
+      .nsc-vote-confirm-bar {
+        width: 100%; display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; flex-wrap: wrap;
+      }
+      .nsc-vote-confirm-btns { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
         100% { box-shadow: 0 0 0 0 transparent; }
@@ -3898,6 +4121,601 @@
     }
   }
 
+  const _nsVoteCache = new Map();
+  const _nsStardustCache = new Map();
+
+  function parseStardustReceiveUrl(rawUrl) {
+    try {
+      let s = String(rawUrl || "").trim();
+      if (!/^nsapp:\/\/stardust-receive\?/i.test(s)) return null;
+      s = s.replace(/([&?]onetime=(?:true|false))[^&\s]*$/i, "$1");
+      const qIdx = s.indexOf("?");
+      if (qIdx < 0) return null;
+      const params = new URLSearchParams(s.slice(qIdx + 1));
+      const memberId = Number(params.get("member_id"));
+      const refId = Number(params.get("ref_id"));
+      if (!Number.isSafeInteger(memberId) || memberId <= 0) return null;
+      if (!Number.isSafeInteger(refId) || refId <= 0) return null;
+      const rawDiff = params.get("diff");
+      const diffNum = rawDiff === null || rawDiff === "" || rawDiff === "null" ? NaN : Number(rawDiff);
+      const validDiff = Number.isSafeInteger(diffNum) && diffNum > 0 && diffNum <= 1000 ? diffNum : null;
+      return {
+        memberId: String(memberId),
+        refId: String(refId),
+        diff: validDiff,
+        rawDiff: rawDiff || "",
+        description: String(params.get("description") || "").trim(),
+        onetime: String(params.get("onetime") || "").toLowerCase() === "true",
+        rawUrl: s,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function parseVoteUrl(rawUrl) {
+    try {
+      const s = String(rawUrl || "").trim();
+      const m = s.match(/^nsapp:\/\/vote\?id=(\d+)/i);
+      if (!m) return null;
+      const id = Number(m[1]);
+      return Number.isSafeInteger(id) && id > 0 ? id : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function extractStardustFromNativePanel(panelEl) {
+    if (!panelEl) return null;
+    const link = panelEl.querySelector('a[href^="nsapp://stardust-receive"], a[data-href^="nsapp://stardust-receive"]');
+    if (link) {
+      const parsed = parseStardustReceiveUrl(link.getAttribute("data-href") || link.getAttribute("href"));
+      if (parsed) return parsed;
+    }
+    const svg = panelEl.querySelector("svg.stardust-pay-abstract");
+    if (!svg) return null;
+    const img = svg.querySelector("image");
+    const imgHref = (img && (img.getAttribute("href") || img.getAttribute("xlink:href"))) || "";
+    const mm = imgHref.match(/\/avatar\/(\d+)/);
+    const texts = Array.from(svg.querySelectorAll("text")).map((t) => (t.textContent || "").trim()).filter(Boolean);
+    let refId = "";
+    let onetime = false;
+    let diff = null;
+    const descParts = [];
+    for (const t of texts) {
+      const rm = t.match(/^Ref\s*ID\s*(\d+)$/i);
+      if (rm) { refId = rm[1]; continue; }
+      if (/^Onetime$/i.test(t)) { onetime = true; continue; }
+      if (diff === null && /^\d+$/.test(t)) { diff = Number(t); continue; }
+      descParts.push(t);
+    }
+    if (!mm || !refId) return null;
+    return {
+      memberId: mm[1],
+      refId,
+      diff: diff && diff > 0 && diff <= 1000 ? diff : null,
+      rawDiff: diff ? String(diff) : "",
+      description: descParts.join(" ").trim(),
+      onetime,
+      rawUrl: `nsapp://stardust-receive?member_id=${mm[1]}&ref_id=${refId}&description=${encodeURIComponent(descParts.join(" ").trim())}&diff=${diff || 1}&onetime=${onetime}`,
+    };
+  }
+
+  function extractVoteIdFromNativePanel(panelEl) {
+    if (!panelEl) return null;
+    const rawId = panelEl.dataset.xnsVoteId || panelEl.dataset.voteId || "";
+    if (/^\d+$/.test(rawId)) return Number(rawId);
+    const link = panelEl.querySelector('a[href^="nsapp://vote"], a[data-href^="nsapp://vote"]');
+    if (link) {
+      const id = parseVoteUrl(link.getAttribute("data-href") || link.getAttribute("href"));
+      if (id) return id;
+    }
+    const textMatch = (panelEl.textContent || "").match(/nsapp:\/\/vote\?id=(\d+)/i);
+    if (textMatch) return Number(textMatch[1]);
+    for (const inp of panelEl.querySelectorAll("input[id]")) {
+      const m = (inp.id || "").match(/^vote-item-(\d+)-(\d+)$/);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
+  async function fetchStardustReceiptStatus(memberId, refId, force = false) {
+    const key = `${memberId}:${refId}`;
+    const existing = _nsStardustCache.get(key);
+    if (!force && existing) {
+      if (existing.promise) return existing.promise;
+      if (existing.data && Date.now() - existing.ts < 20000) return existing.data;
+    }
+    const work = (async () => {
+      detectCurrentUser();
+      const myUid = Number(state.currentUserId) || 0;
+      let count = 0;
+      let total = 0;
+      let cursor = "";
+      let paid = false;
+      for (let page = 0; page < 5; page++) {
+        const qs = new URLSearchParams({ member_id: memberId, ref_id: refId, count: "100" });
+        if (cursor) qs.set("before_id", cursor);
+        const json = await apiGetJson(`/api/stardust/list?${qs.toString()}`);
+        const rows = Array.isArray(json.records) ? json.records : [];
+        for (const r of rows) {
+          const amt = Number(r.diff ?? r.amount ?? r.stardust ?? 0);
+          if (amt > 0) {
+            total += amt;
+            count += 1;
+          }
+          if (myUid && Number(r.peer_id) === myUid) paid = true;
+        }
+        if (!json.exist_more || !json.cursor || json.cursor === cursor) break;
+        cursor = String(json.cursor);
+      }
+      if (!paid && myUid > 0 && count >= 100) {
+        try {
+          const pJson = await apiGetJson(`/api/stardust/list?member_id=${encodeURIComponent(memberId)}&ref_id=${encodeURIComponent(refId)}&peer_id=${myUid}&count=5`);
+          if (Array.isArray(pJson.records) && pJson.records.length > 0) paid = true;
+        } catch (_) {}
+      }
+      const res = { count, total, paid, guest: !myUid };
+      _nsStardustCache.set(key, { ts: Date.now(), data: res });
+      return res;
+    })();
+    _nsStardustCache.set(key, { ts: Date.now(), promise: work });
+    try {
+      return await work;
+    } catch (err) {
+      _nsStardustCache.delete(key);
+      throw err;
+    }
+  }
+
+  function createStardustCardElement(receipt) {
+    const card = document.createElement("div");
+    card.className = "nsc-sd-card";
+    card.addEventListener("click", (e) => e.stopPropagation());
+
+    const ledgerHref = `/stardust/list?member_id=${encodeURIComponent(receipt.memberId)}&ref_id=${encodeURIComponent(receipt.refId)}`;
+    const cachedUser = state.userCache[receipt.memberId];
+    const initName = (cachedUser && cachedUser.name) || `用户 #${receipt.memberId}`;
+    const validAmount = receipt.diff !== null;
+    const isSelfReceiver = Boolean(state.currentUserId && String(state.currentUserId) === receipt.memberId);
+
+    card.innerHTML = `
+      <div class="nsc-sd-head">
+        <div class="nsc-sd-peer">
+          <img class="nsc-sd-avatar" src="/avatar/${escHtml(receipt.memberId)}.png" alt="" loading="lazy" />
+          <div class="nsc-sd-peer-info">
+            <div class="nsc-sd-name-row">
+              <span class="nsc-sd-name">${escHtml(initName)}</span>
+              ${receipt.onetime ? `<span class="nsc-sd-tag">一次性</span>` : ""}
+            </div>
+            <div class="nsc-sd-ref">星辰收款 · Ref #${escHtml(receipt.refId)}</div>
+          </div>
+        </div>
+        <div class="nsc-sd-amount-pill${validAmount ? "" : " is-invalid"}">
+          ${ICONS.stardust}
+          <span>${validAmount ? escHtml(String(receipt.diff)) : "无效"}</span>
+        </div>
+      </div>
+      ${receipt.description ? `<div class="nsc-sd-desc">${escHtml(receipt.description)}</div>` : ""}
+      <div class="nsc-sd-foot">
+        <div class="nsc-sd-status">
+          <span class="nsc-sd-status-text">正在读取收款记录...</span>
+          <a class="nsc-sd-link" href="${ledgerHref}" target="_blank" rel="noopener noreferrer" title="查看此 Ref ID 星辰流水">明细 ↗</a>
+          <button type="button" class="nsc-sd-refresh" title="刷新收款状态">${ICONS.refresh}</button>
+        </div>
+        <button type="button" class="nsc-sd-pay-btn"${validAmount ? "" : " disabled"}>
+          ${validAmount ? `打赏 ${receipt.diff} 星辰` : "数额无效"}
+        </button>
+      </div>
+    `;
+
+    const nameEl = card.querySelector(".nsc-sd-name");
+    const statusTextEl = card.querySelector(".nsc-sd-status-text");
+    const refreshBtn = card.querySelector(".nsc-sd-refresh");
+    const payBtn = card.querySelector(".nsc-sd-pay-btn");
+
+    if (!cachedUser && typeof fetchUserProfile === "function") {
+      fetchUserProfile(receipt.memberId, "").then((u) => {
+        if (card.isConnected && u && u.name && nameEl) nameEl.textContent = u.name;
+      }).catch(() => {});
+    }
+
+    card.querySelector(".nsc-sd-peer").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof openUserProfileModal === "function") {
+        openUserProfileModal({ uid: receipt.memberId, name: (nameEl && nameEl.textContent) || initName });
+      }
+    });
+
+    const loadStatus = async (force = false) => {
+      if (refreshBtn) refreshBtn.classList.add("is-spinning");
+      try {
+        const st = await fetchStardustReceiptStatus(receipt.memberId, receipt.refId, force);
+        if (!card.isConnected) return;
+        const statusPrefix = st.guest
+          ? "未登录"
+          : st.paid
+            ? `<span class="nsc-sd-state is-paid">已付款</span>`
+            : `<span class="nsc-sd-state">未付款</span>`;
+        statusTextEl.innerHTML = `${statusPrefix} · ${st.count} 人共 ${st.total} 星辰`;
+        if (validAmount) {
+          if (receipt.onetime && st.count > 0) {
+            payBtn.textContent = st.paid ? "已付款 (一次性)" : "已被支付";
+            payBtn.classList.add("is-done");
+            payBtn.disabled = true;
+          } else if (isSelfReceiver) {
+            payBtn.textContent = "本人收款码";
+            payBtn.classList.add("is-done");
+            payBtn.disabled = true;
+          } else if (st.paid) {
+            payBtn.textContent = `再次打赏 ${receipt.diff}`;
+            payBtn.classList.add("is-paid");
+            payBtn.disabled = false;
+          } else {
+            payBtn.textContent = `打赏 ${receipt.diff} 星辰`;
+            payBtn.classList.remove("is-paid", "is-done");
+            payBtn.disabled = false;
+          }
+        }
+      } catch (_) {
+        if (!card.isConnected) return;
+        statusTextEl.textContent = "状态读取失败，点击刷新重试";
+      } finally {
+        if (refreshBtn) refreshBtn.classList.remove("is-spinning");
+      }
+    };
+
+    refreshBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      loadStatus(true);
+    });
+
+    payBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!validAmount || payBtn.disabled) return;
+      const payUrl = new URL("/stardust/payment", location.origin);
+      payUrl.searchParams.set("member_id", receipt.memberId);
+      payUrl.searchParams.set("ref_id", receipt.refId);
+      payUrl.searchParams.set("diff", String(receipt.diff));
+      payUrl.searchParams.set("onetime", String(receipt.onetime));
+      payUrl.searchParams.set("description", receipt.description || "Pay with Stardust");
+      payUrl.searchParams.set("callback-origin", location.origin);
+
+      const w = 500;
+      const h = 640;
+      const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2));
+      const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h) / 2));
+      const popup = window.open(
+        payUrl.toString(),
+        "nsc_stardust_pay",
+        `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
+      if (popup) {
+        const startedAt = Date.now();
+        const timer = setInterval(() => {
+          if (popup.closed || Date.now() - startedAt > 180000) {
+            clearInterval(timer);
+            if (card.isConnected) loadStatus(true);
+          }
+        }, 550);
+      }
+    });
+
+    loadStatus(false);
+    return card;
+  }
+
+  async function fetchVoteDetail(voteId, force = false) {
+    const existing = _nsVoteCache.get(voteId);
+    if (!force && existing) {
+      if (existing.promise) return existing.promise;
+      if (existing.data && Date.now() - existing.ts < 30000) return existing.data;
+    }
+    const work = (async () => {
+      const json = await signedApiFetchJson(`/api/vote/info/${voteId}`, { method: "GET" });
+      if (!json || !json.vote || !Array.isArray(json.vote.items)) {
+        throw new Error((json && json.message) || "投票数据格式异常");
+      }
+      _nsVoteCache.set(voteId, { ts: Date.now(), data: json.vote });
+      return json.vote;
+    })();
+    _nsVoteCache.set(voteId, { ts: Date.now(), promise: work });
+    try {
+      return await work;
+    } catch (err) {
+      _nsVoteCache.delete(voteId);
+      throw err;
+    }
+  }
+
+  function createVoteCardElement(voteId) {
+    const card = document.createElement("div");
+    card.className = "nsc-vote-card";
+    card.dataset.voteId = String(voteId);
+    card.addEventListener("click", (e) => e.stopPropagation());
+
+    const selectedIds = new Set();
+    let confirming = false;
+    let submitting = false;
+    let statusMsg = "";
+
+    const renderState = (vote, loading = false, errorMsg = "") => {
+      if (loading && !vote) {
+        card.innerHTML = `
+          <div class="nsc-vote-head">
+            <div class="nsc-vote-title">正在读取投票 #${escHtml(String(voteId))}...</div>
+          </div>
+          <div class="nsc-vote-note">正在同步实时选项与票数</div>
+        `;
+        return;
+      }
+      if (errorMsg && !vote) {
+        const postHref = state.currentPostId ? `/post-${state.currentPostId}-1` : "/";
+        card.innerHTML = `
+          <div class="nsc-vote-head">
+            <div class="nsc-vote-title">投票 #${escHtml(String(voteId))} 加载失败</div>
+            <button type="button" class="nsc-sd-refresh" title="重试">${ICONS.refresh}</button>
+          </div>
+          <div class="nsc-vote-note is-error">${escHtml(errorMsg)}</div>
+          <div class="nsc-vote-foot">
+            <button type="button" class="nsc-mini-btn nsc-vote-retry">重试加载</button>
+            <a class="nsc-mini-btn" href="${postHref}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">原帖查看 ↗</a>
+          </div>
+        `;
+        card.querySelector(".nsc-sd-refresh").addEventListener("click", () => loadVote(true));
+        card.querySelector(".nsc-vote-retry").addEventListener("click", () => loadVote(true));
+        return;
+      }
+
+      const items = Array.isArray(vote.items) ? vote.items : [];
+      const hasVoted = items.some((it) => Boolean(it.voted));
+      const hasCounts = items.some((it) => typeof it.count === "number");
+      const showResults = hasVoted || hasCounts;
+      const canSubmit = !vote.locked && !hasVoted && items.length > 0;
+      const totalVotes = items.reduce((sum, it) => sum + (typeof it.count === "number" ? it.count : 0), 0);
+      const modeText = `${vote.isPublic ? "公开投票" : "匿名投票"} · ${vote.multiple ? "多选" : "单选"}${vote.locked ? " · 已结束" : ""}`;
+
+      card.innerHTML = `
+        <div class="nsc-vote-head">
+          <div class="nsc-vote-title-wrap">
+            <div class="nsc-vote-title">${escHtml(vote.title || `投票 #${voteId}`)}</div>
+            <div class="nsc-vote-badges">
+              <span class="nsc-vote-badge">${escHtml(modeText)}</span>
+              <span class="nsc-vote-id">#${escHtml(String(vote.id || voteId))}</span>
+            </div>
+          </div>
+          <button type="button" class="nsc-sd-refresh" title="刷新投票状态">${ICONS.refresh}</button>
+        </div>
+        <div class="nsc-vote-body"></div>
+        <div class="nsc-vote-foot"></div>
+      `;
+      card.querySelector(".nsc-sd-refresh").addEventListener("click", () => loadVote(true));
+
+      const bodyEl = card.querySelector(".nsc-vote-body");
+      const footEl = card.querySelector(".nsc-vote-foot");
+
+      if (showResults) {
+        items.forEach((it) => {
+          const cnt = typeof it.count === "number" ? it.count : null;
+          const pct = cnt !== null && totalVotes > 0 ? Math.round((cnt / totalVotes) * 100) : 0;
+          const row = document.createElement("div");
+          row.className = "nsc-vote-res-row" + (it.voted ? " is-mine" : "");
+          row.innerHTML = `
+            <div class="nsc-vote-res-top">
+              <span class="nsc-vote-opt-text">${escHtml(it.text || "")}</span>
+              <span class="nsc-vote-res-meta">
+                ${it.voted ? `<span class="nsc-vote-mine-tag">已选</span>` : ""}
+                ${cnt !== null ? `<span>${cnt} 票 (${pct}%)</span>` : ""}
+              </span>
+            </div>
+            ${cnt !== null ? `
+              <div class="nsc-vote-bar-track">
+                <div class="nsc-vote-bar-fill${it.voted ? " is-mine" : ""}" style="width:${pct}%"></div>
+              </div>
+            ` : ""}
+          `;
+          bodyEl.appendChild(row);
+        });
+        footEl.innerHTML = `
+          <span class="nsc-vote-note">
+            ${hasCounts ? (vote.multiple ? `累计 ${totalVotes} 票次` : `共 ${totalVotes} 票`) : ""}
+            ${hasVoted ? (hasCounts ? " · 你已参与投票" : "你已参与投票") : vote.locked ? " · 投票已截止" : ""}
+          </span>
+        `;
+      } else {
+        items.forEach((it) => {
+          const itemId = Number(it.vote_item_id);
+          const isSelected = selectedIds.has(itemId);
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "nsc-vote-opt" + (isSelected ? " is-selected" : "") + (vote.multiple ? " is-multi" : "");
+          row.disabled = !canSubmit || submitting;
+          row.innerHTML = `
+            <span class="nsc-vote-indicator">${isSelected ? (vote.multiple ? ICONS.check : `<span class="nsc-vote-dot"></span>`) : ""}</span>
+            <span class="nsc-vote-opt-text">${escHtml(it.text || "")}</span>
+          `;
+          row.addEventListener("click", () => {
+            if (!canSubmit || submitting) return;
+            confirming = false;
+            statusMsg = "";
+            if (vote.multiple) {
+              if (selectedIds.has(itemId)) selectedIds.delete(itemId);
+              else selectedIds.add(itemId);
+            } else {
+              selectedIds.clear();
+              selectedIds.add(itemId);
+            }
+            renderState(vote);
+          });
+          bodyEl.appendChild(row);
+        });
+
+        if (confirming && canSubmit) {
+          const pickedLabels = items.filter((it) => selectedIds.has(Number(it.vote_item_id))).map((it) => it.text).join("、");
+          footEl.innerHTML = `
+            <div class="nsc-vote-confirm-bar">
+              <div class="nsc-vote-note">确认投给「${escHtml(pickedLabels)}」？${vote.isPublic ? "公开投票，" : ""}提交后不可修改。</div>
+              <div class="nsc-vote-confirm-btns">
+                <button type="button" class="nsc-mini-btn nsc-vote-cancel">取消</button>
+                <button type="button" class="nsc-send-btn nsc-vote-do-submit">${submitting ? "提交中..." : "确认提交"}</button>
+              </div>
+            </div>
+          `;
+          footEl.querySelector(".nsc-vote-cancel").addEventListener("click", () => {
+            confirming = false;
+            renderState(vote);
+          });
+          footEl.querySelector(".nsc-vote-do-submit").addEventListener("click", async () => {
+            if (submitting || selectedIds.size === 0) return;
+            submitting = true;
+            statusMsg = "";
+            renderState(vote);
+            try {
+              await signedApiFetchJson("/api/vote/voteforitem", {
+                method: "POST",
+                bodyObj: { ids: Array.from(selectedIds) },
+              });
+              confirming = false;
+              await loadVote(true);
+            } catch (err) {
+              submitting = false;
+              confirming = false;
+              statusMsg = err.message || "投票提交失败";
+              renderState(vote);
+            }
+          });
+        } else if (canSubmit) {
+          const tip = statusMsg || (vote.isPublic ? "公开投票，选项对他人可见 · 提交后不可修改" : "提交后不可修改");
+          footEl.innerHTML = `
+            <span class="nsc-vote-note${statusMsg ? " is-error" : ""}">${escHtml(tip)}</span>
+            <button type="button" class="nsc-send-btn nsc-vote-submit-btn"${selectedIds.size === 0 || submitting ? " disabled" : ""}>投票</button>
+          `;
+          footEl.querySelector(".nsc-vote-submit-btn").addEventListener("click", () => {
+            if (selectedIds.size === 0 || submitting) return;
+            confirming = true;
+            renderState(vote);
+          });
+        } else {
+          footEl.innerHTML = `<span class="nsc-vote-note">${vote.locked ? "投票已结束" : "当前不可投票"}</span>`;
+        }
+      }
+    };
+
+    const loadVote = async (force = false) => {
+      renderState(null, true);
+      try {
+        const vote = await fetchVoteDetail(voteId, force);
+        submitting = false;
+        if (card.isConnected) renderState(vote);
+      } catch (err) {
+        submitting = false;
+        if (card.isConnected) renderState(null, false, err.message || "加载失败");
+      }
+    };
+
+    loadVote(false);
+    return card;
+  }
+
+  function enhanceNsApps(containerEl) {
+    if (!containerEl) return;
+
+    for (const panel of Array.from(containerEl.querySelectorAll(".stardust-panel"))) {
+      if (panel.dataset.nscNsappInit === "1") continue;
+      const receipt = extractStardustFromNativePanel(panel);
+      if (receipt) {
+        const card = createStardustCardElement(receipt);
+        card.dataset.nscNsappInit = "1";
+        panel.replaceWith(card);
+      }
+    }
+
+    for (const panel of Array.from(containerEl.querySelectorAll(".vote-panel"))) {
+      if (panel.dataset.nscNsappInit === "1") continue;
+      const voteId = extractVoteIdFromNativePanel(panel);
+      if (voteId) {
+        const card = createVoteCardElement(voteId);
+        card.dataset.nscNsappInit = "1";
+        panel.replaceWith(card);
+      }
+    }
+
+    const replaceLinkWithCard = (linkEl, card) => {
+      const parent = linkEl.parentElement;
+      if (
+        parent &&
+        parent.tagName === "P" &&
+        parent.children.length === 1 &&
+        (parent.textContent || "").trim() === (linkEl.textContent || "").trim()
+      ) {
+        parent.replaceWith(card);
+      } else {
+        linkEl.replaceWith(card);
+      }
+    };
+
+    for (const a of Array.from(containerEl.querySelectorAll('a[href^="nsapp://"], a[data-href^="nsapp://"]'))) {
+      if (a.closest("pre, code, script, style, textarea, .nsc-sd-card, .nsc-vote-card")) continue;
+      const rawUrl = a.getAttribute("data-href") || a.getAttribute("href") || "";
+      const receipt = parseStardustReceiveUrl(rawUrl);
+      if (receipt) {
+        replaceLinkWithCard(a, createStardustCardElement(receipt));
+        continue;
+      }
+      const voteId = parseVoteUrl(rawUrl);
+      if (voteId) {
+        replaceLinkWithCard(a, createVoteCardElement(voteId));
+      }
+    }
+
+    const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.nodeValue || !/nsapp:\/\/(?:stardust-receive|vote)\?/i.test(node.nodeValue)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        if (
+          node.parentElement &&
+          node.parentElement.closest("a, pre, code, script, style, textarea, .nsc-sd-card, .nsc-vote-card, .stardust-panel, .vote-panel")
+        ) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+    for (const tn of textNodes) {
+      const text = tn.nodeValue;
+      const re = /(nsapp:\/\/(?:stardust-receive|vote)\?[^\s<>"'`\u3000]+)/gi;
+      let m;
+      let lastIdx = 0;
+      const frag = document.createDocumentFragment();
+      let replacedAny = false;
+      while ((m = re.exec(text)) !== null) {
+        const rawMatch = m[1];
+        const receipt = parseStardustReceiveUrl(rawMatch);
+        const voteId = !receipt ? parseVoteUrl(rawMatch.replace(/[),.;!?。，；！？]+$/, "")) : null;
+        if (!receipt && !voteId) continue;
+        replacedAny = true;
+        if (m.index > lastIdx) {
+          frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        }
+        frag.appendChild(receipt ? createStardustCardElement(receipt) : createVoteCardElement(voteId));
+        lastIdx = m.index + rawMatch.length;
+      }
+      if (replacedAny) {
+        if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+        const parent = tn.parentElement;
+        if (parent && parent.tagName === "P" && parent.childNodes.length === 1 && frag.childNodes.length === 1) {
+          parent.replaceWith(frag);
+        } else {
+          tn.parentNode.replaceChild(frag, tn);
+        }
+      }
+    }
+  }
+
   // ==========================================================================
   // Module: 06-channels-messages.js
   // ==========================================================================
@@ -4657,6 +5475,7 @@
       });
       const pmBubble = wrap.querySelector(".nsc-bubble");
       if (pmBubble) {
+        enhanceNsApps(pmBubble);
         enhanceCodeBlocks(pmBubble);
         processBubbleImages(pmBubble);
       }
@@ -6059,7 +6878,7 @@
     const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         if (!node.nodeValue || !/(\d{1,4}#|#\d{1,4})/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
-        if (node.parentElement && node.parentElement.closest("a, pre, code, script, style")) {
+        if (node.parentElement && node.parentElement.closest("a, pre, code, script, style, .nsc-sd-card, .nsc-vote-card")) {
           return NodeFilter.FILTER_REJECT;
         }
         return NodeFilter.FILTER_ACCEPT;
@@ -6920,6 +7739,7 @@
         bq.classList.toggle("is-expanded");
       });
     }
+    enhanceNsApps(bubble);
     linkifyFloorReferences(bubble);
     enhanceMagicTabs(bubble);
     enhanceCodeBlocks(bubble);
@@ -6975,6 +7795,7 @@
         ti.querySelector(".nsc-msg-author").addEventListener("click", () => openUserProfileModal(ch));
         ti.querySelector(".nsc-floor-tag").addEventListener("click", () => jumpToFloor(ch.floorId));
         const tc = ti.querySelector(".nsc-thread-content");
+        enhanceNsApps(tc);
         linkifyFloorReferences(tc);
         enhanceMagicTabs(tc);
         enhanceCodeBlocks(tc);

@@ -1189,3 +1189,598 @@
     }
   }
 
+  const _nsVoteCache = new Map();
+  const _nsStardustCache = new Map();
+
+  function parseStardustReceiveUrl(rawUrl) {
+    try {
+      let s = String(rawUrl || "").trim();
+      if (!/^nsapp:\/\/stardust-receive\?/i.test(s)) return null;
+      s = s.replace(/([&?]onetime=(?:true|false))[^&\s]*$/i, "$1");
+      const qIdx = s.indexOf("?");
+      if (qIdx < 0) return null;
+      const params = new URLSearchParams(s.slice(qIdx + 1));
+      const memberId = Number(params.get("member_id"));
+      const refId = Number(params.get("ref_id"));
+      if (!Number.isSafeInteger(memberId) || memberId <= 0) return null;
+      if (!Number.isSafeInteger(refId) || refId <= 0) return null;
+      const rawDiff = params.get("diff");
+      const diffNum = rawDiff === null || rawDiff === "" || rawDiff === "null" ? NaN : Number(rawDiff);
+      const validDiff = Number.isSafeInteger(diffNum) && diffNum > 0 && diffNum <= 1000 ? diffNum : null;
+      return {
+        memberId: String(memberId),
+        refId: String(refId),
+        diff: validDiff,
+        rawDiff: rawDiff || "",
+        description: String(params.get("description") || "").trim(),
+        onetime: String(params.get("onetime") || "").toLowerCase() === "true",
+        rawUrl: s,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function parseVoteUrl(rawUrl) {
+    try {
+      const s = String(rawUrl || "").trim();
+      const m = s.match(/^nsapp:\/\/vote\?id=(\d+)/i);
+      if (!m) return null;
+      const id = Number(m[1]);
+      return Number.isSafeInteger(id) && id > 0 ? id : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function extractStardustFromNativePanel(panelEl) {
+    if (!panelEl) return null;
+    const link = panelEl.querySelector('a[href^="nsapp://stardust-receive"], a[data-href^="nsapp://stardust-receive"]');
+    if (link) {
+      const parsed = parseStardustReceiveUrl(link.getAttribute("data-href") || link.getAttribute("href"));
+      if (parsed) return parsed;
+    }
+    const svg = panelEl.querySelector("svg.stardust-pay-abstract");
+    if (!svg) return null;
+    const img = svg.querySelector("image");
+    const imgHref = (img && (img.getAttribute("href") || img.getAttribute("xlink:href"))) || "";
+    const mm = imgHref.match(/\/avatar\/(\d+)/);
+    const texts = Array.from(svg.querySelectorAll("text")).map((t) => (t.textContent || "").trim()).filter(Boolean);
+    let refId = "";
+    let onetime = false;
+    let diff = null;
+    const descParts = [];
+    for (const t of texts) {
+      const rm = t.match(/^Ref\s*ID\s*(\d+)$/i);
+      if (rm) { refId = rm[1]; continue; }
+      if (/^Onetime$/i.test(t)) { onetime = true; continue; }
+      if (diff === null && /^\d+$/.test(t)) { diff = Number(t); continue; }
+      descParts.push(t);
+    }
+    if (!mm || !refId) return null;
+    return {
+      memberId: mm[1],
+      refId,
+      diff: diff && diff > 0 && diff <= 1000 ? diff : null,
+      rawDiff: diff ? String(diff) : "",
+      description: descParts.join(" ").trim(),
+      onetime,
+      rawUrl: `nsapp://stardust-receive?member_id=${mm[1]}&ref_id=${refId}&description=${encodeURIComponent(descParts.join(" ").trim())}&diff=${diff || 1}&onetime=${onetime}`,
+    };
+  }
+
+  function extractVoteIdFromNativePanel(panelEl) {
+    if (!panelEl) return null;
+    const rawId = panelEl.dataset.xnsVoteId || panelEl.dataset.voteId || "";
+    if (/^\d+$/.test(rawId)) return Number(rawId);
+    const link = panelEl.querySelector('a[href^="nsapp://vote"], a[data-href^="nsapp://vote"]');
+    if (link) {
+      const id = parseVoteUrl(link.getAttribute("data-href") || link.getAttribute("href"));
+      if (id) return id;
+    }
+    const textMatch = (panelEl.textContent || "").match(/nsapp:\/\/vote\?id=(\d+)/i);
+    if (textMatch) return Number(textMatch[1]);
+    for (const inp of panelEl.querySelectorAll("input[id]")) {
+      const m = (inp.id || "").match(/^vote-item-(\d+)-(\d+)$/);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
+  async function fetchStardustReceiptStatus(memberId, refId, force = false) {
+    const key = `${memberId}:${refId}`;
+    const existing = _nsStardustCache.get(key);
+    if (!force && existing) {
+      if (existing.promise) return existing.promise;
+      if (existing.data && Date.now() - existing.ts < 20000) return existing.data;
+    }
+    const work = (async () => {
+      detectCurrentUser();
+      const myUid = Number(state.currentUserId) || 0;
+      let count = 0;
+      let total = 0;
+      let cursor = "";
+      let paid = false;
+      for (let page = 0; page < 5; page++) {
+        const qs = new URLSearchParams({ member_id: memberId, ref_id: refId, count: "100" });
+        if (cursor) qs.set("before_id", cursor);
+        const json = await apiGetJson(`/api/stardust/list?${qs.toString()}`);
+        const rows = Array.isArray(json.records) ? json.records : [];
+        for (const r of rows) {
+          const amt = Number(r.diff ?? r.amount ?? r.stardust ?? 0);
+          if (amt > 0) {
+            total += amt;
+            count += 1;
+          }
+          if (myUid && Number(r.peer_id) === myUid) paid = true;
+        }
+        if (!json.exist_more || !json.cursor || json.cursor === cursor) break;
+        cursor = String(json.cursor);
+      }
+      if (!paid && myUid > 0 && count >= 100) {
+        try {
+          const pJson = await apiGetJson(`/api/stardust/list?member_id=${encodeURIComponent(memberId)}&ref_id=${encodeURIComponent(refId)}&peer_id=${myUid}&count=5`);
+          if (Array.isArray(pJson.records) && pJson.records.length > 0) paid = true;
+        } catch (_) {}
+      }
+      const res = { count, total, paid, guest: !myUid };
+      _nsStardustCache.set(key, { ts: Date.now(), data: res });
+      return res;
+    })();
+    _nsStardustCache.set(key, { ts: Date.now(), promise: work });
+    try {
+      return await work;
+    } catch (err) {
+      _nsStardustCache.delete(key);
+      throw err;
+    }
+  }
+
+  function createStardustCardElement(receipt) {
+    const card = document.createElement("div");
+    card.className = "nsc-sd-card";
+    card.addEventListener("click", (e) => e.stopPropagation());
+
+    const ledgerHref = `/stardust/list?member_id=${encodeURIComponent(receipt.memberId)}&ref_id=${encodeURIComponent(receipt.refId)}`;
+    const cachedUser = state.userCache[receipt.memberId];
+    const initName = (cachedUser && cachedUser.name) || `用户 #${receipt.memberId}`;
+    const validAmount = receipt.diff !== null;
+    const isSelfReceiver = Boolean(state.currentUserId && String(state.currentUserId) === receipt.memberId);
+
+    card.innerHTML = `
+      <div class="nsc-sd-head">
+        <div class="nsc-sd-peer">
+          <img class="nsc-sd-avatar" src="/avatar/${escHtml(receipt.memberId)}.png" alt="" loading="lazy" />
+          <div class="nsc-sd-peer-info">
+            <div class="nsc-sd-name-row">
+              <span class="nsc-sd-name">${escHtml(initName)}</span>
+              ${receipt.onetime ? `<span class="nsc-sd-tag">一次性</span>` : ""}
+            </div>
+            <div class="nsc-sd-ref">星辰收款 · Ref #${escHtml(receipt.refId)}</div>
+          </div>
+        </div>
+        <div class="nsc-sd-amount-pill${validAmount ? "" : " is-invalid"}">
+          ${ICONS.stardust}
+          <span>${validAmount ? escHtml(String(receipt.diff)) : "无效"}</span>
+        </div>
+      </div>
+      ${receipt.description ? `<div class="nsc-sd-desc">${escHtml(receipt.description)}</div>` : ""}
+      <div class="nsc-sd-foot">
+        <div class="nsc-sd-status">
+          <span class="nsc-sd-status-text">正在读取收款记录...</span>
+          <a class="nsc-sd-link" href="${ledgerHref}" target="_blank" rel="noopener noreferrer" title="查看此 Ref ID 星辰流水">明细 ↗</a>
+          <button type="button" class="nsc-sd-refresh" title="刷新收款状态">${ICONS.refresh}</button>
+        </div>
+        <button type="button" class="nsc-sd-pay-btn"${validAmount ? "" : " disabled"}>
+          ${validAmount ? `打赏 ${receipt.diff} 星辰` : "数额无效"}
+        </button>
+      </div>
+    `;
+
+    const nameEl = card.querySelector(".nsc-sd-name");
+    const statusTextEl = card.querySelector(".nsc-sd-status-text");
+    const refreshBtn = card.querySelector(".nsc-sd-refresh");
+    const payBtn = card.querySelector(".nsc-sd-pay-btn");
+
+    if (!cachedUser && typeof fetchUserProfile === "function") {
+      fetchUserProfile(receipt.memberId, "").then((u) => {
+        if (card.isConnected && u && u.name && nameEl) nameEl.textContent = u.name;
+      }).catch(() => {});
+    }
+
+    card.querySelector(".nsc-sd-peer").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof openUserProfileModal === "function") {
+        openUserProfileModal({ uid: receipt.memberId, name: (nameEl && nameEl.textContent) || initName });
+      }
+    });
+
+    const loadStatus = async (force = false) => {
+      if (refreshBtn) refreshBtn.classList.add("is-spinning");
+      try {
+        const st = await fetchStardustReceiptStatus(receipt.memberId, receipt.refId, force);
+        if (!card.isConnected) return;
+        const statusPrefix = st.guest
+          ? "未登录"
+          : st.paid
+            ? `<span class="nsc-sd-state is-paid">已付款</span>`
+            : `<span class="nsc-sd-state">未付款</span>`;
+        statusTextEl.innerHTML = `${statusPrefix} · ${st.count} 人共 ${st.total} 星辰`;
+        if (validAmount) {
+          if (receipt.onetime && st.count > 0) {
+            payBtn.textContent = st.paid ? "已付款 (一次性)" : "已被支付";
+            payBtn.classList.add("is-done");
+            payBtn.disabled = true;
+          } else if (isSelfReceiver) {
+            payBtn.textContent = "本人收款码";
+            payBtn.classList.add("is-done");
+            payBtn.disabled = true;
+          } else if (st.paid) {
+            payBtn.textContent = `再次打赏 ${receipt.diff}`;
+            payBtn.classList.add("is-paid");
+            payBtn.disabled = false;
+          } else {
+            payBtn.textContent = `打赏 ${receipt.diff} 星辰`;
+            payBtn.classList.remove("is-paid", "is-done");
+            payBtn.disabled = false;
+          }
+        }
+      } catch (_) {
+        if (!card.isConnected) return;
+        statusTextEl.textContent = "状态读取失败，点击刷新重试";
+      } finally {
+        if (refreshBtn) refreshBtn.classList.remove("is-spinning");
+      }
+    };
+
+    refreshBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      loadStatus(true);
+    });
+
+    payBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!validAmount || payBtn.disabled) return;
+      const payUrl = new URL("/stardust/payment", location.origin);
+      payUrl.searchParams.set("member_id", receipt.memberId);
+      payUrl.searchParams.set("ref_id", receipt.refId);
+      payUrl.searchParams.set("diff", String(receipt.diff));
+      payUrl.searchParams.set("onetime", String(receipt.onetime));
+      payUrl.searchParams.set("description", receipt.description || "Pay with Stardust");
+      payUrl.searchParams.set("callback-origin", location.origin);
+
+      const w = 500;
+      const h = 640;
+      const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2));
+      const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h) / 2));
+      const popup = window.open(
+        payUrl.toString(),
+        "nsc_stardust_pay",
+        `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
+      if (popup) {
+        const startedAt = Date.now();
+        const timer = setInterval(() => {
+          if (popup.closed || Date.now() - startedAt > 180000) {
+            clearInterval(timer);
+            if (card.isConnected) loadStatus(true);
+          }
+        }, 550);
+      }
+    });
+
+    loadStatus(false);
+    return card;
+  }
+
+  async function fetchVoteDetail(voteId, force = false) {
+    const existing = _nsVoteCache.get(voteId);
+    if (!force && existing) {
+      if (existing.promise) return existing.promise;
+      if (existing.data && Date.now() - existing.ts < 30000) return existing.data;
+    }
+    const work = (async () => {
+      const json = await signedApiFetchJson(`/api/vote/info/${voteId}`, { method: "GET" });
+      if (!json || !json.vote || !Array.isArray(json.vote.items)) {
+        throw new Error((json && json.message) || "投票数据格式异常");
+      }
+      _nsVoteCache.set(voteId, { ts: Date.now(), data: json.vote });
+      return json.vote;
+    })();
+    _nsVoteCache.set(voteId, { ts: Date.now(), promise: work });
+    try {
+      return await work;
+    } catch (err) {
+      _nsVoteCache.delete(voteId);
+      throw err;
+    }
+  }
+
+  function createVoteCardElement(voteId) {
+    const card = document.createElement("div");
+    card.className = "nsc-vote-card";
+    card.dataset.voteId = String(voteId);
+    card.addEventListener("click", (e) => e.stopPropagation());
+
+    const selectedIds = new Set();
+    let confirming = false;
+    let submitting = false;
+    let statusMsg = "";
+
+    const renderState = (vote, loading = false, errorMsg = "") => {
+      if (loading && !vote) {
+        card.innerHTML = `
+          <div class="nsc-vote-head">
+            <div class="nsc-vote-title">正在读取投票 #${escHtml(String(voteId))}...</div>
+          </div>
+          <div class="nsc-vote-note">正在同步实时选项与票数</div>
+        `;
+        return;
+      }
+      if (errorMsg && !vote) {
+        const postHref = state.currentPostId ? `/post-${state.currentPostId}-1` : "/";
+        card.innerHTML = `
+          <div class="nsc-vote-head">
+            <div class="nsc-vote-title">投票 #${escHtml(String(voteId))} 加载失败</div>
+            <button type="button" class="nsc-sd-refresh" title="重试">${ICONS.refresh}</button>
+          </div>
+          <div class="nsc-vote-note is-error">${escHtml(errorMsg)}</div>
+          <div class="nsc-vote-foot">
+            <button type="button" class="nsc-mini-btn nsc-vote-retry">重试加载</button>
+            <a class="nsc-mini-btn" href="${postHref}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">原帖查看 ↗</a>
+          </div>
+        `;
+        card.querySelector(".nsc-sd-refresh").addEventListener("click", () => loadVote(true));
+        card.querySelector(".nsc-vote-retry").addEventListener("click", () => loadVote(true));
+        return;
+      }
+
+      const items = Array.isArray(vote.items) ? vote.items : [];
+      const hasVoted = items.some((it) => Boolean(it.voted));
+      const hasCounts = items.some((it) => typeof it.count === "number");
+      const showResults = hasVoted || hasCounts;
+      const canSubmit = !vote.locked && !hasVoted && items.length > 0;
+      const totalVotes = items.reduce((sum, it) => sum + (typeof it.count === "number" ? it.count : 0), 0);
+      const modeText = `${vote.isPublic ? "公开投票" : "匿名投票"} · ${vote.multiple ? "多选" : "单选"}${vote.locked ? " · 已结束" : ""}`;
+
+      card.innerHTML = `
+        <div class="nsc-vote-head">
+          <div class="nsc-vote-title-wrap">
+            <div class="nsc-vote-title">${escHtml(vote.title || `投票 #${voteId}`)}</div>
+            <div class="nsc-vote-badges">
+              <span class="nsc-vote-badge">${escHtml(modeText)}</span>
+              <span class="nsc-vote-id">#${escHtml(String(vote.id || voteId))}</span>
+            </div>
+          </div>
+          <button type="button" class="nsc-sd-refresh" title="刷新投票状态">${ICONS.refresh}</button>
+        </div>
+        <div class="nsc-vote-body"></div>
+        <div class="nsc-vote-foot"></div>
+      `;
+      card.querySelector(".nsc-sd-refresh").addEventListener("click", () => loadVote(true));
+
+      const bodyEl = card.querySelector(".nsc-vote-body");
+      const footEl = card.querySelector(".nsc-vote-foot");
+
+      if (showResults) {
+        items.forEach((it) => {
+          const cnt = typeof it.count === "number" ? it.count : null;
+          const pct = cnt !== null && totalVotes > 0 ? Math.round((cnt / totalVotes) * 100) : 0;
+          const row = document.createElement("div");
+          row.className = "nsc-vote-res-row" + (it.voted ? " is-mine" : "");
+          row.innerHTML = `
+            <div class="nsc-vote-res-top">
+              <span class="nsc-vote-opt-text">${escHtml(it.text || "")}</span>
+              <span class="nsc-vote-res-meta">
+                ${it.voted ? `<span class="nsc-vote-mine-tag">已选</span>` : ""}
+                ${cnt !== null ? `<span>${cnt} 票 (${pct}%)</span>` : ""}
+              </span>
+            </div>
+            ${cnt !== null ? `
+              <div class="nsc-vote-bar-track">
+                <div class="nsc-vote-bar-fill${it.voted ? " is-mine" : ""}" style="width:${pct}%"></div>
+              </div>
+            ` : ""}
+          `;
+          bodyEl.appendChild(row);
+        });
+        footEl.innerHTML = `
+          <span class="nsc-vote-note">
+            ${hasCounts ? (vote.multiple ? `累计 ${totalVotes} 票次` : `共 ${totalVotes} 票`) : ""}
+            ${hasVoted ? (hasCounts ? " · 你已参与投票" : "你已参与投票") : vote.locked ? " · 投票已截止" : ""}
+          </span>
+        `;
+      } else {
+        items.forEach((it) => {
+          const itemId = Number(it.vote_item_id);
+          const isSelected = selectedIds.has(itemId);
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "nsc-vote-opt" + (isSelected ? " is-selected" : "") + (vote.multiple ? " is-multi" : "");
+          row.disabled = !canSubmit || submitting;
+          row.innerHTML = `
+            <span class="nsc-vote-indicator">${isSelected ? (vote.multiple ? ICONS.check : `<span class="nsc-vote-dot"></span>`) : ""}</span>
+            <span class="nsc-vote-opt-text">${escHtml(it.text || "")}</span>
+          `;
+          row.addEventListener("click", () => {
+            if (!canSubmit || submitting) return;
+            confirming = false;
+            statusMsg = "";
+            if (vote.multiple) {
+              if (selectedIds.has(itemId)) selectedIds.delete(itemId);
+              else selectedIds.add(itemId);
+            } else {
+              selectedIds.clear();
+              selectedIds.add(itemId);
+            }
+            renderState(vote);
+          });
+          bodyEl.appendChild(row);
+        });
+
+        if (confirming && canSubmit) {
+          const pickedLabels = items.filter((it) => selectedIds.has(Number(it.vote_item_id))).map((it) => it.text).join("、");
+          footEl.innerHTML = `
+            <div class="nsc-vote-confirm-bar">
+              <div class="nsc-vote-note">确认投给「${escHtml(pickedLabels)}」？${vote.isPublic ? "公开投票，" : ""}提交后不可修改。</div>
+              <div class="nsc-vote-confirm-btns">
+                <button type="button" class="nsc-mini-btn nsc-vote-cancel">取消</button>
+                <button type="button" class="nsc-send-btn nsc-vote-do-submit">${submitting ? "提交中..." : "确认提交"}</button>
+              </div>
+            </div>
+          `;
+          footEl.querySelector(".nsc-vote-cancel").addEventListener("click", () => {
+            confirming = false;
+            renderState(vote);
+          });
+          footEl.querySelector(".nsc-vote-do-submit").addEventListener("click", async () => {
+            if (submitting || selectedIds.size === 0) return;
+            submitting = true;
+            statusMsg = "";
+            renderState(vote);
+            try {
+              await signedApiFetchJson("/api/vote/voteforitem", {
+                method: "POST",
+                bodyObj: { ids: Array.from(selectedIds) },
+              });
+              confirming = false;
+              await loadVote(true);
+            } catch (err) {
+              submitting = false;
+              confirming = false;
+              statusMsg = err.message || "投票提交失败";
+              renderState(vote);
+            }
+          });
+        } else if (canSubmit) {
+          const tip = statusMsg || (vote.isPublic ? "公开投票，选项对他人可见 · 提交后不可修改" : "提交后不可修改");
+          footEl.innerHTML = `
+            <span class="nsc-vote-note${statusMsg ? " is-error" : ""}">${escHtml(tip)}</span>
+            <button type="button" class="nsc-send-btn nsc-vote-submit-btn"${selectedIds.size === 0 || submitting ? " disabled" : ""}>投票</button>
+          `;
+          footEl.querySelector(".nsc-vote-submit-btn").addEventListener("click", () => {
+            if (selectedIds.size === 0 || submitting) return;
+            confirming = true;
+            renderState(vote);
+          });
+        } else {
+          footEl.innerHTML = `<span class="nsc-vote-note">${vote.locked ? "投票已结束" : "当前不可投票"}</span>`;
+        }
+      }
+    };
+
+    const loadVote = async (force = false) => {
+      renderState(null, true);
+      try {
+        const vote = await fetchVoteDetail(voteId, force);
+        submitting = false;
+        if (card.isConnected) renderState(vote);
+      } catch (err) {
+        submitting = false;
+        if (card.isConnected) renderState(null, false, err.message || "加载失败");
+      }
+    };
+
+    loadVote(false);
+    return card;
+  }
+
+  function enhanceNsApps(containerEl) {
+    if (!containerEl) return;
+
+    for (const panel of Array.from(containerEl.querySelectorAll(".stardust-panel"))) {
+      if (panel.dataset.nscNsappInit === "1") continue;
+      const receipt = extractStardustFromNativePanel(panel);
+      if (receipt) {
+        const card = createStardustCardElement(receipt);
+        card.dataset.nscNsappInit = "1";
+        panel.replaceWith(card);
+      }
+    }
+
+    for (const panel of Array.from(containerEl.querySelectorAll(".vote-panel"))) {
+      if (panel.dataset.nscNsappInit === "1") continue;
+      const voteId = extractVoteIdFromNativePanel(panel);
+      if (voteId) {
+        const card = createVoteCardElement(voteId);
+        card.dataset.nscNsappInit = "1";
+        panel.replaceWith(card);
+      }
+    }
+
+    const replaceLinkWithCard = (linkEl, card) => {
+      const parent = linkEl.parentElement;
+      if (
+        parent &&
+        parent.tagName === "P" &&
+        parent.children.length === 1 &&
+        (parent.textContent || "").trim() === (linkEl.textContent || "").trim()
+      ) {
+        parent.replaceWith(card);
+      } else {
+        linkEl.replaceWith(card);
+      }
+    };
+
+    for (const a of Array.from(containerEl.querySelectorAll('a[href^="nsapp://"], a[data-href^="nsapp://"]'))) {
+      if (a.closest("pre, code, script, style, textarea, .nsc-sd-card, .nsc-vote-card")) continue;
+      const rawUrl = a.getAttribute("data-href") || a.getAttribute("href") || "";
+      const receipt = parseStardustReceiveUrl(rawUrl);
+      if (receipt) {
+        replaceLinkWithCard(a, createStardustCardElement(receipt));
+        continue;
+      }
+      const voteId = parseVoteUrl(rawUrl);
+      if (voteId) {
+        replaceLinkWithCard(a, createVoteCardElement(voteId));
+      }
+    }
+
+    const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.nodeValue || !/nsapp:\/\/(?:stardust-receive|vote)\?/i.test(node.nodeValue)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        if (
+          node.parentElement &&
+          node.parentElement.closest("a, pre, code, script, style, textarea, .nsc-sd-card, .nsc-vote-card, .stardust-panel, .vote-panel")
+        ) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+    for (const tn of textNodes) {
+      const text = tn.nodeValue;
+      const re = /(nsapp:\/\/(?:stardust-receive|vote)\?[^\s<>"'`\u3000]+)/gi;
+      let m;
+      let lastIdx = 0;
+      const frag = document.createDocumentFragment();
+      let replacedAny = false;
+      while ((m = re.exec(text)) !== null) {
+        const rawMatch = m[1];
+        const receipt = parseStardustReceiveUrl(rawMatch);
+        const voteId = !receipt ? parseVoteUrl(rawMatch.replace(/[),.;!?。，；！？]+$/, "")) : null;
+        if (!receipt && !voteId) continue;
+        replacedAny = true;
+        if (m.index > lastIdx) {
+          frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        }
+        frag.appendChild(receipt ? createStardustCardElement(receipt) : createVoteCardElement(voteId));
+        lastIdx = m.index + rawMatch.length;
+      }
+      if (replacedAny) {
+        if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+        const parent = tn.parentElement;
+        if (parent && parent.tagName === "P" && parent.childNodes.length === 1 && frag.childNodes.length === 1) {
+          parent.replaceWith(frag);
+        } else {
+          tn.parentNode.replaceChild(frag, tn);
+        }
+      }
+    }
+  }
+

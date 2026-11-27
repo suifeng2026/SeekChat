@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
+// @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.19.1
-// @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
-// @author       JeikCode Assistant
+// @version      7.20.0
+// @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
+// @author       80hou
 // @match        https://www.nodeseek.com/*
 // @match        https://nodeseek.com/*
 // @run-at       document-start
