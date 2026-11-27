@@ -723,8 +723,25 @@
       source: "",
       error: "",
       retryAfter: 0,
-      drawerOpen: false,
+      pinned: false,
       filter: "all",
+    };
+
+    const highlightRulingText = (rawText) => {
+      const s = String(rawText || "");
+      const kwRe = /(轻度灌水|严重灌水|水贴警告|水贴|无意义|活动奖励|推荐阅读|优质技术文章|阅读权限被改为\d+|锁定修改|用户被禁言\d+天|禁言\d+天|违规|骂人|引战|广告|刷分|活动|奖励|中奖|[+-]\d+鸡腿)/g;
+      let out = "";
+      let last = 0;
+      let m;
+      while ((m = kwRe.exec(s)) !== null) {
+        if (m.index > last) out += escHtml(s.slice(last, m.index));
+        const tok = m[0];
+        const isPos = /^(活动奖励|推荐阅读|优质技术文章|活动|奖励|中奖|\+\d+鸡腿)$/.test(tok);
+        out += `<span class="${isPos ? "nsc-rk-pos" : "nsc-rk-warn"}">${escHtml(tok)}</span>`;
+        last = m.index + tok.length;
+      }
+      if (last < s.length) out += escHtml(s.slice(last));
+      return out || "-";
     };
 
     const filterRulingRows = (rows, filterKey) => {
@@ -802,46 +819,10 @@
       const summary = summarizeRulingRows(rows);
       const tagsHtml = summary.tags
         .map((t) => {
-          const isAct = rulingState.drawerOpen && rulingState.filter === t.filter;
+          const isAct = rulingState.pinned && rulingState.filter === t.filter;
           return `<button type="button" class="nsc-ruling-tag tone-${escHtml(t.tone)}${isAct ? " is-active" : ""}" data-rfilter="${escHtml(t.filter)}">${escHtml(t.label)}</button>`;
         })
         .join("");
-
-      const drawerRows = filterRulingRows(rows, rulingState.filter);
-      const drawerHtml = rulingState.drawerOpen
-        ? `
-          <div class="nsc-ruling-drawer is-open">
-            <div class="nsc-ruling-filter-row">
-              <div class="nsc-ruling-seg">
-                <button type="button" class="${rulingState.filter === "all" ? "is-active" : ""}" data-dfilter="all">全部 (${rows.length})</button>
-                <button type="button" class="${rulingState.filter === "punish" ? "is-active" : ""}" data-dfilter="punish">处罚 (${summary.punishCount})</button>
-                <button type="button" class="${rulingState.filter === "reward" ? "is-active" : ""}" data-dfilter="reward">奖励 (${summary.rewardCount})</button>
-              </div>
-              <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-collapse">收起</button>
-            </div>
-            <div class="nsc-ruling-list">
-              ${drawerRows.length === 0
-                ? `<div class="nsc-ruling-status" style="padding:8px 4px;">该分类下暂无记录</div>`
-                : drawerRows.map((r, idx) => `
-                  <div class="nsc-ruling-item">
-                    <div class="nsc-ruling-item-top">
-                      <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> <span style="color:var(--nsc-muted);">#${escHtml(r.recordId || "-")}</span></span>
-                      <span class="nsc-ruling-time" title="${escHtml(r.beijingTime || "")}">${escHtml(r.beijingTime || r.relTime || "-")}</span>
-                    </div>
-                    <div>原因：${escHtml(r.reasonText)}</div>
-                    <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}</div>
-                    <div class="nsc-ruling-post-row">
-                      ${r.postTarget
-                        ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">关联内容：${escHtml(r.postTarget.label)}</button>
-                           <a href="${escHtml(r.postTarget.href)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--nsc-muted);text-decoration:none;">原帖 ↗</a>`
-                        : `<span style="font-size:11px;color:var(--nsc-muted);">无关联内容</span>`}
-                    </div>
-                  </div>
-                `).join("")}
-            </div>
-          </div>
-        `
-        : "";
 
       const srcLabel = rulingState.source === "rulings-web" ? "备用源 nodeseek-rulings" : rulingState.source === "xxboxx" ? "主源 api.xxboxx.de" : "";
       strip.innerHTML = `
@@ -853,82 +834,87 @@
           <div class="nsc-ruling-ops">
             ${rulingState.source === "rulings-web" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">备用源</span>` : ""}
             ${rulingState.error === "rate_limited" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">冷却 ${rulingState.retryAfter}s</span>` : ""}
-            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `详情 (${rows.length})`}</button>
             <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="刷新管理记录">${rulingState.status === "loading" ? "..." : ICONS.refresh}</button>
           </div>
         </div>
         <div class="nsc-ruling-hover-tip" id="nsc-ruling-hover-tip"></div>
-        ${drawerHtml}
       `;
 
       const hoverTip = strip.querySelector("#nsc-ruling-hover-tip");
-      const showHoverPreview = (filterKey) => {
-        if (!hoverTip || rulingState.drawerOpen) return;
-        const previewList = filterRulingRows(rows, filterKey).slice(0, 4);
+      const openPopover = (filterKey, isPinned) => {
+        if (!hoverTip) return;
+        const previewList = filterRulingRows(rows, filterKey);
         if (previewList.length === 0) return;
-        hoverTip.innerHTML = previewList.map((r) => `
+        hoverTip.innerHTML = previewList.map((r, idx) => `
           <div class="nsc-ruling-hover-item">
             <div style="display:flex;justify-content:space-between;gap:8px;">
-              <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> #${escHtml(r.recordId || "-")}</span>
+              <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> <span style="color:var(--nsc-muted);">#${escHtml(r.recordId || "-")}</span></span>
               <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
             </div>
-            <div>原因：${escHtml(r.reasonText)}</div>
-            <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 关联 ${escHtml(r.postTarget.label)}` : ""}</div>
+            <div>原因：${highlightRulingText(r.reasonText)}</div>
+            <div style="color:var(--nsc-muted);">处理：${highlightRulingText(r.cleanActions)}</div>
+            <div class="nsc-ruling-post-row">
+              ${r.postTarget
+                ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">关联内容：${escHtml(r.postTarget.label)}</button>
+                   <a href="${escHtml(r.postTarget.href)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--nsc-muted);text-decoration:none;">原帖 ↗</a>`
+                : `<span style="font-size:11px;color:var(--nsc-muted);">无关联内容</span>`}
+            </div>
           </div>
         `).join("");
         hoverTip.classList.add("is-open");
+        hoverTip.classList.toggle("is-pinned", Boolean(isPinned));
+        hoverTip.querySelectorAll("[data-rpost-idx]").forEach((b) => {
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const item = previewList[Number(b.dataset.rpostIdx)];
+            if (!item || !item.postTarget) return;
+            backdrop.classList.remove("is-open");
+            openPostInChat({
+              postId: item.postTarget.postId,
+              url: item.postTarget.href,
+              title: `帖子 #${item.postTarget.postId}`,
+              targetFloor: item.postTarget.floorId,
+            });
+          });
+        });
       };
-      const hideHoverPreview = () => {
-        if (hoverTip) hoverTip.classList.remove("is-open");
+      const closePopover = () => {
+        if (hoverTip) hoverTip.classList.remove("is-open", "is-pinned");
       };
+
+      if (rulingState.pinned) {
+        openPopover(rulingState.filter, true);
+      }
 
       strip.querySelectorAll(".nsc-ruling-tag").forEach((btn) => {
         const fKey = btn.dataset.rfilter || "all";
-        btn.addEventListener("mouseenter", () => showHoverPreview(fKey));
-        btn.addEventListener("click", () => {
-          hideHoverPreview();
-          if (rulingState.drawerOpen && rulingState.filter === fKey) {
-            rulingState.drawerOpen = false;
+        btn.addEventListener("mouseenter", () => {
+          if (!rulingState.pinned) openPopover(fKey, false);
+        });
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (rulingState.pinned && rulingState.filter === fKey) {
+            rulingState.pinned = false;
+            closePopover();
           } else {
-            rulingState.drawerOpen = true;
+            rulingState.pinned = true;
             rulingState.filter = fKey;
+            openPopover(fKey, true);
           }
-          renderRulingStrip(info);
-        });
-      });
-      strip.addEventListener("mouseleave", hideHoverPreview);
-
-      strip.querySelector("#nsc-ruling-toggle-btn")?.addEventListener("click", () => {
-        hideHoverPreview();
-        rulingState.drawerOpen = !rulingState.drawerOpen;
-        renderRulingStrip(info);
-      });
-      strip.querySelector("#nsc-ruling-collapse")?.addEventListener("click", () => {
-        rulingState.drawerOpen = false;
-        renderRulingStrip(info);
-      });
-      strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", () => {
-        hideHoverPreview();
-        triggerRulingQuery(targetName, true);
-      });
-      strip.querySelectorAll("[data-dfilter]").forEach((b) => {
-        b.addEventListener("click", () => {
-          rulingState.filter = b.dataset.dfilter || "all";
-          renderRulingStrip(info);
-        });
-      });
-      strip.querySelectorAll("[data-rpost-idx]").forEach((b) => {
-        b.addEventListener("click", () => {
-          const item = drawerRows[Number(b.dataset.rpostIdx)];
-          if (!item || !item.postTarget) return;
-          backdrop.classList.remove("is-open");
-          openPostInChat({
-            postId: item.postTarget.postId,
-            url: item.postTarget.href,
-            title: `帖子 #${item.postTarget.postId}`,
-            targetFloor: item.postTarget.floorId,
+          strip.querySelectorAll(".nsc-ruling-tag").forEach((tBtn) => {
+            tBtn.classList.toggle("is-active", rulingState.pinned && tBtn.dataset.rfilter === rulingState.filter);
           });
         });
+      });
+      strip.addEventListener("mouseleave", () => {
+        if (!rulingState.pinned) closePopover();
+      });
+
+      strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        rulingState.pinned = false;
+        closePopover();
+        triggerRulingQuery(targetName, true);
       });
     };
 
@@ -958,7 +944,7 @@
       renderRulingStrip({ name: cleanName });
     };
 
-    const renderModal = (info, loading) => {
+    const renderModal = (info, loading, { scrollToLastSpeak = false } = {}) => {
       const friendActive = isFriend(info.name);
       const blackActive = isBlacklisted(info.name);
       const lastSp = info.uid ? state.lastSpeakCache[info.uid] : null;
@@ -991,7 +977,7 @@
             <div class="nsc-profile-sig-label">个性签名</div>
             <div class="nsc-profile-sig-body">${sigContent || `<span style="color:var(--nsc-muted);">暂无签名</span>`}</div>
             ${apiReadme && (domSig || apiSig) ? `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--nsc-border);"><div class="nsc-profile-sig-label">个人主页 README</div><div>${apiReadme}</div></div>` : ""}
-            ${lastSp ? `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--nsc-border);color:var(--nsc-accent);">最后发言：${lastSp.timeStr}${lastSp.title ? ` (${lastSp.title.replace(/</g, "&lt;")})` : ""}</div>` : ""}
+            ${lastSp ? `<div id="nsc-p-last-speak" class="nsc-last-speak-inline${lastSp.postUrl ? " is-clickable" : ""}" title="${lastSp.postUrl ? "点击在聊天窗口打开该帖子" : ""}">最后发言：${escHtml(lastSp.timeStr)}${lastSp.title ? ` (${escHtml(lastSp.title)})` : ""}</div>` : ""}
           </div>
           <div class="nsc-profile-btns">
             <button type="button" class="${friendActive ? "primary" : ""}" id="nsc-p-friend">${friendActive ? "已是好友" : "加为好友"}</button>
@@ -1054,9 +1040,42 @@
         if (!info.uid) return;
         e.target.textContent = "查询中...";
         await fetchUserLastSpeak(info.uid);
-        renderModal(info, false);
+        renderModal(info, false, { scrollToLastSpeak: true });
         renderRightBody();
       });
+      const lastSpeakEl = modal.querySelector("#nsc-p-last-speak");
+      if (lastSpeakEl) {
+        if (lastSp && lastSp.postUrl) {
+          lastSpeakEl.addEventListener("click", () => {
+            backdrop.classList.remove("is-open");
+            openPostInChat({
+              postId: lastSp.postId,
+              url: lastSp.postUrl,
+              title: lastSp.title || `帖子 #${lastSp.postId}`,
+              author: info.name,
+              avatar: info.avatar,
+              targetFloor: lastSp.floorId ? String(lastSp.floorId) : "",
+            });
+          });
+        }
+        if (scrollToLastSpeak) {
+          requestAnimationFrame(() => {
+            const sigBox = modal.querySelector(".nsc-profile-sig");
+            if (sigBox) sigBox.scrollTop = sigBox.scrollHeight;
+            lastSpeakEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            lastSpeakEl.classList.add("is-highlight");
+            setTimeout(() => { if (lastSpeakEl.isConnected) lastSpeakEl.classList.remove("is-highlight"); }, 1400);
+          });
+        }
+      }
+      modal.onclick = (e) => {
+        if (rulingState.pinned && !e.target.closest("#nsc-p-ruling-strip")) {
+          rulingState.pinned = false;
+          const ht = modal.querySelector("#nsc-ruling-hover-tip");
+          if (ht) ht.classList.remove("is-open", "is-pinned");
+          modal.querySelectorAll(".nsc-ruling-tag.is-active").forEach((b) => b.classList.remove("is-active"));
+        }
+      };
       renderRulingStrip(info);
     };
 

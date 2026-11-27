@@ -318,7 +318,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.36",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.37",
       latest: "",
       installUrl: "",
       hasUpdate: false,
