@@ -12,6 +12,7 @@
     USER_CACHE: "nsc_v7_user_cache",
     LAST_SPEAK_CACHE: "nsc_v7_last_speak_cache",
     POST_TITLE_CACHE: "nsc_v7_post_title_cache",
+    READ_NOTIFS: "nsc_v7_read_notifs",
   };
 
   function isBrowsePath(pathname) {
@@ -174,7 +175,11 @@
     opAuthor: "",
     currentUser: "",
     currentUserId: 0,
+    totalMessageUnread: 0,
     unreadCounts: { atMe: 0, reply: 0, message: 0, sysNotice: 0 },
+    unreadLoaded: false,
+    _markingNotif: {},
+    readNotifs: loadJson(LS.READ_NOTIFS, {}),
     notifData: {
       "at-me": { items: [], loading: false, loaded: false, error: null },
       "reply-me": { items: [], loading: false, loaded: false, error: null },

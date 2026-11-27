@@ -23,16 +23,21 @@
     });
   }
 
+  let _unreadFetchSeq = 0;
   async function fetchUnreadCounts() {
+    const seq = ++_unreadFetchSeq;
     try {
       const resp = await fetch("/api/notification/unread-count", {
         headers: { Accept: "application/json, text/plain, */*" },
         credentials: "include",
+        cache: "no-store",
       });
-      if (!resp.ok) return;
+      if (!resp.ok || seq !== _unreadFetchSeq) return;
       const data = await resp.json().catch(() => null);
+      if (seq !== _unreadFetchSeq) return;
       if (data && data.unreadCount) {
         const totalMsg = Number(data.unreadCount.message) || 0;
+        state.totalMessageUnread = totalMsg;
         const sysUnread = state.sysNoticeList.loaded ? Number(state.unreadCounts.sysNotice) || 0 : 0;
         state.unreadCounts = {
           atMe: Number(data.unreadCount.atMe) || 0,
@@ -40,8 +45,10 @@
           message: Math.max(0, totalMsg - sysUnread),
           sysNotice: sysUnread,
         };
+        state.unreadLoaded = true;
         renderLeftNav();
         syncUserCardNotifyBadge();
+        if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
       }
     } catch (_) {}
   }
@@ -122,6 +129,7 @@
       document.body.classList.add("nsc-theme-dusk");
     }
     syncThemeButtons();
+    syncUserCardNotifyBadge();
 
     const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
       const src = document.querySelector(panelSelector);
@@ -245,9 +253,22 @@
 
     if (channelId === "at-me" || channelId === "reply-me") {
       const st = state.notifData[channelId];
-      fetchUnreadCounts();
+      const countKey = channelId === "at-me" ? "atMe" : "reply";
+      const markInflight = state._markingNotif[channelId];
+      const syncThenCheck = async () => {
+        if (markInflight) {
+          try { await markInflight; } catch (_) {}
+        }
+        await fetchUnreadCounts();
+        const srvCnt = Number(state.unreadCounts[countKey]) || 0;
+        const localCnt = st.items.filter((x) => !x.viewed).length;
+        if (forceRefresh || !st.loaded || (srvCnt > 0 && localCnt === 0)) {
+          fetchNotifications(channelId);
+        }
+      };
       if (forceRefresh || !st.loaded) fetchNotifications(channelId);
       else renderTopicList();
+      syncThenCheck();
       return;
     }
 
@@ -297,6 +318,9 @@
 
     const endpointBase = kind === "at-me" ? "/api/notification/at-me/list" : "/api/notification/reply-to-me/list";
     const countKey = kind === "at-me" ? "atMe" : "reply";
+    if (!state.unreadLoaded) {
+      await fetchUnreadCounts();
+    }
     const mapItems = (raw) =>
       raw.map((it) => {
         const uid = String(it.commenter_id || it.member_id || it.uid || "");
@@ -306,18 +330,25 @@
         const rawId = Number(
           it.id || it.notification_id || it.notify_id || it.nid || it.msg_id || it.reply_id || it.comment_id || it.commentId || 0
         ) || 0;
+        const srvViewed = it.viewed === 1 || it.viewed === "1" || it.viewed === true || it.viewed === "true";
+        const localKey = `${kind}:${rawId}:${postId}:${floorId}`;
+        if (srvViewed && state.readNotifs[localKey]) {
+          delete state.readNotifs[localKey];
+        }
         return {
           id: rawId,
           commentId: Number(it.comment_id || it.commentId || 0) || 0,
           postId,
           floorId,
+          localKey,
           url: `/post-${postId}-${pageIndex}`,
           title: it.title || `帖子 #${postId}`,
           author: it.commenter_name || it.member_name || "Seeker",
           uid,
           avatar: uid ? `/avatar/${uid}.png` : "",
           timeText: formatChineseTime("", it.created_at, ""),
-          viewed: it.viewed === 1 || it.viewed === true,
+          viewed: srvViewed || Boolean(state.readNotifs[localKey]),
+          serverViewed: srvViewed,
         };
       });
 
@@ -366,6 +397,7 @@
       const resp = await fetch("/api/notification/unread-count", {
         headers: { Accept: "application/json, text/plain, */*" },
         credentials: "include",
+        cache: "no-store",
       });
       if (!resp.ok) return null;
       const data = await resp.json().catch(() => null);
@@ -386,16 +418,26 @@
     const floorIdNum = item ? (Number(item.floorId) || 0) : 0;
     const commentIdNum = item ? (Number(item.commentId) || 0) : 0;
 
-    const beforeServerCount = Number(state.unreadCounts[countKey]) || 0;
-
     if (store) {
       if (all) {
-        store.items.forEach((x) => { x.viewed = true; });
+        store.items.forEach((x) => {
+          x.viewed = true;
+          if (x.localKey) delete state.readNotifs[x.localKey];
+        });
+        saveJson(LS.READ_NOTIFS, state.readNotifs);
         state.unreadCounts[countKey] = 0;
       } else {
         const hit = item || (numId > 0 ? store.items.find((x) => x.id === numId) : null);
         if (hit && !hit.viewed) {
           hit.viewed = true;
+          if (hit.localKey) {
+            state.readNotifs[hit.localKey] = Date.now();
+            const rk = Object.keys(state.readNotifs);
+            if (rk.length > 300) {
+              rk.sort((a, b) => state.readNotifs[a] - state.readNotifs[b]).slice(0, rk.length - 200).forEach((k) => delete state.readNotifs[k]);
+            }
+            saveJson(LS.READ_NOTIFS, state.readNotifs);
+          }
           state.unreadCounts[countKey] = Math.max(0, (Number(state.unreadCounts[countKey]) || 0) - 1);
         }
       }
@@ -405,104 +447,127 @@
       if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
     }
 
-    try {
-      let ok = false;
-      if (all) {
-        const attempts = [
-          () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: { Accept: "application/json, text/plain, */*" } }),
-          () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: "{}" }),
-          () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ all: true }) }),
-        ];
-        for (const run of attempts) {
-          const resp = await run();
-          const resJson = await resp.json().catch(() => null);
-          if (resp.ok && (!resJson || resJson.success !== false)) {
-            ok = true;
-            break;
-          }
-        }
-      } else {
-        const strategyKey = `nsc_v7_mv_strategy_${kind}`;
-        const candidates = [];
-        if (numId > 0) {
-          if (kind === "at-me") {
-            candidates.push({ name: "atMeArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ atMe: [numId] }) }) });
-          } else {
-            candidates.push({ name: "replyToMeArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ replyToMe: [numId] }) }) });
-            candidates.push({ name: "replyArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ reply: [numId] }) }) });
-          }
-          candidates.push({ name: "idListArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ idList: [numId] }) }) });
-          candidates.push({ name: "idsArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ ids: [numId] }) }) });
-          candidates.push({ name: "idScalar", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ id: numId }) }) });
-          candidates.push({ name: "idQuery", run: () => fetch(`${api}?id=${numId}`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders() }) });
-        }
-        if (commentIdNum > 0 && commentIdNum !== numId) {
-          candidates.push({ name: "commentId", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ commentId: commentIdNum }) }) });
-        }
-        if (postIdNum > 0) {
-          candidates.push({ name: "postFloorCamel", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ postId: postIdNum, floorId: floorIdNum }) }) });
-          candidates.push({ name: "postFloorSnake", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ post_id: postIdNum, floor_id: floorIdNum }) }) });
-          candidates.push({ name: "postFloorQuery", run: () => fetch(`${api}?postId=${postIdNum}&floorId=${floorIdNum}`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders() }) });
-        }
+    const workPromise = (async () => {
+      try {
+        const serverBefore = await readServerUnreadCountFor(countKey);
+        const beforeCount = serverBefore !== null ? serverBefore : (Number(state.unreadCounts[countKey]) || 0);
+        let ok = false;
 
-        const cachedName = localStorage.getItem(strategyKey) || "";
-        if (cachedName) {
-          const hitCand = candidates.find((c) => c.name === cachedName);
-          if (hitCand) {
-            const resp = await hitCand.run();
-            const resJson = await resp.json().catch(() => null);
-            if (resp.ok && (!resJson || resJson.success !== false)) {
-              const after = await readServerUnreadCountFor(countKey);
-              if (after === null || after < beforeServerCount || beforeServerCount === 0) {
-                ok = true;
-              } else {
-                localStorage.removeItem(strategyKey);
-              }
-            } else {
-              localStorage.removeItem(strategyKey);
-            }
-          }
-        }
-
-        if (!ok) {
-          for (const cand of candidates) {
-            if (cand.name === cachedName) continue;
+        if (all) {
+          const attempts = [
+            () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: "{}" }),
+            () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: { Accept: "application/json, text/plain, */*" } }),
+            () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ all: true }) }),
+            () => fetch(`${api}?all=true`, { method: "GET", credentials: "include", headers: { Accept: "application/json, text/plain, */*" } }),
+          ];
+          for (const run of attempts) {
             try {
-              const resp = await cand.run();
+              const resp = await run();
               const resJson = await resp.json().catch(() => null);
               if (!resp.ok || (resJson && resJson.success === false)) continue;
               const after = await readServerUnreadCountFor(countKey);
-              if (after !== null && after < beforeServerCount) {
-                localStorage.setItem(strategyKey, cand.name);
-                ok = true;
-                break;
-              }
-              if (beforeServerCount === 0) {
+              if (after === 0 || after === null) {
                 ok = true;
                 break;
               }
             } catch (_) {}
           }
-        }
-      }
+        } else {
+          const strategyKey = `nsc_v7_mv_strategy_${kind}`;
+          const candidates = [];
+          if (numId > 0) {
+            if (kind === "at-me") {
+              candidates.push({ name: "atMeArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ atMe: [numId] }) }) });
+              candidates.push({ name: "atMesArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ atMes: [numId] }) }) });
+            } else {
+              candidates.push({ name: "replyToMeArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ replyToMe: [numId] }) }) });
+              candidates.push({ name: "replyArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ reply: [numId] }) }) });
+              candidates.push({ name: "repliesArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ replies: [numId] }) }) });
+            }
+            candidates.push({ name: "notificationsArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ notifications: [numId] }) }) });
+            candidates.push({ name: "idListArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ idList: [numId] }) }) });
+            candidates.push({ name: "idsArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ ids: [numId] }) }) });
+            candidates.push({ name: "idScalar", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ id: numId }) }) });
+            candidates.push({ name: "idQueryPost", run: () => fetch(`${api}?id=${numId}`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders() }) });
+            candidates.push({ name: "idQueryGet", run: () => fetch(`${api}?id=${numId}`, { method: "GET", credentials: "include", headers: { Accept: "application/json, text/plain, */*" } }) });
+          }
+          if (commentIdNum > 0 && commentIdNum !== numId) {
+            candidates.push({ name: "commentId", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ commentId: commentIdNum }) }) });
+          }
+          if (postIdNum > 0) {
+            candidates.push({ name: "postFloorCamel", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ postId: postIdNum, floorId: floorIdNum }) }) });
+            candidates.push({ name: "postFloorSnake", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ post_id: postIdNum, floor_id: floorIdNum }) }) });
+            candidates.push({ name: "postFloorQuery", run: () => fetch(`${api}?postId=${postIdNum}&floorId=${floorIdNum}`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders() }) });
+          }
 
-      if (!ok && !all && store) {
-        const localUnreadLeft = store.items.filter((x) => !x.viewed).length;
-        if (localUnreadLeft === 0 && beforeServerCount > 0 && beforeServerCount <= store.items.length) {
-          const allResp = await fetch(`${api}?all=true`, {
-            method: "POST",
-            credentials: "include",
-            headers: { Accept: "application/json, text/plain, */*" },
-          }).catch(() => null);
-          if (allResp && allResp.ok) ok = true;
-        }
-      }
+          const cachedName = localStorage.getItem(strategyKey) || "";
+          if (cachedName) {
+            const hitCand = candidates.find((c) => c.name === cachedName);
+            if (hitCand) {
+              try {
+                const resp = await hitCand.run();
+                const resJson = await resp.json().catch(() => null);
+                if (resp.ok && (!resJson || resJson.success !== false) && beforeCount > 0) {
+                  const after = await readServerUnreadCountFor(countKey);
+                  if (after !== null && after < beforeCount) {
+                    ok = true;
+                  } else {
+                    localStorage.removeItem(strategyKey);
+                  }
+                } else {
+                  localStorage.removeItem(strategyKey);
+                }
+              } catch (_) {
+                localStorage.removeItem(strategyKey);
+              }
+            }
+          }
 
-      setTimeout(async () => {
+          if (!ok && beforeCount > 0) {
+            for (const cand of candidates) {
+              if (cand.name === cachedName) continue;
+              try {
+                const resp = await cand.run();
+                const resJson = await resp.json().catch(() => null);
+                if (!resp.ok || (resJson && resJson.success === false)) continue;
+                const after = await readServerUnreadCountFor(countKey);
+                if (after !== null && after < beforeCount) {
+                  localStorage.setItem(strategyKey, cand.name);
+                  ok = true;
+                  break;
+                }
+              } catch (_) {}
+            }
+          }
+        }
+
+        if (!ok && !all && store) {
+          const allLocallyRead = store.items.every((x) => x.viewed);
+          if (allLocallyRead && beforeCount > 0 && beforeCount <= store.items.length) {
+            const attempts = [
+              () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: "{}" }),
+              () => fetch(`${api}?all=true`, { method: "POST", credentials: "include", headers: { Accept: "application/json, text/plain, */*" } }),
+            ];
+            for (const run of attempts) {
+              try {
+                const r = await run();
+                if (r && r.ok) {
+                  const after = await readServerUnreadCountFor(countKey);
+                  if (after === 0) { ok = true; break; }
+                }
+              } catch (_) {}
+            }
+          }
+        }
+
         await fetchUnreadCounts();
         if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
-      }, 280);
-    } catch (_) {}
+      } catch (_) {}
+    })();
+
+    state._markingNotif[kind] = workPromise;
+    await workPromise;
+    if (state._markingNotif[kind] === workPromise) delete state._markingNotif[kind];
   }
 
   async function fetchPmList() {
@@ -933,8 +998,13 @@
       items.sort((a, b) => b.ts - a.ts || b.id - a.id);
       state.sysNoticeList.items = items;
       state.sysNoticeList.loaded = true;
-      state.unreadCounts.sysNotice = items.filter((x) => x.unread).length;
+      const sysCnt = items.filter((x) => x.unread).length;
+      state.unreadCounts.sysNotice = sysCnt;
+      if (state.totalMessageUnread > 0) {
+        state.unreadCounts.message = Math.max(0, state.totalMessageUnread - sysCnt);
+      }
       renderLeftNav();
+      syncUserCardNotifyBadge();
       if (!silent && state.activeChannel === "sys-notice") {
         setTimeout(() => enrichSysNoticeTitles(), 120);
       }
@@ -961,7 +1031,11 @@
       state.sysNoticeList.items.forEach((x) => {
         if (idSet.has(x.id)) x.unread = false;
       });
-      state.unreadCounts.sysNotice = state.sysNoticeList.items.filter((x) => x.unread).length;
+      const sysCnt = state.sysNoticeList.items.filter((x) => x.unread).length;
+      state.unreadCounts.sysNotice = sysCnt;
+      if (state.totalMessageUnread > 0) {
+        state.unreadCounts.message = Math.max(0, state.totalMessageUnread - sysCnt);
+      }
       renderLeftNav();
       syncUserCardNotifyBadge();
       if (state.activeChannel === "sys-notice") renderTopicList();
