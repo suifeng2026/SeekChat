@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.34
+// @version      7.22.35
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -68,6 +68,9 @@
     SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
     PANE_COLLAPSED: "nsc_v7_pane_collapsed",
     COMPOSER_PREFS: "nsc_v7_composer_prefs",
+    BASE_ORB_POS: "nsc_v7_base_orb_pos",
+    BASE_ORB_VISIBLE: "nsc_v7_base_orb_visible",
+    DISABLED_ENHANCERS: "nsc_v7_disabled_enhancers",
   };
 
   function isBrowsePath(pathname) {
@@ -321,6 +324,9 @@
     paneSkins: loadJson(LS.PANE_SKINS, {}),
     paneCollapsed: loadJson(LS.PANE_COLLAPSED, { nav: false, list: false, right: false }),
     composerPrefs: loadJson(LS.COMPOSER_PREFS, { pinned: false, size: "md" }),
+    baseOrbPos: loadJson(LS.BASE_ORB_POS, { right: 20, bottom: 136 }),
+    baseOrbVisible: localStorage.getItem(LS.BASE_ORB_VISIBLE) !== "0",
+    disabledEnhancers: new Set(loadJson(LS.DISABLED_ENHANCERS, [])),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
@@ -344,7 +350,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.34",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.35",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -1333,9 +1339,23 @@
     upsertRegistryItem(state.registry.navItems, { order: 90, group: "board", ...spec }, (a, b) => (a.order ?? 90) - (b.order ?? 90));
   }
 
+  function isBubbleEnhancerEnabled(id) {
+    return !(state.disabledEnhancers && state.disabledEnhancers.has(String(id || "")));
+  }
+
+  function setBubbleEnhancerEnabled(id, enabled) {
+    const key = String(id || "");
+    if (!key) return;
+    if (!state.disabledEnhancers) state.disabledEnhancers = new Set();
+    if (enabled) state.disabledEnhancers.delete(key);
+    else state.disabledEnhancers.add(key);
+    saveJson(LS.DISABLED_ENHANCERS, Array.from(state.disabledEnhancers));
+  }
+
   function runBubbleEnhancers(containerEl, ctx = {}) {
     if (!containerEl) return;
     for (const enh of state.registry.bubbleEnhancers) {
+      if (!isBubbleEnhancerEnabled(enh.id)) continue;
       try {
         enh.run(containerEl, ctx);
       } catch (_) {}
@@ -1612,25 +1632,64 @@
   function detectThirdPartyEnv() {
     const items = [];
     if (document.getElementById("hanabi-toggle-btn") || document.getElementById("hanabi-emoji-panel") || document.getElementById("hanabi-custom-styles")) {
-      items.push({ id: "hanabi", name: "花火表情面板", kind: "DOM 特征", detail: "检测到 #hanabi-emoji-panel，保留原生光标插入兼容" });
+      items.push({
+        id: "hanabi",
+        name: "花火表情面板",
+        kind: "脚本共存",
+        status: "已兼容",
+        detail: "支持直接向回复框插入表情，引用正文自动过滤冗余节点",
+        techHint: "检测到 #hanabi-toggle-btn / #hanabi-emoji-panel",
+      });
     }
     const userCss = Array.from(document.querySelectorAll('link[rel="stylesheet"][href*="/userstyle/"]'));
     if (userCss.length > 0) {
-      items.push({ id: "userstyle", name: "论坛扩展自定义样式", kind: "CSS", detail: "已加载 /userstyle/*.css，原版论坛与顶栏保持协同" });
+      items.push({
+        id: "userstyle",
+        name: "论坛自定义样式",
+        kind: "站内扩展",
+        status: "已协同",
+        detail: "原版页面继续生效，群聊工作台保持独立外观",
+        techHint: `已加载 ${userCss.length} 个 /userstyle/ 样式表`,
+      });
+    }
+    if (document.querySelector("read-frog, [data-read-frog-select-all-protected]")) {
+      items.push({
+        id: "read-frog",
+        name: "陪读蛙翻译插件",
+        kind: "浏览扩展",
+        status: "已隔离",
+        detail: "已屏蔽翻译浮层对列表刷新与引用抓取的干扰",
+        techHint: "已过滤 <read-frog> 浮层与辅助样式表",
+      });
+    } else if (document.querySelector("[wxt-shadow-root-document-styles], [data-wxt-shadow-root]")) {
+      items.push({
+        id: "browser-ext",
+        name: "页面划词 / 翻译扩展",
+        kind: "浏览扩展",
+        status: "已隔离",
+        detail: "已屏蔽扩展悬浮层对正文排版与引用的干扰",
+        techHint: "检测到 Shadow DOM 扩展注入节点",
+      });
     }
     const extScripts = Array.from(document.querySelectorAll('script[src^="http"]'))
       .map((s) => s.getAttribute("src") || "")
-      .filter((src) => src && !src.includes("nodeseek.com") && !src.includes("stat.nodeseek.org") && !src.includes("cloudflareinsights.com"));
+      .filter((src) => (
+        src &&
+        !src.includes("nodeseek.com") &&
+        !src.includes("stat.nodeseek.org") &&
+        !src.includes("cloudflareinsights.com") &&
+        !src.includes("fog.22112211.xyz")
+      ));
     if (extScripts.length > 0) {
+      const hosts = Array.from(new Set(extScripts.map((u) => { try { return new URL(u).hostname; } catch (_) { return u; } })));
       items.push({
         id: "ext-scripts",
-        name: `外部注入脚本 (${extScripts.length})`,
-        kind: "Script",
-        detail: extScripts.map((u) => { try { return new URL(u).hostname; } catch (_) { return u; } }).join(", "),
+        name: `外部功能脚本 (${hosts.length})`,
+        kind: "外部脚本",
+        status: "已观测",
+        detail: hosts.join(" · "),
+        techHint: extScripts.join("\n"),
       });
-    }
-    if (document.querySelector("read-frog, [wxt-shadow-root-document-styles]")) {
-      items.push({ id: "browser-ext", name: "浏览器扩展浮层", kind: "Extension", detail: "检测到 Shadow/WXT 扩展节点，MutationObserver 已自动隔离" });
     }
     return items;
   }
@@ -4400,7 +4459,82 @@
       }
       .nsc-vote-confirm-btns { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
-      /* 工作台共享基座配置中心样式 */
+      /* 工作台独立 macOS 双栏基座面板与可拖动悬浮球 */
+      #nsc-base-orb {
+        position: fixed; z-index: 9380; width: 40px; height: 40px; border-radius: 50%;
+        border: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-card); color: var(--nsc-accent);
+        backdrop-filter: blur(14px) saturate(160%);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        display: none; align-items: center; justify-content: center;
+        cursor: grab; user-select: none; touch-action: none;
+        opacity: 0.84; transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      body.nsc-app-active #nsc-base-orb.is-visible { display: flex; }
+      #nsc-base-orb:hover { opacity: 1; transform: scale(1.06); box-shadow: 0 10px 26px rgba(0, 122, 255, 0.24); }
+      #nsc-base-orb:active { cursor: grabbing; transform: scale(0.98); }
+      #nsc-base-orb svg { width: 18px; height: 18px; pointer-events: none; }
+
+      #nsc-base-backdrop {
+        position: fixed; inset: 0; z-index: 9440;
+        background: rgba(15, 23, 42, 0.38); backdrop-filter: blur(8px);
+        display: none; align-items: center; justify-content: center; padding: 16px;
+      }
+      #nsc-base-backdrop.is-open { display: flex; }
+      .nsc-base-modal {
+        width: min(860px, 94vw); height: min(78vh, 680px);
+        background: var(--nsc-bg-list); color: var(--nsc-text);
+        border: 1px solid var(--nsc-border); border-radius: 14px;
+        box-shadow: var(--nsc-shadow); font-family: var(--mac-font);
+        display: flex; overflow: hidden;
+      }
+      .nsc-base-sidebar {
+        width: 176px; flex: 0 0 176px; background: var(--nsc-bg-nav);
+        border-right: 1px solid var(--nsc-border);
+        display: flex; flex-direction: column; padding: 12px 10px; gap: 4px;
+      }
+      .nsc-base-side-head {
+        display: flex; align-items: center; gap: 8px; padding: 2px 6px 10px;
+        border-bottom: 1px solid var(--nsc-border); margin-bottom: 6px;
+      }
+      .nsc-base-side-title { font-size: 13.5px; font-weight: 700; color: var(--nsc-text); }
+      .nsc-base-nav-list { flex: 1; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+      .nsc-base-nav-item {
+        width: 100%; border: none; background: transparent; color: var(--nsc-muted);
+        padding: 7px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 600;
+        display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease;
+      }
+      .nsc-base-nav-item svg { width: 14.5px; height: 14.5px; flex: 0 0 14.5px; }
+      .nsc-base-nav-item:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-base-nav-item.is-active { background: var(--nsc-accent); color: #fff; }
+      .nsc-base-side-foot {
+        padding-top: 8px; border-top: 1px solid var(--nsc-border);
+        display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        font-size: 11px; color: var(--nsc-muted);
+      }
+      .nsc-base-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+      .nsc-base-topbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 11px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
+      }
+      .nsc-base-scroll { flex: 1; overflow-y: auto; padding: 14px 16px; }
+      .nsc-compat-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 8px 11px; border-radius: 7px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-hover);
+      }
+      .nsc-compat-left { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+      .nsc-compat-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--nsc-text); }
+      .nsc-compat-desc { font-size: 11.5px; color: var(--nsc-muted); line-height: 1.4; }
+      .nsc-compat-tag {
+        padding: 1px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 600;
+        border: 1px solid var(--nsc-border); color: var(--nsc-muted); background: var(--nsc-bg-card);
+      }
+      .nsc-compat-status {
+        flex: 0 0 auto; font-size: 11.5px; font-weight: 600; color: #15803d; white-space: nowrap;
+      }
+      body.nsc-app-active.dark-layout .nsc-compat-status { color: #30d158; }
 
       .nsc-base-section {
         margin-bottom: 12px; padding: 12px 14px; border-radius: 12px;
@@ -5926,7 +6060,9 @@
           t.closest("#nsc-composer-dock") ||
           t.closest("#nsc-ni-backdrop") ||
           t.closest("#nsc-lightbox") ||
-          t.closest("#nsc-jump-backdrop")
+          t.closest("#nsc-jump-backdrop") ||
+          t.closest("#nsc-base-backdrop") ||
+          t.closest("#nsc-base-orb")
         )) {
           return;
         }
@@ -6182,6 +6318,8 @@
         if (editBd) editBd.classList.remove("is-open");
         const hubBd = document.getElementById("nsc-hub-backdrop");
         if (hubBd) hubBd.classList.remove("is-open");
+        const baseBd = document.getElementById("nsc-base-backdrop");
+        if (baseBd) baseBd.classList.remove("is-open");
         const spaceBd = document.getElementById("nsc-space-backdrop");
         if (spaceBd) spaceBd.classList.remove("is-open");
         const jumpBd = document.getElementById("nsc-jump-backdrop");
@@ -14442,6 +14580,7 @@
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-hub-open-base" title="打开工作台基座设置">工作台设置</button>
             <a class="nsc-mini-btn" id="nsc-hub-native-link" href="/notification" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">原版页面 ↗</a>
             <button type="button" class="nsc-mini-btn" id="nsc-hub-close" style="padding:3px 9px;">✕</button>
           </div>
@@ -14451,6 +14590,10 @@
         <div class="nsc-hub-body" id="nsc-hub-body"></div>
       `;
       modal.querySelector("#nsc-hub-close").addEventListener("click", () => bd.classList.remove("is-open"));
+      modal.querySelector("#nsc-hub-open-base")?.addEventListener("click", () => {
+        bd.classList.remove("is-open");
+        if (typeof state._openWorkbenchBase === "function") state._openWorkbenchBase();
+      });
       const persistentBody = modal.querySelector("#nsc-hub-body");
       let hubScrollRaf = 0;
       persistentBody.addEventListener("scroll", () => {
@@ -16745,12 +16888,12 @@
   // 官方内置基座配置中心插件：主题中心 / 四区皮肤透明度基座 / 组件调序基座 / 排版与自定义表情基座 / 插槽探测
   (function initWorkbenchBasePlugin() {
     const SECTIONS = [
-      { id: "theme", label: "主题中心" },
-      { id: "skin", label: "分区皮肤" },
-      { id: "layout", label: "组件调序" },
-      { id: "chat", label: "排版与回复" },
-      { id: "ext", label: "原版扩展" },
-      { id: "slots", label: "扩展插槽" },
+      { id: "theme", label: "外观主题", desc: "切换浅色、黄昏护眼、分层暗黑及自定义主题包", icon: () => ICONS.palette },
+      { id: "skin", label: "分区皮肤", desc: "为工作台四个分区独立设置背景图、透明度与模糊度", icon: () => ICONS.photo },
+      { id: "layout", label: "导航与栏位", desc: "自定义左侧导航及右侧热榜/好友/粉丝/黑名单排序与显隐", icon: () => ICONS.layers },
+      { id: "chat", label: "排版与交互", desc: "调节阅读行高、图片上限、外链跳转、名片记录与自定义表情", icon: () => ICONS.sliders },
+      { id: "ext", label: "原版扩展", desc: "管理原版论坛「自定义 style」CSS 预设与一键引导", icon: () => ICONS.edit },
+      { id: "slots", label: "扩展与兼容", desc: "按需开关正文增强功能，查看共存插件与运行环境兼容状态", icon: () => ICONS.tools },
     ];
 
     const DEFAULT_STYLE_PRESETS = [
@@ -16934,7 +17077,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
       `;
       sec.querySelector("#nsc-base-theme-auto").addEventListener("click", () => {
         applyThemeMode("auto");
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
       const grid = sec.querySelector(".nsc-base-theme-grid");
       for (const th of themes) {
@@ -16958,7 +17101,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         `;
         card.addEventListener("click", () => {
           applyThemeMode(th.id);
-          renderUserHubIfOpen();
+          renderBaseModalIfOpen();
         });
         grid.appendChild(card);
       }
@@ -16979,7 +17122,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         state.paneSkins = {};
         saveJson(LS.PANE_SKINS, state.paneSkins);
         applyPaneSkinsToDom();
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
       body.appendChild(intro);
 
@@ -17021,7 +17164,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
           state.paneSkins[spec.id] = { opacity: 0.25, blur: 0, fit: "cover", ...(state.paneSkins[spec.id] || {}), ...patch };
           saveJson(LS.PANE_SKINS, state.paneSkins);
           applyPaneSkinsToDom();
-          if (rerender) renderUserHubIfOpen();
+          if (rerender) renderBaseModalIfOpen();
         };
 
         const urlInp = card.querySelector(".nsc-skin-url");
@@ -17052,7 +17195,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
           delete state.paneSkins[spec.id];
           saveJson(LS.PANE_SKINS, state.paneSkins);
           applyPaneSkinsToDom();
-          renderUserHubIfOpen();
+          renderBaseModalIfOpen();
         });
 
         card.querySelectorAll("[data-fit]").forEach((fb) => {
@@ -17111,14 +17254,14 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
             saveJson(LS.RIGHT_CONFIG, cfg);
             renderRightTabs();
             renderRightBody();
-            renderUserHubIfOpen();
+            renderBaseModalIfOpen();
           },
           onReset: () => {
             state.rightConfig = { order: [], hidden: [] };
             saveJson(LS.RIGHT_CONFIG, state.rightConfig);
             renderRightTabs();
             renderRightBody();
-            renderUserHubIfOpen();
+            renderBaseModalIfOpen();
           },
         })
       );
@@ -17135,13 +17278,13 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
             state.navConfig = cfg;
             saveJson(LS.NAV_CONFIG, cfg);
             renderLeftNav();
-            renderUserHubIfOpen();
+            renderBaseModalIfOpen();
           },
           onReset: () => {
             state.navConfig = { order: [], hidden: [] };
             saveJson(LS.NAV_CONFIG, state.navConfig);
             renderLeftNav();
-            renderUserHubIfOpen();
+            renderBaseModalIfOpen();
           },
         })
       );
@@ -17162,7 +17305,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         state.chatPrefs = { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 };
         saveJson(LS.CHAT_PREFS, state.chatPrefs);
         applyChatPrefsToDom();
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
 
       const commitPref = (patch) => {
@@ -17225,7 +17368,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         }
         grp.items.push({ name: iName, url: iUrl });
         saveJson(LS.CUSTOM_STICKERS, state.customStickers);
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
 
       const listEl = stkBox.querySelector("#nsc-stk-list");
@@ -17246,7 +17389,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
           gRow.querySelector(".nsc-stk-del-grp").addEventListener("click", () => {
             state.customStickers.splice(gIdx, 1);
             saveJson(LS.CUSTOM_STICKERS, state.customStickers);
-            renderUserHubIfOpen();
+            renderBaseModalIfOpen();
           });
           const prevEl = gRow.querySelector(".nsc-base-sticker-preview");
           grp.items.forEach((it, iIdx) => {
@@ -17257,7 +17400,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
               grp.items.splice(iIdx, 1);
               if (grp.items.length === 0) state.customStickers.splice(gIdx, 1);
               saveJson(LS.CUSTOM_STICKERS, state.customStickers);
-              renderUserHubIfOpen();
+              renderBaseModalIfOpen();
             });
             prevEl.appendChild(chip);
           });
@@ -17294,18 +17437,18 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         b.addEventListener("click", () => {
           state.jumpLinkMode = b.dataset.jmode || "modal";
           localStorage.setItem(LS.JUMP_MODE, state.jumpLinkMode);
-          renderUserHubIfOpen();
+          renderBaseModalIfOpen();
         });
       });
       interBox.querySelector("#nsc-ruling-auto-sw").addEventListener("click", () => {
         state.rulingAutoQuery = !state.rulingAutoQuery;
         localStorage.setItem(LS.RULING_AUTO, state.rulingAutoQuery ? "1" : "0");
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
       interBox.querySelector("#nsc-ruling-clear-cache").addEventListener("click", () => {
         state.rulingCache = {};
         saveJson(LS.RULING_CACHE, {});
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
       body.appendChild(interBox);
     }
@@ -17346,7 +17489,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         selectedExtId = nid;
         showExtGuideBox = false;
         saveJson(LS.CUSTOM_STYLE_NOTES, notes);
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
 
       intro.querySelector("#nsc-ext-restore").addEventListener("click", () => {
@@ -17358,7 +17501,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         selectedExtId = preset.id;
         showExtGuideBox = false;
         saveJson(LS.CUSTOM_STYLE_NOTES, notes);
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
 
       const tabsEl = intro.querySelector("#nsc-ext-tabs");
@@ -17373,7 +17516,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
           b.addEventListener("click", () => {
             selectedExtId = n.id;
             showExtGuideBox = false;
-            renderUserHubIfOpen();
+            renderBaseModalIfOpen();
           });
           tabsEl.appendChild(b);
         });
@@ -17422,6 +17565,8 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         `;
         guideSlot.querySelector("#nsc-ext-go-setting").addEventListener("click", () => {
           showExtGuideBox = false;
+          const baseBd = document.getElementById("nsc-base-backdrop");
+          if (baseBd) baseBd.classList.remove("is-open");
           state._settingAutoSection = "论坛扩展";
           if (typeof openUserHubModal === "function") openUserHubModal("setting");
         });
@@ -17439,7 +17584,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         saveJson(LS.CUSTOM_STYLE_NOTES, notes);
         msgEl.textContent = "已保存至扩展备忘录";
         msgEl.style.color = "var(--nsc-green)";
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
 
       edBox.querySelector("#nsc-ext-del").addEventListener("click", () => {
@@ -17449,7 +17594,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         selectedExtId = notes[0] ? notes[0].id : "";
         showExtGuideBox = false;
         saveJson(LS.CUSTOM_STYLE_NOTES, notes);
-        renderUserHubIfOpen();
+        renderBaseModalIfOpen();
       });
 
       edBox.querySelector("#nsc-ext-apply").addEventListener("click", async () => {
@@ -17472,84 +17617,322 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
       body.appendChild(edBox);
     }
 
+    const ENHANCER_META = {
+      nsapp: { name: "协议卡片解析", desc: "将星辰打赏与投票链接转为工作台内交互卡片" },
+      "floor-ref": { name: "楼层直达引用", desc: "将正文里的 #楼层 与 12# 转为可点击定位链接" },
+      "magic-tabs": { name: "测评标签页", desc: "保留并激活测评帖的多标签页切换排版" },
+      "ansi-blocks": { name: "终端彩色代码", desc: "解析 ANSI 终端转义序列并渲染彩色高亮块" },
+      tables: { name: "表格容器优化", desc: "为 Markdown 表格增加圆角边框与横向滚动" },
+      "code-blocks": { name: "代码块一键复制", desc: "在代码块右上角挂载快捷复制按钮" },
+      images: { name: "宫格画廊与灯箱", desc: "连续多图自动排列宫格并支持原图缩放灯箱" },
+    };
+
+    const PLUGIN_NAME_MAP = {
+      "plugins/core-hub-analytics.js": "鸡腿百页统计与星辰账本分析",
+      "plugins/core-workbench-base.js": "工作台基座与独立悬浮设置",
+      "themes/mac-default.js": "macOS 浅色 / 黄昏 / 暗黑默认主题包",
+    };
+
     function renderSlotsSection(body) {
       const manifest = typeof NSC_DISCOVERED_MODULES !== "undefined" ? NSC_DISCOVERED_MODULES : { mode: "unknown", themes: [], plugins: [] };
       const reg = state.registry;
       const extEnv = typeof detectThirdPartyEnv === "function" ? detectThirdPartyEnv() : [];
-      const box = document.createElement("div");
-      box.className = "nsc-base-section";
-      box.innerHTML = `
+
+      const modBox = document.createElement("div");
+      modBox.className = "nsc-base-section";
+      const allMods = [...(manifest.themes || []), ...(manifest.plugins || [])];
+      modBox.innerHTML = `
         <div class="nsc-base-title">
-          <span>目录自动发现与扩展插槽状态</span>
-          <span class="nsc-badge-read">构建模式：${escHtml(manifest.mode || "release")}</span>
+          <span>已挂载主题与扩展模块</span>
+          <span class="nsc-badge-read">${escHtml(manifest.mode === "local" ? "本地构建" : "正式构建")} · ${allMods.length} 个模块</span>
         </div>
-        <div class="nsc-base-sub">build.mjs 在构建时自动扫描 src/themes/*.js 与 src/plugins/*.js。二开者使用 custom-*.js 命名插件或主题，可在上游更新后无冲突保留扩展能力。</div>
-        <div class="nsc-hub-kpi-grid">
-          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">已发现主题文件</div><div class="nsc-hub-kpi-val">${manifest.themes.length}</div></div>
-          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">已发现插件文件</div><div class="nsc-hub-kpi-val">${manifest.plugins.length}</div></div>
-          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">注册主题 / Hub 插槽</div><div class="nsc-hub-kpi-val">${reg.themes.length} / ${reg.hubTabs.length}</div></div>
-          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">气泡增强器 / 动作插槽</div><div class="nsc-hub-kpi-val">${reg.bubbleEnhancers.length} / ${reg.userActions.length}</div></div>
-        </div>
+        <div class="nsc-base-sub">二开或自研文件放入 src/themes/custom-*.js 或 src/plugins/custom-*.js 后打包即可自动识别挂载，升级主线时不冲突。</div>
         <div class="nsc-base-order-list">
-          <div class="nsc-base-order-row"><span>themes/ 目录模块</span><span class="nsc-vote-note">${escHtml(manifest.themes.join(", ") || "无")}</span></div>
-          <div class="nsc-base-order-row"><span>plugins/ 目录模块</span><span class="nsc-vote-note">${escHtml(manifest.plugins.join(", ") || "无")}</span></div>
-          <div class="nsc-base-order-row"><span>已注册气泡增强管线（按优先级）</span><span class="nsc-vote-note">${escHtml(reg.bubbleEnhancers.map((e) => `${e.priority}:${e.id}`).join(" → "))}</span></div>
+          ${allMods.map((f) => {
+            const label = PLUGIN_NAME_MAP[f] || (f.includes("custom-") ? "自定义扩展模块" : f);
+            const isTheme = f.startsWith("themes/");
+            return `
+              <div class="nsc-compat-row">
+                <div class="nsc-compat-left">
+                  <div class="nsc-compat-title">
+                    <span>${escHtml(label)}</span>
+                    <span class="nsc-compat-tag">${isTheme ? "主题" : "插件"}</span>
+                  </div>
+                  <div class="nsc-compat-desc">${escHtml(f)}</div>
+                </div>
+                ${isTheme
+                  ? `<button type="button" class="nsc-mini-btn nsc-mod-go-theme">切换主题</button>`
+                  : `<span class="nsc-compat-status">已启用</span>`}
+              </div>
+            `;
+          }).join("")}
         </div>
       `;
-      body.appendChild(box);
+      modBox.querySelectorAll(".nsc-mod-go-theme").forEach((b) => {
+        b.addEventListener("click", () => {
+          state.workbenchSection = "theme";
+          renderBaseModalIfOpen();
+        });
+      });
+      body.appendChild(modBox);
+
+      const enhBox = document.createElement("div");
+      enhBox.className = "nsc-base-section";
+      const enhancers = reg.bubbleEnhancers || [];
+      enhBox.innerHTML = `
+        <div class="nsc-base-title">
+          <span>正文增强流水线（按需独立开关）</span>
+          <span class="nsc-badge-read">共 ${enhancers.length} 项能力</span>
+        </div>
+        <div class="nsc-base-sub">每一项正文处理能力按顺序依次执行；关闭暂不需要的模块可进一步降低渲染开销，新打开帖子立即生效。</div>
+        <div class="nsc-base-order-list" id="nsc-enh-switch-list"></div>
+      `;
+      const enhListEl = enhBox.querySelector("#nsc-enh-switch-list");
+      for (const enh of enhancers) {
+        const meta = ENHANCER_META[enh.id] || { name: enh.id, desc: `自定义增强插件（执行权重 ${enh.priority}）` };
+        const on = typeof isBubbleEnhancerEnabled === "function" ? isBubbleEnhancerEnabled(enh.id) : true;
+        const row = document.createElement("div");
+        row.className = "nsc-compat-row";
+        row.innerHTML = `
+          <div class="nsc-compat-left">
+            <div class="nsc-compat-title">
+              <span>${escHtml(meta.name)}</span>
+              <span class="nsc-compat-tag">#${enh.priority}</span>
+            </div>
+            <div class="nsc-compat-desc">${escHtml(meta.desc)}</div>
+          </div>
+          <button type="button" class="nsc-switch ${on ? "is-on" : ""}" aria-pressed="${on ? "true" : "false"}" title="${on ? "点击停用此项增强" : "点击启用此项增强"}"><span class="nsc-switch-knob"></span></button>
+        `;
+        row.querySelector(".nsc-switch").addEventListener("click", () => {
+          if (typeof setBubbleEnhancerEnabled === "function") {
+            setBubbleEnhancerEnabled(enh.id, !on);
+          }
+          renderBaseModalIfOpen();
+        });
+        enhListEl.appendChild(row);
+      }
+      body.appendChild(enhBox);
 
       const compatBox = document.createElement("div");
       compatBox.className = "nsc-base-section";
       compatBox.innerHTML = `
         <div class="nsc-base-title">
-          <span>第三方脚本 / 扩展兼容探测（运行时特征）</span>
-          <span class="nsc-badge-read">${extEnv.length} 项已识别</span>
+          <span>共存脚本与浏览器扩展兼容状态</span>
+          <span class="nsc-badge-read">${extEnv.length > 0 ? `已识别 ${extEnv.length} 项` : "纯净环境"}</span>
         </div>
-        <div class="nsc-base-sub">受浏览器油猴沙箱隔离限制，脚本无法直接读取油猴插件列表；SeekChat 在运行时自动探测页面内共存脚本的 DOM/CSS 特征并隔离节点，避免互相干扰。</div>
+        <div class="nsc-base-sub">仅在打开此面板时按需检测当前页面上的其他扩展与样式特征，自动隔离干扰节点，不在后台轮询占用资源。</div>
         <div class="nsc-base-order-list">
           ${extEnv.length === 0
-            ? `<div class="nsc-base-order-row"><span>当前页面未检测到外部注入浮层或自定义样式</span><span class="nsc-badge-read">纯净环境</span></div>`
-            : extEnv.map((it) => `<div class="nsc-base-order-row"><span><strong>${escHtml(it.name)}</strong> <span class="nsc-badge-read">${escHtml(it.kind)}</span></span><span class="nsc-vote-note">${escHtml(it.detail)}</span></div>`).join("")}
+            ? `<div class="nsc-compat-row"><div class="nsc-compat-left"><div class="nsc-compat-title">运行环境纯净</div><div class="nsc-compat-desc">当前页面未检测到可能互相干扰的第三方脚本或浏览器扩展浮层。</div></div><span class="nsc-compat-status">正常</span></div>`
+            : extEnv.map((it) => `
+              <div class="nsc-compat-row" title="${escHtml(it.techHint || "")}">
+                <div class="nsc-compat-left">
+                  <div class="nsc-compat-title">
+                    <span>${escHtml(it.name)}</span>
+                    <span class="nsc-compat-tag">${escHtml(it.kind)}</span>
+                  </div>
+                  <div class="nsc-compat-desc">${escHtml(it.detail)}</div>
+                </div>
+                <span class="nsc-compat-status">${escHtml(it.status || "已兼容")}</span>
+              </div>
+            `).join("")}
         </div>
       `;
       body.appendChild(compatBox);
     }
 
-    registerHubTab({
-      id: "workbench",
-      label: "基座",
-      order: 95,
-      nativeHref: "/setting",
-      renderSubbar(subbar) {
-        const seg = document.createElement("div");
-        seg.className = "nsc-seg-tabs";
+    function renderBaseModal() {
+      const bd = document.getElementById("nsc-base-backdrop");
+      if (!bd) return;
+      const modal = bd.querySelector(".nsc-base-modal");
+      if (!modal) return;
+      const curSecId = state.workbenchSection || "theme";
+      const curSec = SECTIONS.find((s) => s.id === curSecId) || SECTIONS[0];
+
+      if (!modal.dataset.nscBaseInit) {
+        modal.dataset.nscBaseInit = "1";
+        modal.innerHTML = `
+          <aside class="nsc-base-sidebar">
+            <div class="nsc-base-side-head">
+              <div class="nsc-mac-dots" aria-hidden="true">
+                <span class="nsc-mac-dot red"></span>
+                <span class="nsc-mac-dot yellow"></span>
+                <span class="nsc-mac-dot green"></span>
+              </div>
+              <span class="nsc-base-side-title">工作台基座</span>
+            </div>
+            <div class="nsc-base-nav-list" id="nsc-base-nav-list"></div>
+            <div class="nsc-base-side-foot">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button type="button" class="nsc-switch ${state.baseOrbVisible ? "is-on" : ""}" id="nsc-base-orb-sw" title="显示/隐藏桌面可拖动悬浮球"><span class="nsc-switch-knob"></span></button>
+                <span>悬浮球</span>
+              </div>
+              <span>v${escHtml((state.updateInfo && state.updateInfo.current) || "")}</span>
+            </div>
+          </aside>
+          <section class="nsc-base-main">
+            <div class="nsc-base-topbar">
+              <div style="min-width:0;">
+                <div id="nsc-base-sec-title" style="font-size:14px;font-weight:700;color:var(--nsc-text);"></div>
+                <div id="nsc-base-sec-desc" style="font-size:11.5px;color:var(--nsc-muted);margin-top:2px;"></div>
+              </div>
+              <button type="button" class="nsc-mini-btn" id="nsc-base-close" style="padding:3px 9px;">✕</button>
+            </div>
+            <div class="nsc-base-scroll" id="nsc-base-scroll"></div>
+          </section>
+        `;
+        modal.querySelector("#nsc-base-close").addEventListener("click", () => bd.classList.remove("is-open"));
+        const orbSw = modal.querySelector("#nsc-base-orb-sw");
+        orbSw.addEventListener("click", () => {
+          state.baseOrbVisible = !state.baseOrbVisible;
+          localStorage.setItem(LS.BASE_ORB_VISIBLE, state.baseOrbVisible ? "1" : "0");
+          orbSw.classList.toggle("is-on", state.baseOrbVisible);
+          syncBaseOrbVisibility();
+        });
+      }
+
+      const navList = modal.querySelector("#nsc-base-nav-list");
+      if (navList) {
+        navList.innerHTML = "";
         for (const s of SECTIONS) {
-          const b = document.createElement("button");
-          b.type = "button";
-          b.className = "nsc-seg-btn" + (state.workbenchSection === s.id ? " is-active" : "");
-          b.textContent = s.label;
-          b.addEventListener("click", () => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "nsc-base-nav-item" + (s.id === curSec.id ? " is-active" : "");
+          btn.innerHTML = `${s.icon()}<span>${escHtml(s.label)}</span>`;
+          btn.addEventListener("click", () => {
             state.workbenchSection = s.id;
-            renderUserHub();
+            renderBaseModal();
           });
-          seg.appendChild(b);
+          navList.appendChild(btn);
         }
-        subbar.appendChild(seg);
-        const tip = document.createElement("span");
-        tip.style.cssText = "font-size:11px;color:var(--nsc-muted);";
-        tip.textContent = "零依赖共享基座 · 所有配置即时保存本地";
-        subbar.appendChild(tip);
-      },
-      renderBody(body) {
-        const sec = state.workbenchSection || "theme";
-        if (sec === "theme") renderThemeSection(body);
-        else if (sec === "skin") renderSkinSection(body);
-        else if (sec === "layout") renderLayoutSection(body);
-        else if (sec === "chat") renderChatAndComposerSection(body);
-        else if (sec === "ext") renderExtSection(body);
+      }
+
+      const titleEl = modal.querySelector("#nsc-base-sec-title");
+      const descEl = modal.querySelector("#nsc-base-sec-desc");
+      if (titleEl) titleEl.textContent = curSec.label;
+      if (descEl) descEl.textContent = curSec.desc;
+
+      const orbSw = modal.querySelector("#nsc-base-orb-sw");
+      if (orbSw) orbSw.classList.toggle("is-on", Boolean(state.baseOrbVisible));
+
+      const body = modal.querySelector("#nsc-base-scroll");
+      if (body) {
+        const prevTop = body.dataset.lastSec === curSec.id ? body.scrollTop : 0;
+        body.dataset.lastSec = curSec.id;
+        body.innerHTML = "";
+        if (curSec.id === "theme") renderThemeSection(body);
+        else if (curSec.id === "skin") renderSkinSection(body);
+        else if (curSec.id === "layout") renderLayoutSection(body);
+        else if (curSec.id === "chat") renderChatAndComposerSection(body);
+        else if (curSec.id === "ext") renderExtSection(body);
         else renderSlotsSection(body);
-      },
-    });
+        if (prevTop > 0) body.scrollTop = prevTop;
+      }
+    }
+
+    function renderBaseModalIfOpen() {
+      const bd = document.getElementById("nsc-base-backdrop");
+      if (bd && bd.classList.contains("is-open")) renderBaseModal();
+    }
+
+    function openWorkbenchBaseModal(sectionId = "") {
+      if (sectionId) state.workbenchSection = sectionId;
+      let bd = document.getElementById("nsc-base-backdrop");
+      if (!bd) {
+        bd = document.createElement("div");
+        bd.id = "nsc-base-backdrop";
+        bd.innerHTML = `<div class="nsc-base-modal" role="dialog" aria-label="工作台基座设置"></div>`;
+        bd.addEventListener("click", (e) => {
+          if (e.target === bd) bd.classList.remove("is-open");
+        });
+        document.body.appendChild(bd);
+      }
+      bd.classList.add("is-open");
+      renderBaseModal();
+    }
+    state._openWorkbenchBase = openWorkbenchBaseModal;
+
+    function syncBaseOrbVisibility() {
+      const orb = document.getElementById("nsc-base-orb");
+      if (orb) orb.classList.toggle("is-visible", Boolean(state.baseOrbVisible));
+    }
+
+    function mountBaseFloatingOrb() {
+      if (document.getElementById("nsc-base-orb")) return;
+      if (!document.body) {
+        document.addEventListener("DOMContentLoaded", mountBaseFloatingOrb, { once: true });
+        return;
+      }
+      const orb = document.createElement("button");
+      orb.id = "nsc-base-orb";
+      orb.type = "button";
+      orb.title = "工作台基座设置（按住可拖动位置）";
+      orb.innerHTML = ICONS.sliders;
+      const saved = state.baseOrbPos || { right: 20, bottom: 136 };
+      const rVal = Math.max(10, Math.min((window.innerWidth || 1200) - 52, Number(saved.right) || 20));
+      const bVal = Math.max(10, Math.min((window.innerHeight || 800) - 52, Number(saved.bottom) || 136));
+      orb.style.right = `${rVal}px`;
+      orb.style.bottom = `${bVal}px`;
+      orb.classList.toggle("is-visible", Boolean(state.baseOrbVisible));
+
+      let dragging = false;
+      let hasMoved = false;
+      let startX = 0;
+      let startY = 0;
+      let initRight = rVal;
+      let initBottom = bVal;
+
+      orb.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
+        dragging = true;
+        hasMoved = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = orb.getBoundingClientRect();
+        initRight = window.innerWidth - rect.right;
+        initBottom = window.innerHeight - rect.bottom;
+        try { orb.setPointerCapture(e.pointerId); } catch (_) {}
+
+        const onMove = (ev) => {
+          if (!dragging) return;
+          const dx = ev.clientX - startX;
+          const dy = ev.clientY - startY;
+          if (Math.hypot(dx, dy) > 5) hasMoved = true;
+          const nr = Math.max(10, Math.min(window.innerWidth - 50, initRight - dx));
+          const nb = Math.max(10, Math.min(window.innerHeight - 50, initBottom - dy));
+          orb.style.right = `${nr}px`;
+          orb.style.bottom = `${nb}px`;
+        };
+        const onUp = () => {
+          if (!dragging) return;
+          dragging = false;
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          window.removeEventListener("pointercancel", onUp);
+          if (hasMoved) {
+            const rect = orb.getBoundingClientRect();
+            const pos = {
+              right: Math.round(window.innerWidth - rect.right),
+              bottom: Math.round(window.innerHeight - rect.bottom),
+            };
+            state.baseOrbPos = pos;
+            saveJson(LS.BASE_ORB_POS, pos);
+          }
+        };
+        window.addEventListener("pointermove", onMove, { passive: true });
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+      });
+
+      orb.addEventListener("click", () => {
+        if (hasMoved) return;
+        openWorkbenchBaseModal();
+      });
+
+      document.body.appendChild(orb);
+    }
+
+    mountBaseFloatingOrb();
   })();
 
   // ==========================================================================

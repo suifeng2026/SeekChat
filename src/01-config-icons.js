@@ -33,6 +33,9 @@
     SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
     PANE_COLLAPSED: "nsc_v7_pane_collapsed",
     COMPOSER_PREFS: "nsc_v7_composer_prefs",
+    BASE_ORB_POS: "nsc_v7_base_orb_pos",
+    BASE_ORB_VISIBLE: "nsc_v7_base_orb_visible",
+    DISABLED_ENHANCERS: "nsc_v7_disabled_enhancers",
   };
 
   function isBrowsePath(pathname) {
@@ -286,6 +289,9 @@
     paneSkins: loadJson(LS.PANE_SKINS, {}),
     paneCollapsed: loadJson(LS.PANE_COLLAPSED, { nav: false, list: false, right: false }),
     composerPrefs: loadJson(LS.COMPOSER_PREFS, { pinned: false, size: "md" }),
+    baseOrbPos: loadJson(LS.BASE_ORB_POS, { right: 20, bottom: 136 }),
+    baseOrbVisible: localStorage.getItem(LS.BASE_ORB_VISIBLE) !== "0",
+    disabledEnhancers: new Set(loadJson(LS.DISABLED_ENHANCERS, [])),
     navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
     rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
@@ -309,7 +315,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.34",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.35",
       latest: "",
       installUrl: "",
       hasUpdate: false,

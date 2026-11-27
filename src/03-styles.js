@@ -2226,7 +2226,82 @@
       }
       .nsc-vote-confirm-btns { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
-      /* 工作台共享基座配置中心样式 */
+      /* 工作台独立 macOS 双栏基座面板与可拖动悬浮球 */
+      #nsc-base-orb {
+        position: fixed; z-index: 9380; width: 40px; height: 40px; border-radius: 50%;
+        border: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-card); color: var(--nsc-accent);
+        backdrop-filter: blur(14px) saturate(160%);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        display: none; align-items: center; justify-content: center;
+        cursor: grab; user-select: none; touch-action: none;
+        opacity: 0.84; transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      body.nsc-app-active #nsc-base-orb.is-visible { display: flex; }
+      #nsc-base-orb:hover { opacity: 1; transform: scale(1.06); box-shadow: 0 10px 26px rgba(0, 122, 255, 0.24); }
+      #nsc-base-orb:active { cursor: grabbing; transform: scale(0.98); }
+      #nsc-base-orb svg { width: 18px; height: 18px; pointer-events: none; }
+
+      #nsc-base-backdrop {
+        position: fixed; inset: 0; z-index: 9440;
+        background: rgba(15, 23, 42, 0.38); backdrop-filter: blur(8px);
+        display: none; align-items: center; justify-content: center; padding: 16px;
+      }
+      #nsc-base-backdrop.is-open { display: flex; }
+      .nsc-base-modal {
+        width: min(860px, 94vw); height: min(78vh, 680px);
+        background: var(--nsc-bg-list); color: var(--nsc-text);
+        border: 1px solid var(--nsc-border); border-radius: 14px;
+        box-shadow: var(--nsc-shadow); font-family: var(--mac-font);
+        display: flex; overflow: hidden;
+      }
+      .nsc-base-sidebar {
+        width: 176px; flex: 0 0 176px; background: var(--nsc-bg-nav);
+        border-right: 1px solid var(--nsc-border);
+        display: flex; flex-direction: column; padding: 12px 10px; gap: 4px;
+      }
+      .nsc-base-side-head {
+        display: flex; align-items: center; gap: 8px; padding: 2px 6px 10px;
+        border-bottom: 1px solid var(--nsc-border); margin-bottom: 6px;
+      }
+      .nsc-base-side-title { font-size: 13.5px; font-weight: 700; color: var(--nsc-text); }
+      .nsc-base-nav-list { flex: 1; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+      .nsc-base-nav-item {
+        width: 100%; border: none; background: transparent; color: var(--nsc-muted);
+        padding: 7px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 600;
+        display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease;
+      }
+      .nsc-base-nav-item svg { width: 14.5px; height: 14.5px; flex: 0 0 14.5px; }
+      .nsc-base-nav-item:hover { background: var(--nsc-hover); color: var(--nsc-text); }
+      .nsc-base-nav-item.is-active { background: var(--nsc-accent); color: #fff; }
+      .nsc-base-side-foot {
+        padding-top: 8px; border-top: 1px solid var(--nsc-border);
+        display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        font-size: 11px; color: var(--nsc-muted);
+      }
+      .nsc-base-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+      .nsc-base-topbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        padding: 11px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
+      }
+      .nsc-base-scroll { flex: 1; overflow-y: auto; padding: 14px 16px; }
+      .nsc-compat-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 8px 11px; border-radius: 7px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-hover);
+      }
+      .nsc-compat-left { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+      .nsc-compat-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--nsc-text); }
+      .nsc-compat-desc { font-size: 11.5px; color: var(--nsc-muted); line-height: 1.4; }
+      .nsc-compat-tag {
+        padding: 1px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 600;
+        border: 1px solid var(--nsc-border); color: var(--nsc-muted); background: var(--nsc-bg-card);
+      }
+      .nsc-compat-status {
+        flex: 0 0 auto; font-size: 11.5px; font-weight: 600; color: #15803d; white-space: nowrap;
+      }
+      body.nsc-app-active.dark-layout .nsc-compat-status { color: #30d158; }
 
       .nsc-base-section {
         margin-bottom: 12px; padding: 12px 14px; border-radius: 12px;

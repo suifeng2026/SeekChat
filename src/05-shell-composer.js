@@ -407,7 +407,9 @@
           t.closest("#nsc-composer-dock") ||
           t.closest("#nsc-ni-backdrop") ||
           t.closest("#nsc-lightbox") ||
-          t.closest("#nsc-jump-backdrop")
+          t.closest("#nsc-jump-backdrop") ||
+          t.closest("#nsc-base-backdrop") ||
+          t.closest("#nsc-base-orb")
         )) {
           return;
         }
@@ -663,6 +665,8 @@
         if (editBd) editBd.classList.remove("is-open");
         const hubBd = document.getElementById("nsc-hub-backdrop");
         if (hubBd) hubBd.classList.remove("is-open");
+        const baseBd = document.getElementById("nsc-base-backdrop");
+        if (baseBd) baseBd.classList.remove("is-open");
         const spaceBd = document.getElementById("nsc-space-backdrop");
         if (spaceBd) spaceBd.classList.remove("is-open");
         const jumpBd = document.getElementById("nsc-jump-backdrop");

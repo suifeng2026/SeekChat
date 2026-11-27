@@ -1949,6 +1949,7 @@
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-hub-open-base" title="打开工作台基座设置">工作台设置</button>
             <a class="nsc-mini-btn" id="nsc-hub-native-link" href="/notification" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">原版页面 ↗</a>
             <button type="button" class="nsc-mini-btn" id="nsc-hub-close" style="padding:3px 9px;">✕</button>
           </div>
@@ -1958,6 +1959,10 @@
         <div class="nsc-hub-body" id="nsc-hub-body"></div>
       `;
       modal.querySelector("#nsc-hub-close").addEventListener("click", () => bd.classList.remove("is-open"));
+      modal.querySelector("#nsc-hub-open-base")?.addEventListener("click", () => {
+        bd.classList.remove("is-open");
+        if (typeof state._openWorkbenchBase === "function") state._openWorkbenchBase();
+      });
       const persistentBody = modal.querySelector("#nsc-hub-body");
       let hubScrollRaf = 0;
       persistentBody.addEventListener("scroll", () => {

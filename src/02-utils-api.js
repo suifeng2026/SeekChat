@@ -963,9 +963,23 @@
     upsertRegistryItem(state.registry.navItems, { order: 90, group: "board", ...spec }, (a, b) => (a.order ?? 90) - (b.order ?? 90));
   }
 
+  function isBubbleEnhancerEnabled(id) {
+    return !(state.disabledEnhancers && state.disabledEnhancers.has(String(id || "")));
+  }
+
+  function setBubbleEnhancerEnabled(id, enabled) {
+    const key = String(id || "");
+    if (!key) return;
+    if (!state.disabledEnhancers) state.disabledEnhancers = new Set();
+    if (enabled) state.disabledEnhancers.delete(key);
+    else state.disabledEnhancers.add(key);
+    saveJson(LS.DISABLED_ENHANCERS, Array.from(state.disabledEnhancers));
+  }
+
   function runBubbleEnhancers(containerEl, ctx = {}) {
     if (!containerEl) return;
     for (const enh of state.registry.bubbleEnhancers) {
+      if (!isBubbleEnhancerEnabled(enh.id)) continue;
       try {
         enh.run(containerEl, ctx);
       } catch (_) {}
@@ -1242,25 +1256,64 @@
   function detectThirdPartyEnv() {
     const items = [];
     if (document.getElementById("hanabi-toggle-btn") || document.getElementById("hanabi-emoji-panel") || document.getElementById("hanabi-custom-styles")) {
-      items.push({ id: "hanabi", name: "花火表情面板", kind: "DOM 特征", detail: "检测到 #hanabi-emoji-panel，保留原生光标插入兼容" });
+      items.push({
+        id: "hanabi",
+        name: "花火表情面板",
+        kind: "脚本共存",
+        status: "已兼容",
+        detail: "支持直接向回复框插入表情，引用正文自动过滤冗余节点",
+        techHint: "检测到 #hanabi-toggle-btn / #hanabi-emoji-panel",
+      });
     }
     const userCss = Array.from(document.querySelectorAll('link[rel="stylesheet"][href*="/userstyle/"]'));
     if (userCss.length > 0) {
-      items.push({ id: "userstyle", name: "论坛扩展自定义样式", kind: "CSS", detail: "已加载 /userstyle/*.css，原版论坛与顶栏保持协同" });
+      items.push({
+        id: "userstyle",
+        name: "论坛自定义样式",
+        kind: "站内扩展",
+        status: "已协同",
+        detail: "原版页面继续生效，群聊工作台保持独立外观",
+        techHint: `已加载 ${userCss.length} 个 /userstyle/ 样式表`,
+      });
+    }
+    if (document.querySelector("read-frog, [data-read-frog-select-all-protected]")) {
+      items.push({
+        id: "read-frog",
+        name: "陪读蛙翻译插件",
+        kind: "浏览扩展",
+        status: "已隔离",
+        detail: "已屏蔽翻译浮层对列表刷新与引用抓取的干扰",
+        techHint: "已过滤 <read-frog> 浮层与辅助样式表",
+      });
+    } else if (document.querySelector("[wxt-shadow-root-document-styles], [data-wxt-shadow-root]")) {
+      items.push({
+        id: "browser-ext",
+        name: "页面划词 / 翻译扩展",
+        kind: "浏览扩展",
+        status: "已隔离",
+        detail: "已屏蔽扩展悬浮层对正文排版与引用的干扰",
+        techHint: "检测到 Shadow DOM 扩展注入节点",
+      });
     }
     const extScripts = Array.from(document.querySelectorAll('script[src^="http"]'))
       .map((s) => s.getAttribute("src") || "")
-      .filter((src) => src && !src.includes("nodeseek.com") && !src.includes("stat.nodeseek.org") && !src.includes("cloudflareinsights.com"));
+      .filter((src) => (
+        src &&
+        !src.includes("nodeseek.com") &&
+        !src.includes("stat.nodeseek.org") &&
+        !src.includes("cloudflareinsights.com") &&
+        !src.includes("fog.22112211.xyz")
+      ));
     if (extScripts.length > 0) {
+      const hosts = Array.from(new Set(extScripts.map((u) => { try { return new URL(u).hostname; } catch (_) { return u; } })));
       items.push({
         id: "ext-scripts",
-        name: `外部注入脚本 (${extScripts.length})`,
-        kind: "Script",
-        detail: extScripts.map((u) => { try { return new URL(u).hostname; } catch (_) { return u; } }).join(", "),
+        name: `外部功能脚本 (${hosts.length})`,
+        kind: "外部脚本",
+        status: "已观测",
+        detail: hosts.join(" · "),
+        techHint: extScripts.join("\n"),
       });
-    }
-    if (document.querySelector("read-frog, [wxt-shadow-root-document-styles]")) {
-      items.push({ id: "browser-ext", name: "浏览器扩展浮层", kind: "Extension", detail: "检测到 Shadow/WXT 扩展节点，MutationObserver 已自动隔离" });
     }
     return items;
   }
