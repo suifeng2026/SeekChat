@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.21
+// @version      7.22.22
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -323,7 +323,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.21",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.22",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -1047,15 +1047,33 @@
     btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>`;
   }
 
-  async function resolveFreshGithubInstallUrl(downloadUrl, latestVersion) {
+  function parseRawGithubUrl(rawUrl) {
+    const m = String(rawUrl || "").trim().match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
+    if (!m) return null;
+    return {
+      owner: m[1],
+      repo: m[2],
+      branch: m[3],
+      restPath: m[4].replace(/[?#].*$/, ""),
+    };
+  }
+
+  async function resolveLatestGithubSha(owner, repo, branch) {
+    try {
+      const apiText = await fetchRemoteMetaText(`https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`);
+      const json = JSON.parse(apiText);
+      return (json && json.sha) ? String(json.sha) : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  async function resolveFreshGithubInstallUrl(downloadUrl, latestVersion, knownSha = "") {
     const rawUrl = String(downloadUrl || "").trim();
     if (!rawUrl) return "";
-    const m = rawUrl.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
-    if (!m) return rawUrl;
-    const owner = m[1];
-    const repo = m[2];
-    const branch = m[3];
-    const restPath = m[4].replace(/[?#].*$/, "");
+    const parsed = parseRawGithubUrl(rawUrl);
+    if (!parsed) return rawUrl;
+    const { owner, repo, branch, restPath } = parsed;
     const cleanVer = String(latestVersion || "").replace(/^v/i, "").trim();
 
     if (cleanVer) {
@@ -1071,13 +1089,10 @@
       }
     }
 
-    try {
-      const apiText = await fetchRemoteMetaText(`https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`);
-      const json = JSON.parse(apiText);
-      if (json && json.sha) {
-        return `https://raw.githubusercontent.com/${owner}/${repo}/${json.sha}/${restPath}`;
-      }
-    } catch (_) {}
+    const sha = knownSha || await resolveLatestGithubSha(owner, repo, branch);
+    if (sha) {
+      return `https://raw.githubusercontent.com/${owner}/${repo}/${sha}/${restPath}`;
+    }
 
     return rawUrl;
   }
@@ -1157,16 +1172,32 @@
     u.justChecked = false;
     renderUpdateButton();
     try {
-      const sep = targets.metaUrl.includes("?") ? "&" : "?";
-      const url = manual ? `${targets.metaUrl}${sep}_t=${Date.now()}` : targets.metaUrl;
-      const text = await fetchRemoteMetaText(url);
+      let text = "";
+      let knownSha = "";
+      const ghMeta = parseRawGithubUrl(targets.metaUrl);
+      if (manual && ghMeta) {
+        knownSha = await resolveLatestGithubSha(ghMeta.owner, ghMeta.repo, ghMeta.branch);
+        if (knownSha) {
+          const shaMetaUrl = `https://raw.githubusercontent.com/${ghMeta.owner}/${ghMeta.repo}/${knownSha}/${ghMeta.restPath}`;
+          try {
+            text = await fetchRemoteMetaText(shaMetaUrl);
+          } catch (_) {
+            text = "";
+          }
+        }
+      }
+      if (!text) {
+        const sep = targets.metaUrl.includes("?") ? "&" : "?";
+        const url = manual ? `${targets.metaUrl}${sep}_t=${Date.now()}` : targets.metaUrl;
+        text = await fetchRemoteMetaText(url);
+      }
       const m = text.match(/\/\/\s*@version\s+([^\s]+)/i);
       const latest = m ? m[1].trim() : "";
       if (!latest) throw new Error("未解析到版本号");
       u.latest = latest;
       u.hasUpdate = compareSemver(latest, u.current) > 0;
       u.installUrl = u.hasUpdate
-        ? await resolveFreshGithubInstallUrl(targets.downloadUrl, latest)
+        ? await resolveFreshGithubInstallUrl(targets.downloadUrl, latest, knownSha)
         : targets.downloadUrl;
       u.justChecked = manual && !u.hasUpdate;
       saveJson(LS.UPDATE_CHECK, { latest, metaUrl: targets.metaUrl, installUrl: u.installUrl, ts: Date.now() });
