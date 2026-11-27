@@ -464,10 +464,18 @@
 
     const msgsEl = shell.querySelector("#nsc-chat-messages");
     msgsEl.addEventListener("scroll", () => {
+      if (msgsEl.scrollTop < 120) {
+        tryAutoLoadPrevPage();
+      }
       if (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 220) {
         tryAutoLoadNextPage();
       }
     });
+    msgsEl.addEventListener("wheel", (e) => {
+      if (e.deltaY < 0 && msgsEl.scrollTop <= 2) {
+        tryAutoLoadPrevPage();
+      }
+    }, { passive: true });
 
     renderLeftNav();
   }

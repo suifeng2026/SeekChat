@@ -177,5 +177,6 @@
     currentRoom: null,
     loadedPages: new Set(),
     loadingNextPage: false,
+    loadingPrevPage: false,
   };
 

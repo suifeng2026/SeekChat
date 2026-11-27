@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.10.1
+// @version      7.11.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -204,6 +204,7 @@
     currentRoom: null,
     loadedPages: new Set(),
     loadingNextPage: false,
+    loadingPrevPage: false,
   };
 
   // ==========================================================================
@@ -2474,10 +2475,18 @@
 
     const msgsEl = shell.querySelector("#nsc-chat-messages");
     msgsEl.addEventListener("scroll", () => {
+      if (msgsEl.scrollTop < 120) {
+        tryAutoLoadPrevPage();
+      }
       if (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 220) {
         tryAutoLoadNextPage();
       }
     });
+    msgsEl.addEventListener("wheel", (e) => {
+      if (e.deltaY < 0 && msgsEl.scrollTop <= 2) {
+        tryAutoLoadPrevPage();
+      }
+    }, { passive: true });
 
     renderLeftNav();
   }
@@ -4624,6 +4633,7 @@
     state.currentPostUrl = url;
     state.loadedPages = new Set([pageNum]);
     state.loadingNextPage = false;
+    state.loadingPrevPage = false;
 
     const titleEl = doc.querySelector(".nsk-post .post-title h1 a, .nsk-post .post-title h1");
     const title = titleEl ? titleEl.textContent.trim() : (itemHint && itemHint.title) || doc.title || "帖子详情";
@@ -4716,6 +4726,67 @@
       if (footerTip) footerTip.textContent = "加载下一页失败";
     } finally {
       state.loadingNextPage = false;
+    }
+  }
+
+  async function tryAutoLoadPrevPage() {
+    const room = state.currentRoom;
+    if (!room || state.loadingPrevPage || !room.pages || room.pages.length <= 1) return;
+
+    const minLoaded = Math.min(...Array.from(state.loadedPages));
+    if (minLoaded <= 1) return;
+    const prevPageObj = room.pages.find((p) => p.num === minLoaded - 1) || {
+      num: minLoaded - 1,
+      href: `/post-${room.pid}-${minLoaded - 1}`,
+    };
+
+    state.loadingPrevPage = true;
+    const prevTip = document.getElementById("nsc-prev-waterfall-status");
+    if (prevTip) prevTip.textContent = `正在瀑布流加载第 ${prevPageObj.num} 页...`;
+
+    try {
+      const resp = await fetch(prevPageObj.href, { credentials: "include" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+      if (prevPageObj.num === 1 && !room.opObj) {
+        const opNode = doc.querySelector(".nsk-post .content-item");
+        if (opNode) {
+          room.opObj = extractCommentObject(opNode, true, 1);
+          state.opAuthor = room.opObj.author;
+        }
+      }
+      const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
+      let added = 0;
+      for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
+        const obj = extractCommentObject(el, false, prevPageObj.num);
+        if (obj.floorId && seenFloors.has(obj.floorId)) continue;
+        if (obj.floorId) seenFloors.add(obj.floorId);
+        if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
+        room.flatComments.push(obj);
+        added++;
+      }
+      room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
+      state.loadedPages.add(prevPageObj.num);
+      for (const np of parsePagesFromDoc(doc, room.pid)) {
+        if (!room.pages.some((p) => p.num === np.num)) room.pages.push(np);
+      }
+      room.pages.sort((a, b) => a.num - b.num);
+      if (added > 0 || (prevPageObj.num === 1 && room.opObj)) {
+        const msgsEl = document.getElementById("nsc-chat-messages");
+        const prevH = msgsEl ? msgsEl.scrollHeight : 0;
+        const prevTop = msgsEl ? msgsEl.scrollTop : 0;
+        renderChatRoom(room, true);
+        if (msgsEl) {
+          const delta = msgsEl.scrollHeight - prevH;
+          msgsEl.scrollTop = Math.max(0, prevTop + delta);
+        }
+      } else if (prevTip) {
+        prevTip.textContent = `已加载至第 ${prevPageObj.num} 页`;
+      }
+    } catch (_) {
+      if (prevTip) prevTip.textContent = "加载上一页失败，点击重试";
+    } finally {
+      state.loadingPrevPage = false;
     }
   }
 
@@ -4957,10 +5028,22 @@
     state.members = Array.from(memberMap.values()).sort((a, b) => (b.isOp - a.isOp) || (b.count - a.count));
 
     msgsEl.innerHTML = "";
+    const minLoaded = state.loadedPages.size > 0 ? Math.min(...Array.from(state.loadedPages)) : 1;
+    if (room.pages.length > 1 && minLoaded > 1) {
+      const prevTip = document.createElement("button");
+      prevTip.type = "button";
+      prevTip.id = "nsc-prev-waterfall-status";
+      prevTip.className = "nsc-load-more-btn";
+      prevTip.style.marginTop = "0";
+      prevTip.textContent = `↑ 向上滚动或点击加载第 ${minLoaded - 1} 页`;
+      prevTip.addEventListener("click", () => tryAutoLoadPrevPage());
+      msgsEl.appendChild(prevTip);
+    }
     if (room.opObj) {
       msgsEl.appendChild(createMessageNode(room.opObj, true, room.isNativePage));
     }
 
+    room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
     const roots = buildThreadedComments(room.flatComments);
     let lastPageShown = room.opObj ? 1 : 0;
     for (const r of roots) {
