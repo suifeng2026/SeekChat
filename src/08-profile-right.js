@@ -977,54 +977,80 @@
     if (!bodyEl) return;
     bodyEl.style.padding = "8px 10px";
     bodyEl.style.overflow = "hidden";
+    bodyEl.style.position = "relative";
+
+    const loadingTip = document.createElement("div");
+    loadingTip.className = "nsc-empty-state";
+    loadingTip.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;margin:0;";
+    loadingTip.textContent = "正在载入页面...";
+
     const iframe = document.createElement("iframe");
     iframe.className = "nsc-hub-iframe";
+    iframe.style.opacity = "0";
+    iframe.style.transition = "opacity 0.14s ease";
     iframe.src = srcPath;
+
+    let revealed = false;
+    const revealIframe = () => {
+      if (revealed) return;
+      revealed = true;
+      try { loadingTip.remove(); } catch (_) {}
+      requestAnimationFrame(() => {
+        iframe.style.opacity = "1";
+      });
+    };
+    setTimeout(revealIframe, 3500);
+
     iframe.addEventListener("load", () => {
       try {
         const idoc = iframe.contentDocument;
-        if (!idoc || idoc.getElementById("nsc-hub-iframe-style")) return;
-        const isDark = document.body.classList.contains("dark-layout");
-        const isDusk = document.body.classList.contains("nsc-theme-dusk");
-        if (isDark) {
-          idoc.body.classList.remove("light-layout");
-          idoc.body.classList.add("dark-layout");
-        } else {
-          idoc.body.classList.remove("dark-layout");
-          idoc.body.classList.add("light-layout");
+        if (!idoc) { revealIframe(); return; }
+        if (!idoc.getElementById("nsc-hub-iframe-style")) {
+          const isDark = document.body.classList.contains("dark-layout");
+          const isDusk = document.body.classList.contains("nsc-theme-dusk");
+          if (isDark) {
+            idoc.body.classList.remove("light-layout");
+            idoc.body.classList.add("dark-layout");
+          } else {
+            idoc.body.classList.remove("dark-layout");
+            idoc.body.classList.add("light-layout");
+          }
+          const st = idoc.createElement("style");
+          st.id = "nsc-hub-iframe-style";
+          st.textContent = `
+            header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
+            html, body {
+              background: transparent !important;
+              color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
+              margin: 0 !important; padding: 6px !important;
+            }
+            body > section#nsk-frame { opacity: 1 !important; }
+            #nsk-frame, #nsk-body, #nsk-body-left {
+              width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
+              float: none !important;
+            }
+            #user-setting-panel, .nsk-panel, .board-container, .lucky-container, .invite-container {
+              background: ${isDark ? "#2f333d" : isDusk ? "#faf4e8" : "#ffffff"} !important;
+              color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
+              border: 1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"} !important;
+              border-radius: 12px !important;
+              box-shadow: none !important;
+              margin: 0 auto !important;
+              padding: 16px 20px !important;
+            }
+            input, textarea, select {
+              border-radius: 8px !important;
+              border: 1px solid ${isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)"} !important;
+              background: ${isDark ? "#22252c" : isDusk ? "#f4ecdf" : "#f8f9fb"} !important;
+              color: ${isDark ? "#f2f2f7" : "#1d1d1f"} !important;
+            }
+            .btn, button[type="submit"] { border-radius: 8px !important; }
+          `;
+          (idoc.head || idoc.documentElement).appendChild(st);
+          const preHide = idoc.getElementById("nsc-hub-iframe-prehide");
+          if (preHide) preHide.remove();
         }
-        const st = idoc.createElement("style");
-        st.id = "nsc-hub-iframe-style";
-        st.textContent = `
-          header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
-          body {
-            background: transparent !important;
-            color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
-            margin: 0 !important; padding: 6px !important;
-          }
-          #nsk-frame, #nsk-body, #nsk-body-left {
-            width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
-            float: none !important;
-          }
-          #user-setting-panel, .nsk-panel, .board-container, .lucky-container, .invite-container {
-            background: ${isDark ? "#2f333d" : isDusk ? "#faf4e8" : "#ffffff"} !important;
-            color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
-            border: 1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"} !important;
-            border-radius: 12px !important;
-            box-shadow: none !important;
-            margin: 0 auto !important;
-            padding: 16px 20px !important;
-          }
-          input, textarea, select {
-            border-radius: 8px !important;
-            border: 1px solid ${isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)"} !important;
-            background: ${isDark ? "#22252c" : isDusk ? "#f4ecdf" : "#f8f9fb"} !important;
-            color: ${isDark ? "#f2f2f7" : "#1d1d1f"} !important;
-          }
-          .btn, button[type="submit"] { border-radius: 8px !important; }
-        `;
-        (idoc.head || idoc.documentElement).appendChild(st);
         if (state._settingAutoSection) {
           const targetSec = String(state._settingAutoSection);
           state._settingAutoSection = "";
@@ -1035,13 +1061,15 @@
               secEl.click();
               const panel = idoc.getElementById("user-setting-panel");
               if (panel && typeof panel.scrollIntoView === "function") {
-                panel.scrollIntoView({ behavior: "smooth", block: "start" });
+                panel.scrollIntoView({ behavior: "auto", block: "start" });
               }
               return true;
             }
             return false;
           };
-          if (!trySelectSection()) {
+          if (trySelectSection()) {
+            revealIframe();
+          } else {
             setTimeout(() => {
               try {
                 if (!trySelectSection()) {
@@ -1052,12 +1080,18 @@
                   }
                 }
               } catch (_) {}
-            }, 450);
+              revealIframe();
+            }, 320);
           }
+        } else {
+          revealIframe();
         }
-      } catch (_) {}
+      } catch (_) {
+        revealIframe();
+      }
     });
     bodyEl.innerHTML = "";
+    bodyEl.appendChild(loadingTip);
     bodyEl.appendChild(iframe);
   }
 

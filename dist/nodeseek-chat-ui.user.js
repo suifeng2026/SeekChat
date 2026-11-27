@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.2
+// @version      7.22.3
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -76,8 +76,20 @@
     (document.head || document.documentElement).appendChild(preStyle);
   }
 
-  // 在隐藏 iframe 中用于提取动态渲染数据时不运行外层外壳
+  // 在隐藏 iframe 中用于提取动态渲染数据时不运行外层外壳；若为个人中心同源换肤 iframe，则在 document-start 预设防闪屏隐藏
   if (window.self !== window.top) {
+    try {
+      if (window.frameElement && window.frameElement.classList && window.frameElement.classList.contains("nsc-hub-iframe")) {
+        const iframePre = document.createElement("style");
+        iframePre.id = "nsc-hub-iframe-prehide";
+        iframePre.textContent = `
+          header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
+          html, body { background: transparent !important; }
+          body > section#nsk-frame { opacity: 0 !important; }
+        `;
+        (document.head || document.documentElement).appendChild(iframePre);
+      }
+    } catch (_) {}
     return;
   }
 
@@ -291,7 +303,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.2",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.3",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -5843,9 +5855,10 @@
         if (tab && typeof openUserHubModal === "function") {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           openUserHubModal(tab);
         }
-      });
+      }, true);
     }
     const signBtn = userCard.querySelector('.menu span[title="签到"]');
     if (signBtn && signBtn.dataset.nscHubBound !== "1") {
@@ -5855,6 +5868,7 @@
         if (typeof openUserHubModal === "function") {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           openUserHubModal("attendance");
         }
       }, true);
@@ -5867,9 +5881,10 @@
         if (typeof openUserHubModal === "function") {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           openUserHubModal("setting");
         }
-      });
+      }, true);
     }
   }
 
@@ -10084,54 +10099,80 @@
     if (!bodyEl) return;
     bodyEl.style.padding = "8px 10px";
     bodyEl.style.overflow = "hidden";
+    bodyEl.style.position = "relative";
+
+    const loadingTip = document.createElement("div");
+    loadingTip.className = "nsc-empty-state";
+    loadingTip.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;margin:0;";
+    loadingTip.textContent = "正在载入页面...";
+
     const iframe = document.createElement("iframe");
     iframe.className = "nsc-hub-iframe";
+    iframe.style.opacity = "0";
+    iframe.style.transition = "opacity 0.14s ease";
     iframe.src = srcPath;
+
+    let revealed = false;
+    const revealIframe = () => {
+      if (revealed) return;
+      revealed = true;
+      try { loadingTip.remove(); } catch (_) {}
+      requestAnimationFrame(() => {
+        iframe.style.opacity = "1";
+      });
+    };
+    setTimeout(revealIframe, 3500);
+
     iframe.addEventListener("load", () => {
       try {
         const idoc = iframe.contentDocument;
-        if (!idoc || idoc.getElementById("nsc-hub-iframe-style")) return;
-        const isDark = document.body.classList.contains("dark-layout");
-        const isDusk = document.body.classList.contains("nsc-theme-dusk");
-        if (isDark) {
-          idoc.body.classList.remove("light-layout");
-          idoc.body.classList.add("dark-layout");
-        } else {
-          idoc.body.classList.remove("dark-layout");
-          idoc.body.classList.add("light-layout");
+        if (!idoc) { revealIframe(); return; }
+        if (!idoc.getElementById("nsc-hub-iframe-style")) {
+          const isDark = document.body.classList.contains("dark-layout");
+          const isDusk = document.body.classList.contains("nsc-theme-dusk");
+          if (isDark) {
+            idoc.body.classList.remove("light-layout");
+            idoc.body.classList.add("dark-layout");
+          } else {
+            idoc.body.classList.remove("dark-layout");
+            idoc.body.classList.add("light-layout");
+          }
+          const st = idoc.createElement("style");
+          st.id = "nsc-hub-iframe-style";
+          st.textContent = `
+            header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
+            html, body {
+              background: transparent !important;
+              color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
+              margin: 0 !important; padding: 6px !important;
+            }
+            body > section#nsk-frame { opacity: 1 !important; }
+            #nsk-frame, #nsk-body, #nsk-body-left {
+              width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
+              float: none !important;
+            }
+            #user-setting-panel, .nsk-panel, .board-container, .lucky-container, .invite-container {
+              background: ${isDark ? "#2f333d" : isDusk ? "#faf4e8" : "#ffffff"} !important;
+              color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
+              border: 1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"} !important;
+              border-radius: 12px !important;
+              box-shadow: none !important;
+              margin: 0 auto !important;
+              padding: 16px 20px !important;
+            }
+            input, textarea, select {
+              border-radius: 8px !important;
+              border: 1px solid ${isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)"} !important;
+              background: ${isDark ? "#22252c" : isDusk ? "#f4ecdf" : "#f8f9fb"} !important;
+              color: ${isDark ? "#f2f2f7" : "#1d1d1f"} !important;
+            }
+            .btn, button[type="submit"] { border-radius: 8px !important; }
+          `;
+          (idoc.head || idoc.documentElement).appendChild(st);
+          const preHide = idoc.getElementById("nsc-hub-iframe-prehide");
+          if (preHide) preHide.remove();
         }
-        const st = idoc.createElement("style");
-        st.id = "nsc-hub-iframe-style";
-        st.textContent = `
-          header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
-          body {
-            background: transparent !important;
-            color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
-            margin: 0 !important; padding: 6px !important;
-          }
-          #nsk-frame, #nsk-body, #nsk-body-left {
-            width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
-            float: none !important;
-          }
-          #user-setting-panel, .nsk-panel, .board-container, .lucky-container, .invite-container {
-            background: ${isDark ? "#2f333d" : isDusk ? "#faf4e8" : "#ffffff"} !important;
-            color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
-            border: 1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"} !important;
-            border-radius: 12px !important;
-            box-shadow: none !important;
-            margin: 0 auto !important;
-            padding: 16px 20px !important;
-          }
-          input, textarea, select {
-            border-radius: 8px !important;
-            border: 1px solid ${isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)"} !important;
-            background: ${isDark ? "#22252c" : isDusk ? "#f4ecdf" : "#f8f9fb"} !important;
-            color: ${isDark ? "#f2f2f7" : "#1d1d1f"} !important;
-          }
-          .btn, button[type="submit"] { border-radius: 8px !important; }
-        `;
-        (idoc.head || idoc.documentElement).appendChild(st);
         if (state._settingAutoSection) {
           const targetSec = String(state._settingAutoSection);
           state._settingAutoSection = "";
@@ -10142,13 +10183,15 @@
               secEl.click();
               const panel = idoc.getElementById("user-setting-panel");
               if (panel && typeof panel.scrollIntoView === "function") {
-                panel.scrollIntoView({ behavior: "smooth", block: "start" });
+                panel.scrollIntoView({ behavior: "auto", block: "start" });
               }
               return true;
             }
             return false;
           };
-          if (!trySelectSection()) {
+          if (trySelectSection()) {
+            revealIframe();
+          } else {
             setTimeout(() => {
               try {
                 if (!trySelectSection()) {
@@ -10159,12 +10202,18 @@
                   }
                 }
               } catch (_) {}
-            }, 450);
+              revealIframe();
+            }, 320);
           }
+        } else {
+          revealIframe();
         }
-      } catch (_) {}
+      } catch (_) {
+        revealIframe();
+      }
     });
     bodyEl.innerHTML = "";
+    bodyEl.appendChild(loadingTip);
     bodyEl.appendChild(iframe);
   }
 
@@ -12335,7 +12384,7 @@
     const DEFAULT_STYLE_PRESETS = [
       {
         id: "preset_kawaii_border",
-        title: "原版论坛 · 萌系半透明封边（官方扩展预设）",
+        title: "原版论坛 · 萌系半透明封边（80hou预留）",
         note: "包含白色圆角头像投影、斜纹滚动条、自定义指针、全屏背景图与 #nsk-body-left 封边；切回原版论坛时依然生效。",
         code: `/* ============================================================
    1. 组件基础样式：统一图标与按钮风格
@@ -12404,6 +12453,15 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
       if (state.customStyleNotes === null) {
         state.customStyleNotes = DEFAULT_STYLE_PRESETS.map((p) => ({ ...p }));
         saveJson(LS.CUSTOM_STYLE_NOTES, state.customStyleNotes);
+      } else if (Array.isArray(state.customStyleNotes)) {
+        let migrated = false;
+        for (const n of state.customStyleNotes) {
+          if (n && n.id === "preset_kawaii_border" && n.title === "原版论坛 · 萌系半透明封边（官方扩展预设）") {
+            n.title = DEFAULT_STYLE_PRESETS[0].title;
+            migrated = true;
+          }
+        }
+        if (migrated) saveJson(LS.CUSTOM_STYLE_NOTES, state.customStyleNotes);
       }
       return Array.isArray(state.customStyleNotes) ? state.customStyleNotes : [];
     }
@@ -12851,7 +12909,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
           <span>原版论坛扩展样式备忘录（自定义 style 预设与引导）</span>
           <div style="display:inline-flex;gap:6px;">
             <button type="button" class="nsc-mini-btn" id="nsc-ext-new">+ 新建备忘</button>
-            <button type="button" class="nsc-mini-btn" id="nsc-ext-restore">恢复官方预设</button>
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-restore">恢复默认预设</button>
           </div>
         </div>
         <div class="nsc-base-sub">
@@ -12890,7 +12948,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
 
       const tabsEl = intro.querySelector("#nsc-ext-tabs");
       if (notes.length === 0) {
-        tabsEl.innerHTML = `<span style="font-size:11.5px;color:var(--nsc-muted);">暂无扩展备忘，点击右上角「+ 新建备忘」或「恢复官方预设」。</span>`;
+        tabsEl.innerHTML = `<span style="font-size:11.5px;color:var(--nsc-muted);">暂无扩展备忘，点击右上角「+ 新建备忘」或「恢复默认预设」。</span>`;
       } else {
         notes.forEach((n) => {
           const b = document.createElement("button");

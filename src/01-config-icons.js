@@ -46,8 +46,20 @@
     (document.head || document.documentElement).appendChild(preStyle);
   }
 
-  // 在隐藏 iframe 中用于提取动态渲染数据时不运行外层外壳
+  // 在隐藏 iframe 中用于提取动态渲染数据时不运行外层外壳；若为个人中心同源换肤 iframe，则在 document-start 预设防闪屏隐藏
   if (window.self !== window.top) {
+    try {
+      if (window.frameElement && window.frameElement.classList && window.frameElement.classList.contains("nsc-hub-iframe")) {
+        const iframePre = document.createElement("style");
+        iframePre.id = "nsc-hub-iframe-prehide";
+        iframePre.textContent = `
+          header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
+          html, body { background: transparent !important; }
+          body > section#nsk-frame { opacity: 0 !important; }
+        `;
+        (document.head || document.documentElement).appendChild(iframePre);
+      }
+    } catch (_) {}
     return;
   }
 
@@ -261,7 +273,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.2",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.3",
       latest: "",
       hasUpdate: false,
       checking: false,

@@ -12,7 +12,7 @@
     const DEFAULT_STYLE_PRESETS = [
       {
         id: "preset_kawaii_border",
-        title: "原版论坛 · 萌系半透明封边（官方扩展预设）",
+        title: "原版论坛 · 萌系半透明封边（80hou预留）",
         note: "包含白色圆角头像投影、斜纹滚动条、自定义指针、全屏背景图与 #nsk-body-left 封边；切回原版论坛时依然生效。",
         code: `/* ============================================================
    1. 组件基础样式：统一图标与按钮风格
@@ -81,6 +81,15 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
       if (state.customStyleNotes === null) {
         state.customStyleNotes = DEFAULT_STYLE_PRESETS.map((p) => ({ ...p }));
         saveJson(LS.CUSTOM_STYLE_NOTES, state.customStyleNotes);
+      } else if (Array.isArray(state.customStyleNotes)) {
+        let migrated = false;
+        for (const n of state.customStyleNotes) {
+          if (n && n.id === "preset_kawaii_border" && n.title === "原版论坛 · 萌系半透明封边（官方扩展预设）") {
+            n.title = DEFAULT_STYLE_PRESETS[0].title;
+            migrated = true;
+          }
+        }
+        if (migrated) saveJson(LS.CUSTOM_STYLE_NOTES, state.customStyleNotes);
       }
       return Array.isArray(state.customStyleNotes) ? state.customStyleNotes : [];
     }
@@ -528,7 +537,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
           <span>原版论坛扩展样式备忘录（自定义 style 预设与引导）</span>
           <div style="display:inline-flex;gap:6px;">
             <button type="button" class="nsc-mini-btn" id="nsc-ext-new">+ 新建备忘</button>
-            <button type="button" class="nsc-mini-btn" id="nsc-ext-restore">恢复官方预设</button>
+            <button type="button" class="nsc-mini-btn" id="nsc-ext-restore">恢复默认预设</button>
           </div>
         </div>
         <div class="nsc-base-sub">
@@ -567,7 +576,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
 
       const tabsEl = intro.querySelector("#nsc-ext-tabs");
       if (notes.length === 0) {
-        tabsEl.innerHTML = `<span style="font-size:11.5px;color:var(--nsc-muted);">暂无扩展备忘，点击右上角「+ 新建备忘」或「恢复官方预设」。</span>`;
+        tabsEl.innerHTML = `<span style="font-size:11.5px;color:var(--nsc-muted);">暂无扩展备忘，点击右上角「+ 新建备忘」或「恢复默认预设」。</span>`;
       } else {
         notes.forEach((n) => {
           const b = document.createElement("button");

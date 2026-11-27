@@ -80,9 +80,10 @@
         if (tab && typeof openUserHubModal === "function") {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           openUserHubModal(tab);
         }
-      });
+      }, true);
     }
     const signBtn = userCard.querySelector('.menu span[title="签到"]');
     if (signBtn && signBtn.dataset.nscHubBound !== "1") {
@@ -92,6 +93,7 @@
         if (typeof openUserHubModal === "function") {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           openUserHubModal("attendance");
         }
       }, true);
@@ -104,9 +106,10 @@
         if (typeof openUserHubModal === "function") {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
           openUserHubModal("setting");
         }
-      });
+      }, true);
     }
   }
 
