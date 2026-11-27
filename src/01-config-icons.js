@@ -26,6 +26,10 @@
     CHAT_PREFS: "nsc_v7_chat_prefs",
     CUSTOM_STICKERS: "nsc_v7_custom_stickers",
     CUSTOM_STYLE_NOTES: "nsc_v7_custom_style_notes",
+    JUMP_MODE: "nsc_v7_jump_mode",
+    RULING_AUTO: "nsc_v7_ruling_auto",
+    RULING_CACHE: "nsc_v7_ruling_cache",
+    SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
   };
 
   function isBrowsePath(pathname) {
@@ -270,6 +274,10 @@
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
     customStickers: loadJson(LS.CUSTOM_STICKERS, []),
     customStyleNotes: loadJson(LS.CUSTOM_STYLE_NOTES, null),
+    jumpLinkMode: localStorage.getItem(LS.JUMP_MODE) || "modal",
+    rulingAutoQuery: localStorage.getItem(LS.RULING_AUTO) !== "0",
+    rulingCache: loadJson(LS.RULING_CACHE, {}),
+    seekViewerCache: loadJson(LS.SEEK_VIEWER_CACHE, { username: "", uid: "" }),
     registry: {
       themes: [],
       hubTabs: [],
@@ -283,7 +291,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.20",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.21",
       latest: "",
       installUrl: "",
       hasUpdate: false,

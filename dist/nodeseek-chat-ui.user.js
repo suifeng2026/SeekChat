@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.20
+// @version      7.22.21
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -19,6 +19,7 @@
 // @connect      www.nodeimage.com
 // @connect      raw.githubusercontent.com
 // @connect      api.github.com
+// @connect      api.xxboxx.de
 // @updateURL    https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js
 // @downloadURL  https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.user.js
 // ==/UserScript==
@@ -57,6 +58,10 @@
     CHAT_PREFS: "nsc_v7_chat_prefs",
     CUSTOM_STICKERS: "nsc_v7_custom_stickers",
     CUSTOM_STYLE_NOTES: "nsc_v7_custom_style_notes",
+    JUMP_MODE: "nsc_v7_jump_mode",
+    RULING_AUTO: "nsc_v7_ruling_auto",
+    RULING_CACHE: "nsc_v7_ruling_cache",
+    SEEK_VIEWER_CACHE: "nsc_v7_seek_viewer_cache",
   };
 
   function isBrowsePath(pathname) {
@@ -301,6 +306,10 @@
     chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
     customStickers: loadJson(LS.CUSTOM_STICKERS, []),
     customStyleNotes: loadJson(LS.CUSTOM_STYLE_NOTES, null),
+    jumpLinkMode: localStorage.getItem(LS.JUMP_MODE) || "modal",
+    rulingAutoQuery: localStorage.getItem(LS.RULING_AUTO) !== "0",
+    rulingCache: loadJson(LS.RULING_CACHE, {}),
+    seekViewerCache: loadJson(LS.SEEK_VIEWER_CACHE, { username: "", uid: "" }),
     registry: {
       themes: [],
       hubTabs: [],
@@ -314,7 +323,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.20",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.21",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -623,12 +632,50 @@
   }
 
   function detectCurrentUser() {
-    const el = document.querySelector("#nsk-right-panel-container .user-card .Username, .nsc-right-user .Username");
+    const el = document.querySelector("#nsk-right-panel-container .user-card .Username, .nsc-right-user .Username, .menu a.Username[href*=\"/space/\"]");
     if (el) {
-      state.currentUser = el.textContent.trim();
+      const name = el.textContent.trim();
       const m = (el.getAttribute("href") || "").match(/\/space\/(\d+)/);
+      if (name) state.currentUser = name;
       if (m) state.currentUserId = Number(m[1]);
+      if (name || m) {
+        const nextViewer = { username: state.currentUser || "", uid: state.currentUserId ? String(state.currentUserId) : "" };
+        if (
+          !state.seekViewerCache ||
+          state.seekViewerCache.username !== nextViewer.username ||
+          state.seekViewerCache.uid !== nextViewer.uid
+        ) {
+          state.seekViewerCache = nextViewer;
+          scheduleSaveJson(LS.SEEK_VIEWER_CACHE, nextViewer);
+        }
+      }
     }
+  }
+
+  function getSeekViewerIdentity() {
+    detectCurrentUser();
+    if (state.currentUser || state.currentUserId) {
+      return {
+        username: state.currentUser || "",
+        uid: state.currentUserId ? String(state.currentUserId) : "",
+      };
+    }
+    const exact = document.querySelector('.menu a.Username[href*="/space/"]');
+    if (exact) {
+      const username = (exact.textContent || "").trim();
+      const m = (exact.getAttribute("href") || "").match(/\/space\/(\d+)/);
+      const v = { username, uid: m ? m[1] : "" };
+      if (v.username || v.uid) {
+        state.seekViewerCache = v;
+        scheduleSaveJson(LS.SEEK_VIEWER_CACHE, v);
+        return v;
+      }
+    }
+    const cached = state.seekViewerCache || loadJson(LS.SEEK_VIEWER_CACHE, {});
+    if (cached && (cached.username || cached.uid)) {
+      return { username: String(cached.username || ""), uid: String(cached.uid || "") };
+    }
+    return { username: "", uid: "" };
   }
 
   function isFriend(name) {
@@ -1532,6 +1579,299 @@
     rootEl.querySelectorAll(
       '[id^="hanabi-"], [class*="hanabi-"], read-frog, [data-wxt-shadow-root], .nsc-hover-bar, .nsc-copy-code-btn'
     ).forEach((n) => n.remove());
+  }
+
+  const JUMP_WHITELIST = new Set([
+    "github.com",
+    "gitlab.com",
+    "docker.com",
+    "mozilla.org",
+    "stackoverflow.com",
+    "t.me",
+    "bilibili.com",
+    "youtube.com",
+    "twitter.com",
+    "facebook.com",
+    "wikipedia.org",
+    "google.com",
+    "nodeseek.com",
+    "nodehatch.com",
+    "namatra.de",
+    "deepflood.com",
+    "nodequality.com",
+  ]);
+
+  function isJumpWhitelisted(targetUrl) {
+    try {
+      const host = new URL(targetUrl).hostname.toLowerCase();
+      const parts = host.split(".");
+      const rootDomain = parts.length >= 2 ? parts.slice(-2).join(".") : host;
+      return JUMP_WHITELIST.has(host) || JUMP_WHITELIST.has(rootDomain);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function parseJumpTargetUrl(rawHref) {
+    if (!rawHref) return null;
+    try {
+      const parsed = new URL(rawHref, location.origin);
+      const host = parsed.hostname.toLowerCase();
+      const isNodeSeek = host === "www.nodeseek.com" || host === "nodeseek.com";
+      if (!isNodeSeek || parsed.pathname !== "/jump") return null;
+      let to = parsed.searchParams.get("to") || "";
+      if (!to) return null;
+      if (/^https?%3A/i.test(to)) {
+        try { to = decodeURIComponent(to); } catch (_) {}
+      }
+      const targetParsed = new URL(to);
+      if (targetParsed.protocol !== "http:" && targetParsed.protocol !== "https:") return null;
+      return {
+        rawHref,
+        targetUrl: targetParsed.toString(),
+        host: targetParsed.hostname,
+        isWhitelisted: isJumpWhitelisted(targetParsed.toString()),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function formatUtcMsToBeijingStr(utcMs) {
+    if (!utcMs || Number.isNaN(utcMs)) return "";
+    const bj = new Date(utcMs + 8 * 3600000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${bj.getUTCFullYear()}-${pad(bj.getUTCMonth() + 1)}-${pad(bj.getUTCDate())} ${pad(bj.getUTCHours())}:${pad(bj.getUTCMinutes())}:${pad(bj.getUTCSeconds())}`;
+  }
+
+  function parseRulingPostTarget(postUrl) {
+    if (!postUrl || typeof postUrl !== "string") return null;
+    const m = postUrl.match(/\/post-(\d+)(?:-(\d+))?(?:#(-?\d+))?/);
+    if (!m) return null;
+    const pid = m[1];
+    if (!pid || Number(pid) <= 0) return null;
+    const page = m[2] && Number(m[2]) > 0 ? m[2] : "1";
+    const floorRaw = m[3];
+    const floorId = floorRaw !== undefined && Number(floorRaw) >= 0 ? String(floorRaw) : "";
+    const href = `/post-${pid}-${page}${floorId !== "" ? `#${floorId}` : ""}`;
+    return {
+      postId: pid,
+      page,
+      floorId,
+      href,
+      label: floorId !== "" ? `帖子 #${pid} · #${floorId}` : `帖子 #${pid}`,
+    };
+  }
+
+  function normalizeRulingRow(row) {
+    const rawActions = String((row && row.actions_text) || "").replace(/\s*\n+\s*/g, " ").trim();
+    const timeRe = /(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)/i;
+    const tm = rawActions.match(timeRe);
+    let utcMs = 0;
+    let beijingTime = "";
+    let relTime = "";
+    let cleanActions = rawActions;
+    if (tm) {
+      const month = Number(tm[1]);
+      const day = Number(tm[2]);
+      const year = Number(tm[3]);
+      let hour = Number(tm[4]);
+      const minute = Number(tm[5]);
+      const second = Number(tm[6]);
+      const ampm = tm[7].toUpperCase();
+      if (ampm === "PM" && hour < 12) hour += 12;
+      if (ampm === "AM" && hour === 12) hour = 0;
+      utcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+      beijingTime = formatUtcMsToBeijingStr(utcMs);
+      relTime = formatRelativeFromMs(utcMs);
+      cleanActions = rawActions.replace(tm[0], "").replace(/\s{2,}/g, " ").trim();
+    }
+    const delta = typeof (row && row.action_points_delta) === "number" ? row.action_points_delta : null;
+    const cat = String((row && row.action_category) || "");
+    let kind = "other";
+    let kindLabel = "管理";
+    if (cat === "punish" || (delta !== null && delta < 0) || (row && row.action_mute_days > 0)) {
+      kind = "punish";
+      kindLabel = "处罚";
+    } else if (cat === "reward" || (delta !== null && delta > 0)) {
+      kind = "reward";
+      kindLabel = "奖励";
+    }
+    return {
+      recordId: row && row.record_id ? String(row.record_id) : "",
+      reasonText: String((row && row.reason_text) || "-").trim(),
+      cleanActions: cleanActions || "-",
+      pointsDelta: delta,
+      muteDays: typeof (row && row.action_mute_days) === "number" ? row.action_mute_days : 0,
+      moveTo: row && row.action_move_to ? String(row.action_move_to) : "",
+      readLevel: row && row.action_read_level !== null && row.action_read_level !== undefined ? row.action_read_level : null,
+      postTarget: parseRulingPostTarget(row && row.post_url),
+      utcMs,
+      beijingTime,
+      relTime,
+      kind,
+      kindLabel,
+    };
+  }
+
+  function summarizeRulingRows(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    let punishCount = 0;
+    let rewardCount = 0;
+    let otherCount = 0;
+    let muteCount = 0;
+    let muteDaysTotal = 0;
+    let moveCount = 0;
+    let pointsDeltaNet = 0;
+    let hasPoints = false;
+
+    for (const r of list) {
+      if (r.kind === "punish") punishCount += 1;
+      else if (r.kind === "reward") rewardCount += 1;
+      else otherCount += 1;
+      if (r.muteDays > 0) {
+        muteCount += 1;
+        muteDaysTotal += r.muteDays;
+      }
+      if (r.moveTo) moveCount += 1;
+      if (typeof r.pointsDelta === "number") {
+        hasPoints = true;
+        pointsDeltaNet += r.pointsDelta;
+      }
+    }
+
+    const tags = [];
+    if (punishCount > 0) tags.push({ key: "punish", label: `处罚 ${punishCount}`, tone: "danger", filter: "punish" });
+    if (muteCount > 0) tags.push({ key: "mute", label: muteDaysTotal > 0 ? `禁言 ${muteCount} (${muteDaysTotal}天)` : `禁言 ${muteCount}`, tone: "warn", filter: "mute" });
+    if (moveCount > 0) tags.push({ key: "move", label: `移版 ${moveCount}`, tone: "indigo", filter: "move" });
+    if (rewardCount > 0) tags.push({ key: "reward", label: `奖励 ${rewardCount}`, tone: "success", filter: "reward" });
+    if (otherCount > 0 && punishCount === 0 && rewardCount === 0) {
+      tags.push({ key: "other", label: `记录 ${otherCount}`, tone: "neutral", filter: "all" });
+    }
+    if (hasPoints && pointsDeltaNet !== 0) {
+      tags.push({
+        key: "points",
+        label: `鸡腿 ${pointsDeltaNet > 0 ? "+" : ""}${pointsDeltaNet}`,
+        tone: pointsDeltaNet < 0 ? "warn" : "success",
+        filter: "all",
+      });
+    }
+    return {
+      total: list.length,
+      punishCount,
+      rewardCount,
+      otherCount,
+      muteCount,
+      muteDaysTotal,
+      moveCount,
+      pointsDeltaNet,
+      tags,
+    };
+  }
+
+  let _rulingCooldownUntil = 0;
+  const _rulingInFlight = new Map();
+  const RULING_CACHE_TTL_MS = 60 * 60 * 1000;
+
+  function gmFetchJson(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest !== "function") {
+        reject(new Error("GM_xmlhttpRequest 不可用"));
+        return;
+      }
+      GM_xmlhttpRequest({
+        method: "GET",
+        url,
+        timeout: 12000,
+        headers: { Accept: "application/json" },
+        onload: (res) => {
+          try {
+            const json = JSON.parse(res.responseText || "{}");
+            resolve(json);
+          } catch (err) {
+            reject(err);
+          }
+        },
+        onerror: () => reject(new Error("网络请求失败")),
+        ontimeout: () => reject(new Error("请求超时")),
+      });
+    });
+  }
+
+  async function fetchUserRulingRecords(username, force = false) {
+    const cleanName = String(username || "").trim();
+    if (!cleanName || cleanName === "Seeker") {
+      return { ok: false, error: "invalid_username", rows: [] };
+    }
+    const cacheKey = cleanName.toLowerCase();
+    const cached = state.rulingCache && state.rulingCache[cacheKey];
+    if (!force && cached && Array.isArray(cached.rows) && Date.now() - (cached.ts || 0) < RULING_CACHE_TTL_MS) {
+      return { ok: true, rows: cached.rows, fromCache: true, ts: cached.ts };
+    }
+
+    if (_rulingCooldownUntil > Date.now()) {
+      const waitSec = Math.max(1, Math.ceil((_rulingCooldownUntil - Date.now()) / 1000));
+      return {
+        ok: false,
+        error: "rate_limited",
+        retryAfter: waitSec,
+        rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
+        fromCache: Boolean(cached && Array.isArray(cached.rows)),
+      };
+    }
+
+    if (!force && _rulingInFlight.has(cacheKey)) {
+      return _rulingInFlight.get(cacheKey);
+    }
+
+    const reqPromise = (async () => {
+      const viewer = getSeekViewerIdentity();
+      const url = `https://api.xxboxx.de/api/seek?username=${encodeURIComponent(cleanName)}&limit=100000&viewer=${encodeURIComponent(viewer.username)}&viewer_uid=${encodeURIComponent(viewer.uid)}`;
+      let data = null;
+      try {
+        const resp = await fetch(url, { cache: "no-store" });
+        data = await resp.json();
+      } catch (_) {
+        data = await gmFetchJson(url);
+      }
+
+      if (!data || !data.ok) {
+        if (data && data.error === "rate_limited") {
+          const retryAfter = Math.max(5, Number(data.retry_after) || 60);
+          _rulingCooldownUntil = Date.now() + retryAfter * 1000;
+          return {
+            ok: false,
+            error: "rate_limited",
+            retryAfter,
+            rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
+            fromCache: Boolean(cached && Array.isArray(cached.rows)),
+          };
+        }
+        throw new Error((data && data.error) || "query_failed");
+      }
+
+      const normalized = (Array.isArray(data.rows) ? data.rows : []).map(normalizeRulingRow);
+      state.rulingCache[cacheKey] = {
+        ts: Date.now(),
+        username: cleanName,
+        rows: normalized,
+      };
+      pruneTimedCache(state.rulingCache, 180, 120);
+      scheduleSaveJson(LS.RULING_CACHE, state.rulingCache);
+      return { ok: true, rows: normalized, fromCache: false, ts: Date.now() };
+    })()
+      .catch((err) => ({
+        ok: false,
+        error: err && err.message ? err.message : "query_failed",
+        rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
+        fromCache: Boolean(cached && Array.isArray(cached.rows)),
+      }))
+      .finally(() => {
+        _rulingInFlight.delete(cacheKey);
+      });
+
+    _rulingInFlight.set(cacheKey, reqPromise);
+    return reqPromise;
   }
 
   // ==========================================================================
@@ -3017,17 +3357,18 @@
       }
       #nsc-profile-backdrop.is-open { display: flex; }
       .nsc-profile-modal {
-        width: min(420px, 92vw);
+        width: min(440px, 92vw); max-height: 88vh;
         background: var(--nsc-bg-card); color: var(--nsc-text);
-        border: 1px solid var(--nsc-border); border-radius: 16px;
+        border: 1px solid var(--nsc-border); border-radius: 14px;
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); overflow: hidden;
+        display: flex; flex-direction: column;
       }
-      .nsc-profile-banner { height: 58px; background: linear-gradient(135deg, #007aff, #5ac8fa); position: relative; }
+      .nsc-profile-banner { height: 54px; flex-shrink: 0; background: linear-gradient(135deg, #007aff, #5ac8fa); position: relative; }
       .nsc-profile-close {
-        position: absolute; right: 10px; top: 10px; width: 26px; height: 26px; border-radius: 50%;
+        position: absolute; right: 10px; top: 10px; width: 24px; height: 24px; border-radius: 6px;
         border: none; background: rgba(0,0,0,0.28); color: #fff; cursor: pointer; font-size: 13px;
       }
-      .nsc-profile-body { padding: 0 18px 18px; margin-top: -26px; position: relative; }
+      .nsc-profile-body { padding: 0 18px 16px; margin-top: -24px; position: relative; overflow-y: auto; flex: 1; min-height: 0; }
       .nsc-profile-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 10px; }
       .nsc-profile-head img {
         width: 58px; height: 58px; border-radius: 50%; object-fit: cover;
@@ -3643,6 +3984,165 @@
       }
       .nsc-flash .nsc-bubble,
       .nsc-flash > .nsc-thread-body > .nsc-thread-content { animation: nscFlash 1.5s ease; }
+
+      /* 外链跳转提醒二级弹窗（macOS 对话框风格） */
+      #nsc-jump-backdrop {
+        position: fixed; inset: 0; z-index: 9600;
+        background: rgba(15, 23, 42, 0.38); backdrop-filter: blur(5px);
+        display: none; align-items: center; justify-content: center; padding: 16px;
+      }
+      #nsc-jump-backdrop.is-open { display: flex; }
+      .nsc-jump-modal {
+        width: min(460px, 92vw);
+        background: var(--nsc-bg-card); color: var(--nsc-text);
+        border: 1px solid var(--nsc-border); border-radius: 12px;
+        box-shadow: 0 22px 56px rgba(0, 0, 0, 0.28); overflow: hidden;
+        font-family: var(--mac-font);
+      }
+      .nsc-jump-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 11px 15px; border-bottom: 1px solid var(--nsc-border);
+        background: var(--nsc-hover);
+      }
+      .nsc-jump-title { font-size: 13.5px; font-weight: 700; color: var(--nsc-text); }
+      .nsc-jump-close {
+        width: 24px; height: 24px; border-radius: 6px; border: none;
+        background: transparent; color: var(--nsc-muted); cursor: pointer; font-size: 14px;
+      }
+      .nsc-jump-close:hover { background: var(--nsc-border); color: var(--nsc-text); }
+      .nsc-jump-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+      .nsc-jump-hint { font-size: 12px; color: var(--nsc-muted); line-height: 1.5; }
+      .nsc-jump-host {
+        padding: 8px 11px; border-radius: 7px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-hover); display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      }
+      .nsc-jump-host-name {
+        font-size: 13.5px; font-weight: 700; color: var(--nsc-accent);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .nsc-jump-url-box {
+        padding: 8px 10px; border-radius: 7px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-chat); color: var(--nsc-text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11.5px; line-height: 1.5; word-break: break-all; max-height: 108px; overflow-y: auto;
+      }
+      .nsc-jump-foot {
+        padding: 11px 16px; border-top: 1px solid var(--nsc-border);
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+        background: var(--nsc-hover);
+      }
+      .nsc-jump-skip-label {
+        display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+        color: var(--nsc-muted); cursor: pointer; user-select: none;
+      }
+      .nsc-jump-skip-label input { accent-color: var(--nsc-accent); cursor: pointer; }
+      .nsc-mac-btn {
+        height: 28px; padding: 0 12px; border-radius: 6px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card); color: var(--nsc-text);
+        font-size: 12px; font-weight: 600; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+        transition: background 0.12s ease, border-color 0.12s ease;
+      }
+      .nsc-mac-btn:hover { background: var(--nsc-hover); }
+      .nsc-mac-btn.primary {
+        background: var(--nsc-accent); color: #fff; border-color: var(--nsc-accent);
+      }
+      .nsc-mac-btn.primary:hover { filter: brightness(1.06); background: var(--nsc-accent); }
+
+      /* 名片管理记录条（macOS 纯文字染色标签 + 悬停预览 + 展开详情，非胶囊） */
+      .nsc-ruling-strip {
+        margin: 8px 0 4px; padding: 7px 10px; border-radius: 7px;
+        background: var(--nsc-hover); border: 1px solid var(--nsc-border);
+        position: relative;
+      }
+      .nsc-ruling-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+      }
+      .nsc-ruling-tags {
+        display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0;
+      }
+      .nsc-ruling-prefix { font-size: 11px; color: var(--nsc-muted); font-weight: 600; margin-right: 2px; }
+      .nsc-ruling-tag {
+        border: none; background: transparent; padding: 2px 5px; border-radius: 4px;
+        font-size: 11.5px; font-weight: 600; line-height: 1.35; cursor: pointer;
+        transition: background 0.12s ease;
+      }
+      .nsc-ruling-tag:hover, .nsc-ruling-tag.is-active { background: rgba(128, 128, 128, 0.14); }
+      .nsc-ruling-tag.tone-danger { color: #d93025; }
+      .nsc-ruling-tag.tone-warn { color: #c25900; }
+      .nsc-ruling-tag.tone-indigo { color: #4f46e5; }
+      .nsc-ruling-tag.tone-success { color: #15803d; }
+      .nsc-ruling-tag.tone-neutral { color: var(--nsc-muted); }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-danger { color: #ff5a52; }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-warn { color: #ff9f0a; }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-indigo { color: #818cf8; }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-tag.tone-success { color: #30d158; }
+      .nsc-ruling-ops { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+      .nsc-ruling-link-btn {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 11px; font-weight: 600; padding: 2px 5px; border-radius: 4px; cursor: pointer;
+      }
+      .nsc-ruling-link-btn:hover { background: rgba(128, 128, 128, 0.12); color: var(--nsc-text); }
+      .nsc-ruling-status { font-size: 11.5px; color: var(--nsc-muted); }
+      .nsc-ruling-hover-tip {
+        position: absolute; left: 0; right: 0; top: calc(100% + 5px); z-index: 30;
+        background: var(--nsc-bg-card); color: var(--nsc-text);
+        border: 1px solid var(--nsc-border); border-radius: 8px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+        padding: 8px 10px; font-size: 11.5px; line-height: 1.5;
+        display: none;
+      }
+      .nsc-ruling-hover-tip.is-open { display: block; }
+      .nsc-ruling-hover-item {
+        padding: 5px 0; border-bottom: 1px dashed var(--nsc-border);
+      }
+      .nsc-ruling-hover-item:last-child { border-bottom: none; padding-bottom: 0; }
+      .nsc-ruling-hover-item:first-child { padding-top: 0; }
+      .nsc-ruling-drawer {
+        margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--nsc-border);
+        display: none;
+      }
+      .nsc-ruling-drawer.is-open { display: block; }
+      .nsc-ruling-filter-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 7px;
+      }
+      .nsc-ruling-seg {
+        display: inline-flex; gap: 2px; padding: 2px; border-radius: 6px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-ruling-seg button {
+        border: none; background: transparent; color: var(--nsc-muted);
+        font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+      }
+      .nsc-ruling-seg button.is-active {
+        background: var(--nsc-accent); color: #fff;
+      }
+      .nsc-ruling-list {
+        max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+      }
+      .nsc-ruling-item {
+        padding: 7px 9px; border-radius: 6px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        font-size: 11.5px; line-height: 1.5;
+      }
+      .nsc-ruling-item-top {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px;
+      }
+      .nsc-ruling-kind { font-weight: 700; }
+      .nsc-ruling-kind.punish { color: #d93025; }
+      .nsc-ruling-kind.reward { color: #15803d; }
+      .nsc-ruling-kind.other { color: var(--nsc-muted); }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-kind.punish { color: #ff5a52; }
+      body.nsc-app-active[data-nsc-theme="dark"] .nsc-ruling-kind.reward { color: #30d158; }
+      .nsc-ruling-time { font-size: 10.5px; color: var(--nsc-muted); }
+      .nsc-ruling-post-row {
+        margin-top: 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      }
+      .nsc-ruling-post-btn {
+        border: none; background: transparent; padding: 1px 4px; border-radius: 4px;
+        color: var(--nsc-accent); font-size: 11px; font-weight: 600; cursor: pointer;
+      }
+      .nsc-ruling-post-btn:hover { background: var(--nsc-accent-soft); }
     `;
     document.head.appendChild(style);
     if (typeof syncRegisteredThemesCss === "function") syncRegisteredThemesCss();
@@ -4587,6 +5087,8 @@
         if (hubBd) hubBd.classList.remove("is-open");
         const spaceBd = document.getElementById("nsc-space-backdrop");
         if (spaceBd) spaceBd.classList.remove("is-open");
+        const jumpBd = document.getElementById("nsc-jump-backdrop");
+        if (jumpBd) jumpBd.classList.remove("is-open");
         if (niBackdrop) niBackdrop.classList.remove("is-open");
       } else if (lightbox.classList.contains("is-open")) {
         if (e.key === "ArrowLeft") stepLightbox(-1);
@@ -4602,6 +5104,101 @@
       if (e.target === backdrop) backdrop.classList.remove("is-open");
     });
     document.body.appendChild(backdrop);
+
+    const jumpBackdrop = document.createElement("div");
+    jumpBackdrop.id = "nsc-jump-backdrop";
+    jumpBackdrop.innerHTML = `
+      <div class="nsc-jump-modal" role="dialog" aria-label="外链跳转提醒">
+        <div class="nsc-jump-head">
+          <span class="nsc-jump-title">外链跳转提醒</span>
+          <button type="button" class="nsc-jump-close" id="nsc-jump-close" title="关闭 (Esc)">✕</button>
+        </div>
+        <div class="nsc-jump-body">
+          <div class="nsc-jump-hint">即将离开 NodeSeek 前往以下外部站点，请确认目标域名与地址安全：</div>
+          <div class="nsc-jump-host">
+            <span class="nsc-jump-host-name" id="nsc-jump-host-name"></span>
+            <button type="button" class="nsc-mac-btn" id="nsc-jump-copy" style="height:24px;padding:0 9px;font-size:11px;">复制链接</button>
+          </div>
+          <div class="nsc-jump-url-box" id="nsc-jump-url-box"></div>
+        </div>
+        <div class="nsc-jump-foot">
+          <label class="nsc-jump-skip-label">
+            <input type="checkbox" id="nsc-jump-skip-chk" />
+            <span>以后直接跳转，不再提醒</span>
+          </label>
+          <div style="display:inline-flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-mac-btn" id="nsc-jump-cancel">取消</button>
+            <button type="button" class="nsc-mac-btn primary" id="nsc-jump-go">立即前往</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(jumpBackdrop);
+
+    let _pendingJumpUrl = "";
+    const closeJumpModal = () => {
+      jumpBackdrop.classList.remove("is-open");
+      _pendingJumpUrl = "";
+    };
+    const openJumpConfirmModal = (parsed) => {
+      if (!parsed || !parsed.targetUrl) return;
+      _pendingJumpUrl = parsed.targetUrl;
+      const hostEl = jumpBackdrop.querySelector("#nsc-jump-host-name");
+      const urlEl = jumpBackdrop.querySelector("#nsc-jump-url-box");
+      const skipChk = jumpBackdrop.querySelector("#nsc-jump-skip-chk");
+      const copyBtn = jumpBackdrop.querySelector("#nsc-jump-copy");
+      if (hostEl) hostEl.textContent = parsed.host || parsed.targetUrl;
+      if (urlEl) urlEl.textContent = parsed.targetUrl;
+      if (skipChk) skipChk.checked = false;
+      if (copyBtn) copyBtn.textContent = "复制链接";
+      jumpBackdrop.classList.add("is-open");
+    };
+
+    jumpBackdrop.addEventListener("click", (e) => {
+      if (e.target === jumpBackdrop) closeJumpModal();
+    });
+    jumpBackdrop.querySelector("#nsc-jump-close").addEventListener("click", closeJumpModal);
+    jumpBackdrop.querySelector("#nsc-jump-cancel").addEventListener("click", closeJumpModal);
+    jumpBackdrop.querySelector("#nsc-jump-copy").addEventListener("click", async (e) => {
+      if (!_pendingJumpUrl) return;
+      const ok = await copyTextToClipboard(_pendingJumpUrl);
+      if (ok) {
+        e.target.textContent = "已复制";
+        setTimeout(() => { e.target.textContent = "复制链接"; }, 1200);
+      }
+    });
+    jumpBackdrop.querySelector("#nsc-jump-go").addEventListener("click", () => {
+      const target = _pendingJumpUrl;
+      const skip = Boolean(jumpBackdrop.querySelector("#nsc-jump-skip-chk")?.checked);
+      if (skip) {
+        state.jumpLinkMode = "direct";
+        localStorage.setItem(LS.JUMP_MODE, "direct");
+        if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
+      }
+      closeJumpModal();
+      if (target) window.open(target, "_blank", "noopener,noreferrer");
+    });
+
+    if (!document.documentElement.dataset.nscJumpBound) {
+      document.documentElement.dataset.nscJumpBound = "1";
+      document.addEventListener("click", (e) => {
+        if (!state.enabled || !document.body.classList.contains("nsc-app-active")) return;
+        if (state.jumpLinkMode === "native") return;
+        const a = e.target && e.target.closest ? e.target.closest('a[href*="/jump"]') : null;
+        if (!a) return;
+        if (!a.closest("#nsc-app-shell, #nsc-profile-backdrop, #nsc-space-backdrop, #nsc-hub-backdrop")) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        const parsed = parseJumpTargetUrl(a.getAttribute("href") || a.href);
+        if (!parsed) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (state.jumpLinkMode === "direct" || parsed.isWhitelisted) {
+          window.open(parsed.targetUrl, "_blank", "noopener,noreferrer");
+          return;
+        }
+        openJumpConfirmModal(parsed);
+      });
+    }
 
     const npBackdrop = document.createElement("div");
     npBackdrop.id = "nsc-newpost-backdrop";
@@ -11249,16 +11846,256 @@
     renderUserSpaceModal();
   }
 
+  let _profileModalSeq = 0;
+
   async function openUserProfileModal(userObj) {
     const backdrop = document.getElementById("nsc-profile-backdrop");
     const modal = document.getElementById("nsc-profile-modal");
     if (!backdrop || !modal) return;
+    const modalSeq = ++_profileModalSeq;
 
     const cachedSigHtml =
       userObj.signatureHtml ||
       (userObj.uid && state.signatureCache[`uid:${userObj.uid}`]) ||
       ((userObj.author || userObj.name) && state.signatureCache[`name:${userObj.author || userObj.name}`]) ||
       "";
+
+    const rulingState = {
+      status: "idle",
+      targetName: "",
+      rows: [],
+      error: "",
+      retryAfter: 0,
+      drawerOpen: false,
+      filter: "all",
+    };
+
+    const filterRulingRows = (rows, filterKey) => {
+      const list = Array.isArray(rows) ? rows : [];
+      if (filterKey === "punish") return list.filter((r) => r.kind === "punish");
+      if (filterKey === "reward") return list.filter((r) => r.kind === "reward");
+      if (filterKey === "mute") return list.filter((r) => r.muteDays > 0);
+      if (filterKey === "move") return list.filter((r) => Boolean(r.moveTo));
+      return list;
+    };
+
+    const renderRulingStrip = (info) => {
+      const strip = modal.querySelector("#nsc-p-ruling-strip");
+      if (!strip) return;
+      const targetName = String((info && info.name) || "").trim();
+      const hasValidName = Boolean(targetName && targetName !== "Seeker");
+
+      if (!hasValidName) {
+        strip.innerHTML = `<div class="nsc-ruling-row"><span class="nsc-ruling-status">管理记录 待识别用户名</span></div>`;
+        return;
+      }
+
+      if (rulingState.status === "idle" && !state.rulingAutoQuery) {
+        strip.innerHTML = `
+          <div class="nsc-ruling-row">
+            <span class="nsc-ruling-status">管理记录（已关闭自动查询）</span>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-manual-btn">查询该用户</button>
+          </div>
+        `;
+        strip.querySelector("#nsc-ruling-manual-btn")?.addEventListener("click", () => {
+          triggerRulingQuery(targetName, false);
+        });
+        return;
+      }
+
+      if (rulingState.status === "loading" && rulingState.rows.length === 0) {
+        strip.innerHTML = `<div class="nsc-ruling-row"><span class="nsc-ruling-prefix">管理记录</span><span class="nsc-ruling-status">读取中...</span></div>`;
+        return;
+      }
+
+      if (rulingState.status === "error" && rulingState.rows.length === 0) {
+        const msg =
+          rulingState.error === "rate_limited"
+            ? `查询冷却中 (${rulingState.retryAfter || 60}s)`
+            : "查询暂不可用";
+        strip.innerHTML = `
+          <div class="nsc-ruling-row">
+            <span class="nsc-ruling-status"><span class="nsc-ruling-prefix">管理记录</span>${escHtml(msg)}</span>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-retry-btn">重试</button>
+          </div>
+        `;
+        strip.querySelector("#nsc-ruling-retry-btn")?.addEventListener("click", () => {
+          triggerRulingQuery(targetName, true);
+        });
+        return;
+      }
+
+      const rows = rulingState.rows || [];
+      if (rows.length === 0) {
+        strip.innerHTML = `
+          <div class="nsc-ruling-row">
+            <span class="nsc-ruling-status"><span class="nsc-ruling-prefix">管理记录</span>无记录</span>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="重新请求最新记录">刷新</button>
+          </div>
+        `;
+        strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", () => {
+          triggerRulingQuery(targetName, true);
+        });
+        return;
+      }
+
+      const summary = summarizeRulingRows(rows);
+      const tagsHtml = summary.tags
+        .map((t) => {
+          const isAct = rulingState.drawerOpen && rulingState.filter === t.filter;
+          return `<button type="button" class="nsc-ruling-tag tone-${escHtml(t.tone)}${isAct ? " is-active" : ""}" data-rfilter="${escHtml(t.filter)}">${escHtml(t.label)}</button>`;
+        })
+        .join("");
+
+      const drawerRows = filterRulingRows(rows, rulingState.filter);
+      const drawerHtml = rulingState.drawerOpen
+        ? `
+          <div class="nsc-ruling-drawer is-open">
+            <div class="nsc-ruling-filter-row">
+              <div class="nsc-ruling-seg">
+                <button type="button" class="${rulingState.filter === "all" ? "is-active" : ""}" data-dfilter="all">全部 (${rows.length})</button>
+                <button type="button" class="${rulingState.filter === "punish" ? "is-active" : ""}" data-dfilter="punish">处罚 (${summary.punishCount})</button>
+                <button type="button" class="${rulingState.filter === "reward" ? "is-active" : ""}" data-dfilter="reward">奖励 (${summary.rewardCount})</button>
+              </div>
+              <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-collapse">收起</button>
+            </div>
+            <div class="nsc-ruling-list">
+              ${drawerRows.length === 0
+                ? `<div class="nsc-ruling-status" style="padding:8px 4px;">该分类下暂无记录</div>`
+                : drawerRows.map((r, idx) => `
+                  <div class="nsc-ruling-item">
+                    <div class="nsc-ruling-item-top">
+                      <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> <span style="color:var(--nsc-muted);">#${escHtml(r.recordId || "-")}</span></span>
+                      <span class="nsc-ruling-time" title="${escHtml(r.beijingTime || "")}">${escHtml(r.beijingTime || r.relTime || "-")}</span>
+                    </div>
+                    <div>原因：${escHtml(r.reasonText)}</div>
+                    <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}</div>
+                    <div class="nsc-ruling-post-row">
+                      ${r.postTarget
+                        ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">打开涉事帖${r.postTarget.floorId !== "" ? ` #${escHtml(r.postTarget.floorId)}` : ""}</button>
+                           <a href="${escHtml(r.postTarget.href)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--nsc-muted);text-decoration:none;">原帖 ↗</a>`
+                        : `<span style="font-size:11px;color:var(--nsc-muted);">无关联帖子</span>`}
+                    </div>
+                  </div>
+                `).join("")}
+            </div>
+          </div>
+        `
+        : "";
+
+      strip.innerHTML = `
+        <div class="nsc-ruling-row">
+          <div class="nsc-ruling-tags">
+            <span class="nsc-ruling-prefix">管理记录</span>
+            ${tagsHtml}
+          </div>
+          <div class="nsc-ruling-ops">
+            ${rulingState.error === "rate_limited" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">冷却 ${rulingState.retryAfter}s</span>` : ""}
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `明细 (${rows.length})`}</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn">${rulingState.status === "loading" ? "..." : "刷新"}</button>
+          </div>
+        </div>
+        <div class="nsc-ruling-hover-tip" id="nsc-ruling-hover-tip"></div>
+        ${drawerHtml}
+      `;
+
+      const hoverTip = strip.querySelector("#nsc-ruling-hover-tip");
+      const showHoverPreview = (filterKey) => {
+        if (!hoverTip || rulingState.drawerOpen) return;
+        const previewList = filterRulingRows(rows, filterKey).slice(0, 4);
+        if (previewList.length === 0) return;
+        hoverTip.innerHTML = `
+          ${previewList.map((r) => `
+            <div class="nsc-ruling-hover-item">
+              <div style="display:flex;justify-content:space-between;gap:8px;">
+                <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> #${escHtml(r.recordId || "-")}</span>
+                <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
+              </div>
+              <div>原因：${escHtml(r.reasonText)}</div>
+              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 涉事 ${escHtml(r.postTarget.label)}` : ""}</div>
+            </div>
+          `).join("")}
+          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开完整明细并跳转涉事帖</div>
+        `;
+        hoverTip.classList.add("is-open");
+      };
+      const hideHoverPreview = () => {
+        if (hoverTip) hoverTip.classList.remove("is-open");
+      };
+
+      strip.querySelectorAll(".nsc-ruling-tag").forEach((btn) => {
+        const fKey = btn.dataset.rfilter || "all";
+        btn.addEventListener("mouseenter", () => showHoverPreview(fKey));
+        btn.addEventListener("click", () => {
+          hideHoverPreview();
+          if (rulingState.drawerOpen && rulingState.filter === fKey) {
+            rulingState.drawerOpen = false;
+          } else {
+            rulingState.drawerOpen = true;
+            rulingState.filter = fKey;
+          }
+          renderRulingStrip(info);
+        });
+      });
+      strip.addEventListener("mouseleave", hideHoverPreview);
+
+      strip.querySelector("#nsc-ruling-toggle-btn")?.addEventListener("click", () => {
+        hideHoverPreview();
+        rulingState.drawerOpen = !rulingState.drawerOpen;
+        renderRulingStrip(info);
+      });
+      strip.querySelector("#nsc-ruling-collapse")?.addEventListener("click", () => {
+        rulingState.drawerOpen = false;
+        renderRulingStrip(info);
+      });
+      strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", () => {
+        hideHoverPreview();
+        triggerRulingQuery(targetName, true);
+      });
+      strip.querySelectorAll("[data-dfilter]").forEach((b) => {
+        b.addEventListener("click", () => {
+          rulingState.filter = b.dataset.dfilter || "all";
+          renderRulingStrip(info);
+        });
+      });
+      strip.querySelectorAll("[data-rpost-idx]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const item = drawerRows[Number(b.dataset.rpostIdx)];
+          if (!item || !item.postTarget) return;
+          backdrop.classList.remove("is-open");
+          openPostInChat({
+            postId: item.postTarget.postId,
+            url: item.postTarget.href,
+            title: `帖子 #${item.postTarget.postId}`,
+            targetFloor: item.postTarget.floorId,
+          });
+        });
+      });
+    };
+
+    const triggerRulingQuery = async (targetName, force = false) => {
+      const cleanName = String(targetName || "").trim();
+      if (!cleanName || cleanName === "Seeker") return;
+      if (!force && rulingState.targetName === cleanName && rulingState.status !== "idle") return;
+      rulingState.targetName = cleanName;
+      rulingState.status = "loading";
+      rulingState.error = "";
+      renderRulingStrip({ name: cleanName });
+
+      const res = await fetchUserRulingRecords(cleanName, force);
+      if (modalSeq !== _profileModalSeq || !backdrop.classList.contains("is-open")) return;
+      if (res && res.ok) {
+        rulingState.status = "ready";
+        rulingState.rows = Array.isArray(res.rows) ? res.rows : [];
+        rulingState.error = "";
+      } else {
+        rulingState.error = (res && res.error) || "query_failed";
+        rulingState.retryAfter = (res && res.retryAfter) || 0;
+        rulingState.rows = Array.isArray(res && res.rows) ? res.rows : [];
+        rulingState.status = rulingState.rows.length > 0 ? "ready" : "error";
+      }
+      renderRulingStrip({ name: cleanName });
+    };
 
     const renderModal = (info, loading) => {
       const friendActive = isFriend(info.name);
@@ -11281,6 +12118,7 @@
               <div style="font-size:12px;color:var(--nsc-muted);">ID: ${info.uid || "-"} · ${info.level} · 加入 ${info.days}${loading ? " (读取中...)" : ""}</div>
             </div>
           </div>
+          <div class="nsc-ruling-strip" id="nsc-p-ruling-strip"></div>
           <div class="nsc-profile-stats">
             <div><div class="nsc-stat-val">${info.legs}</div><div class="nsc-stat-lbl">鸡腿</div></div>
             <div><div class="nsc-stat-val">${info.stars}</div><div class="nsc-stat-lbl">星辰</div></div>
@@ -11358,13 +12196,15 @@
         renderModal(info, false);
         renderRightBody();
       });
+      renderRulingStrip(info);
     };
 
     backdrop.classList.add("is-open");
+    const initName = userObj.author || userObj.name || "Seeker";
     renderModal(
       {
         uid: userObj.uid || "",
-        name: userObj.author || userObj.name || "Seeker",
+        name: initName,
         avatar: userObj.avatar || "",
         level: userObj.level || "--",
         days: "--",
@@ -11378,13 +12218,20 @@
       },
       true
     );
+    if (state.rulingAutoQuery && initName && initName !== "Seeker") {
+      triggerRulingQuery(initName, false);
+    }
 
-    const fullInfo = await fetchUserProfile(userObj.uid, userObj.author || userObj.name);
+    const fullInfo = await fetchUserProfile(userObj.uid, initName);
+    if (modalSeq !== _profileModalSeq) return;
     if (fullInfo && userObj.uid) {
       syncUserBadgeToChatDom(userObj.uid, fullInfo);
     }
     if (backdrop.classList.contains("is-open")) {
       renderModal(fullInfo, false);
+      if (state.rulingAutoQuery && fullInfo && fullInfo.name && fullInfo.name !== "Seeker" && rulingState.status === "idle") {
+        triggerRulingQuery(fullInfo.name, false);
+      }
       if (fullInfo && fullInfo.uid) {
         preloadUserSpace(fullInfo);
       }
@@ -14981,6 +15828,49 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         });
       }
       body.appendChild(stkBox);
+
+      const interBox = document.createElement("div");
+      interBox.className = "nsc-base-section";
+      const cachedCount = Object.keys(state.rulingCache || {}).length;
+      interBox.innerHTML = `
+        <div class="nsc-base-title">
+          <span>外链跳转与名片管理记录基座</span>
+        </div>
+        <div class="nsc-base-sub">控制 /jump 外链的页内确认交互，以及点击头像打开单个用户名片时的管理记录查询行为（仅按次按人查询，不作批量预拉取）。</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <span style="font-size:12px;font-weight:600;color:var(--nsc-text);">外链跳转提醒方式</span>
+          <div class="nsc-seg-tabs" id="nsc-jump-mode-seg">
+            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "modal" ? "is-active" : ""}" data-jmode="modal">页内二次确认</button>
+            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "direct" ? "is-active" : ""}" data-jmode="direct">直接跳转（免提醒）</button>
+            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "native" ? "is-active" : ""}" data-jmode="native">跟随原站</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-switch ${state.rulingAutoQuery ? "is-on" : ""}" id="nsc-ruling-auto-sw" aria-pressed="${state.rulingAutoQuery ? "true" : "false"}"><span class="nsc-switch-knob"></span></button>
+            <span style="font-size:12px;font-weight:600;color:var(--nsc-text);">点击头像打开名片时自动查询该用户管理记录</span>
+          </div>
+          <button type="button" class="nsc-mini-btn" id="nsc-ruling-clear-cache">清空记录缓存 (${cachedCount})</button>
+        </div>
+      `;
+      interBox.querySelectorAll("[data-jmode]").forEach((b) => {
+        b.addEventListener("click", () => {
+          state.jumpLinkMode = b.dataset.jmode || "modal";
+          localStorage.setItem(LS.JUMP_MODE, state.jumpLinkMode);
+          renderUserHubIfOpen();
+        });
+      });
+      interBox.querySelector("#nsc-ruling-auto-sw").addEventListener("click", () => {
+        state.rulingAutoQuery = !state.rulingAutoQuery;
+        localStorage.setItem(LS.RULING_AUTO, state.rulingAutoQuery ? "1" : "0");
+        renderUserHubIfOpen();
+      });
+      interBox.querySelector("#nsc-ruling-clear-cache").addEventListener("click", () => {
+        state.rulingCache = {};
+        saveJson(LS.RULING_CACHE, {});
+        renderUserHubIfOpen();
+      });
+      body.appendChild(interBox);
     }
 
     function renderExtSection(body) {

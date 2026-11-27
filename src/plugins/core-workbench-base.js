@@ -521,6 +521,49 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         });
       }
       body.appendChild(stkBox);
+
+      const interBox = document.createElement("div");
+      interBox.className = "nsc-base-section";
+      const cachedCount = Object.keys(state.rulingCache || {}).length;
+      interBox.innerHTML = `
+        <div class="nsc-base-title">
+          <span>外链跳转与名片管理记录基座</span>
+        </div>
+        <div class="nsc-base-sub">控制 /jump 外链的页内确认交互，以及点击头像打开单个用户名片时的管理记录查询行为（仅按次按人查询，不作批量预拉取）。</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <span style="font-size:12px;font-weight:600;color:var(--nsc-text);">外链跳转提醒方式</span>
+          <div class="nsc-seg-tabs" id="nsc-jump-mode-seg">
+            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "modal" ? "is-active" : ""}" data-jmode="modal">页内二次确认</button>
+            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "direct" ? "is-active" : ""}" data-jmode="direct">直接跳转（免提醒）</button>
+            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "native" ? "is-active" : ""}" data-jmode="native">跟随原站</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-switch ${state.rulingAutoQuery ? "is-on" : ""}" id="nsc-ruling-auto-sw" aria-pressed="${state.rulingAutoQuery ? "true" : "false"}"><span class="nsc-switch-knob"></span></button>
+            <span style="font-size:12px;font-weight:600;color:var(--nsc-text);">点击头像打开名片时自动查询该用户管理记录</span>
+          </div>
+          <button type="button" class="nsc-mini-btn" id="nsc-ruling-clear-cache">清空记录缓存 (${cachedCount})</button>
+        </div>
+      `;
+      interBox.querySelectorAll("[data-jmode]").forEach((b) => {
+        b.addEventListener("click", () => {
+          state.jumpLinkMode = b.dataset.jmode || "modal";
+          localStorage.setItem(LS.JUMP_MODE, state.jumpLinkMode);
+          renderUserHubIfOpen();
+        });
+      });
+      interBox.querySelector("#nsc-ruling-auto-sw").addEventListener("click", () => {
+        state.rulingAutoQuery = !state.rulingAutoQuery;
+        localStorage.setItem(LS.RULING_AUTO, state.rulingAutoQuery ? "1" : "0");
+        renderUserHubIfOpen();
+      });
+      interBox.querySelector("#nsc-ruling-clear-cache").addEventListener("click", () => {
+        state.rulingCache = {};
+        saveJson(LS.RULING_CACHE, {});
+        renderUserHubIfOpen();
+      });
+      body.appendChild(interBox);
     }
 
     function renderExtSection(body) {

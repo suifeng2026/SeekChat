@@ -702,16 +702,256 @@
     renderUserSpaceModal();
   }
 
+  let _profileModalSeq = 0;
+
   async function openUserProfileModal(userObj) {
     const backdrop = document.getElementById("nsc-profile-backdrop");
     const modal = document.getElementById("nsc-profile-modal");
     if (!backdrop || !modal) return;
+    const modalSeq = ++_profileModalSeq;
 
     const cachedSigHtml =
       userObj.signatureHtml ||
       (userObj.uid && state.signatureCache[`uid:${userObj.uid}`]) ||
       ((userObj.author || userObj.name) && state.signatureCache[`name:${userObj.author || userObj.name}`]) ||
       "";
+
+    const rulingState = {
+      status: "idle",
+      targetName: "",
+      rows: [],
+      error: "",
+      retryAfter: 0,
+      drawerOpen: false,
+      filter: "all",
+    };
+
+    const filterRulingRows = (rows, filterKey) => {
+      const list = Array.isArray(rows) ? rows : [];
+      if (filterKey === "punish") return list.filter((r) => r.kind === "punish");
+      if (filterKey === "reward") return list.filter((r) => r.kind === "reward");
+      if (filterKey === "mute") return list.filter((r) => r.muteDays > 0);
+      if (filterKey === "move") return list.filter((r) => Boolean(r.moveTo));
+      return list;
+    };
+
+    const renderRulingStrip = (info) => {
+      const strip = modal.querySelector("#nsc-p-ruling-strip");
+      if (!strip) return;
+      const targetName = String((info && info.name) || "").trim();
+      const hasValidName = Boolean(targetName && targetName !== "Seeker");
+
+      if (!hasValidName) {
+        strip.innerHTML = `<div class="nsc-ruling-row"><span class="nsc-ruling-status">管理记录 待识别用户名</span></div>`;
+        return;
+      }
+
+      if (rulingState.status === "idle" && !state.rulingAutoQuery) {
+        strip.innerHTML = `
+          <div class="nsc-ruling-row">
+            <span class="nsc-ruling-status">管理记录（已关闭自动查询）</span>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-manual-btn">查询该用户</button>
+          </div>
+        `;
+        strip.querySelector("#nsc-ruling-manual-btn")?.addEventListener("click", () => {
+          triggerRulingQuery(targetName, false);
+        });
+        return;
+      }
+
+      if (rulingState.status === "loading" && rulingState.rows.length === 0) {
+        strip.innerHTML = `<div class="nsc-ruling-row"><span class="nsc-ruling-prefix">管理记录</span><span class="nsc-ruling-status">读取中...</span></div>`;
+        return;
+      }
+
+      if (rulingState.status === "error" && rulingState.rows.length === 0) {
+        const msg =
+          rulingState.error === "rate_limited"
+            ? `查询冷却中 (${rulingState.retryAfter || 60}s)`
+            : "查询暂不可用";
+        strip.innerHTML = `
+          <div class="nsc-ruling-row">
+            <span class="nsc-ruling-status"><span class="nsc-ruling-prefix">管理记录</span>${escHtml(msg)}</span>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-retry-btn">重试</button>
+          </div>
+        `;
+        strip.querySelector("#nsc-ruling-retry-btn")?.addEventListener("click", () => {
+          triggerRulingQuery(targetName, true);
+        });
+        return;
+      }
+
+      const rows = rulingState.rows || [];
+      if (rows.length === 0) {
+        strip.innerHTML = `
+          <div class="nsc-ruling-row">
+            <span class="nsc-ruling-status"><span class="nsc-ruling-prefix">管理记录</span>无记录</span>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn" title="重新请求最新记录">刷新</button>
+          </div>
+        `;
+        strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", () => {
+          triggerRulingQuery(targetName, true);
+        });
+        return;
+      }
+
+      const summary = summarizeRulingRows(rows);
+      const tagsHtml = summary.tags
+        .map((t) => {
+          const isAct = rulingState.drawerOpen && rulingState.filter === t.filter;
+          return `<button type="button" class="nsc-ruling-tag tone-${escHtml(t.tone)}${isAct ? " is-active" : ""}" data-rfilter="${escHtml(t.filter)}">${escHtml(t.label)}</button>`;
+        })
+        .join("");
+
+      const drawerRows = filterRulingRows(rows, rulingState.filter);
+      const drawerHtml = rulingState.drawerOpen
+        ? `
+          <div class="nsc-ruling-drawer is-open">
+            <div class="nsc-ruling-filter-row">
+              <div class="nsc-ruling-seg">
+                <button type="button" class="${rulingState.filter === "all" ? "is-active" : ""}" data-dfilter="all">全部 (${rows.length})</button>
+                <button type="button" class="${rulingState.filter === "punish" ? "is-active" : ""}" data-dfilter="punish">处罚 (${summary.punishCount})</button>
+                <button type="button" class="${rulingState.filter === "reward" ? "is-active" : ""}" data-dfilter="reward">奖励 (${summary.rewardCount})</button>
+              </div>
+              <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-collapse">收起</button>
+            </div>
+            <div class="nsc-ruling-list">
+              ${drawerRows.length === 0
+                ? `<div class="nsc-ruling-status" style="padding:8px 4px;">该分类下暂无记录</div>`
+                : drawerRows.map((r, idx) => `
+                  <div class="nsc-ruling-item">
+                    <div class="nsc-ruling-item-top">
+                      <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> <span style="color:var(--nsc-muted);">#${escHtml(r.recordId || "-")}</span></span>
+                      <span class="nsc-ruling-time" title="${escHtml(r.beijingTime || "")}">${escHtml(r.beijingTime || r.relTime || "-")}</span>
+                    </div>
+                    <div>原因：${escHtml(r.reasonText)}</div>
+                    <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}</div>
+                    <div class="nsc-ruling-post-row">
+                      ${r.postTarget
+                        ? `<button type="button" class="nsc-ruling-post-btn" data-rpost-idx="${idx}">打开涉事帖${r.postTarget.floorId !== "" ? ` #${escHtml(r.postTarget.floorId)}` : ""}</button>
+                           <a href="${escHtml(r.postTarget.href)}" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--nsc-muted);text-decoration:none;">原帖 ↗</a>`
+                        : `<span style="font-size:11px;color:var(--nsc-muted);">无关联帖子</span>`}
+                    </div>
+                  </div>
+                `).join("")}
+            </div>
+          </div>
+        `
+        : "";
+
+      strip.innerHTML = `
+        <div class="nsc-ruling-row">
+          <div class="nsc-ruling-tags">
+            <span class="nsc-ruling-prefix">管理记录</span>
+            ${tagsHtml}
+          </div>
+          <div class="nsc-ruling-ops">
+            ${rulingState.error === "rate_limited" ? `<span class="nsc-ruling-status" style="font-size:10.5px;">冷却 ${rulingState.retryAfter}s</span>` : ""}
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-toggle-btn">${rulingState.drawerOpen ? "收起" : `明细 (${rows.length})`}</button>
+            <button type="button" class="nsc-ruling-link-btn" id="nsc-ruling-ref-btn">${rulingState.status === "loading" ? "..." : "刷新"}</button>
+          </div>
+        </div>
+        <div class="nsc-ruling-hover-tip" id="nsc-ruling-hover-tip"></div>
+        ${drawerHtml}
+      `;
+
+      const hoverTip = strip.querySelector("#nsc-ruling-hover-tip");
+      const showHoverPreview = (filterKey) => {
+        if (!hoverTip || rulingState.drawerOpen) return;
+        const previewList = filterRulingRows(rows, filterKey).slice(0, 4);
+        if (previewList.length === 0) return;
+        hoverTip.innerHTML = `
+          ${previewList.map((r) => `
+            <div class="nsc-ruling-hover-item">
+              <div style="display:flex;justify-content:space-between;gap:8px;">
+                <span><span class="nsc-ruling-kind ${escHtml(r.kind)}">${escHtml(r.kindLabel)}</span> #${escHtml(r.recordId || "-")}</span>
+                <span class="nsc-ruling-time">${escHtml(r.beijingTime || r.relTime || "")}</span>
+              </div>
+              <div>原因：${escHtml(r.reasonText)}</div>
+              <div style="color:var(--nsc-muted);">处理：${escHtml(r.cleanActions)}${r.postTarget ? ` · 涉事 ${escHtml(r.postTarget.label)}` : ""}</div>
+            </div>
+          `).join("")}
+          <div style="margin-top:5px;font-size:10.5px;color:var(--nsc-accent);">点击标签可展开完整明细并跳转涉事帖</div>
+        `;
+        hoverTip.classList.add("is-open");
+      };
+      const hideHoverPreview = () => {
+        if (hoverTip) hoverTip.classList.remove("is-open");
+      };
+
+      strip.querySelectorAll(".nsc-ruling-tag").forEach((btn) => {
+        const fKey = btn.dataset.rfilter || "all";
+        btn.addEventListener("mouseenter", () => showHoverPreview(fKey));
+        btn.addEventListener("click", () => {
+          hideHoverPreview();
+          if (rulingState.drawerOpen && rulingState.filter === fKey) {
+            rulingState.drawerOpen = false;
+          } else {
+            rulingState.drawerOpen = true;
+            rulingState.filter = fKey;
+          }
+          renderRulingStrip(info);
+        });
+      });
+      strip.addEventListener("mouseleave", hideHoverPreview);
+
+      strip.querySelector("#nsc-ruling-toggle-btn")?.addEventListener("click", () => {
+        hideHoverPreview();
+        rulingState.drawerOpen = !rulingState.drawerOpen;
+        renderRulingStrip(info);
+      });
+      strip.querySelector("#nsc-ruling-collapse")?.addEventListener("click", () => {
+        rulingState.drawerOpen = false;
+        renderRulingStrip(info);
+      });
+      strip.querySelector("#nsc-ruling-ref-btn")?.addEventListener("click", () => {
+        hideHoverPreview();
+        triggerRulingQuery(targetName, true);
+      });
+      strip.querySelectorAll("[data-dfilter]").forEach((b) => {
+        b.addEventListener("click", () => {
+          rulingState.filter = b.dataset.dfilter || "all";
+          renderRulingStrip(info);
+        });
+      });
+      strip.querySelectorAll("[data-rpost-idx]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const item = drawerRows[Number(b.dataset.rpostIdx)];
+          if (!item || !item.postTarget) return;
+          backdrop.classList.remove("is-open");
+          openPostInChat({
+            postId: item.postTarget.postId,
+            url: item.postTarget.href,
+            title: `帖子 #${item.postTarget.postId}`,
+            targetFloor: item.postTarget.floorId,
+          });
+        });
+      });
+    };
+
+    const triggerRulingQuery = async (targetName, force = false) => {
+      const cleanName = String(targetName || "").trim();
+      if (!cleanName || cleanName === "Seeker") return;
+      if (!force && rulingState.targetName === cleanName && rulingState.status !== "idle") return;
+      rulingState.targetName = cleanName;
+      rulingState.status = "loading";
+      rulingState.error = "";
+      renderRulingStrip({ name: cleanName });
+
+      const res = await fetchUserRulingRecords(cleanName, force);
+      if (modalSeq !== _profileModalSeq || !backdrop.classList.contains("is-open")) return;
+      if (res && res.ok) {
+        rulingState.status = "ready";
+        rulingState.rows = Array.isArray(res.rows) ? res.rows : [];
+        rulingState.error = "";
+      } else {
+        rulingState.error = (res && res.error) || "query_failed";
+        rulingState.retryAfter = (res && res.retryAfter) || 0;
+        rulingState.rows = Array.isArray(res && res.rows) ? res.rows : [];
+        rulingState.status = rulingState.rows.length > 0 ? "ready" : "error";
+      }
+      renderRulingStrip({ name: cleanName });
+    };
 
     const renderModal = (info, loading) => {
       const friendActive = isFriend(info.name);
@@ -734,6 +974,7 @@
               <div style="font-size:12px;color:var(--nsc-muted);">ID: ${info.uid || "-"} · ${info.level} · 加入 ${info.days}${loading ? " (读取中...)" : ""}</div>
             </div>
           </div>
+          <div class="nsc-ruling-strip" id="nsc-p-ruling-strip"></div>
           <div class="nsc-profile-stats">
             <div><div class="nsc-stat-val">${info.legs}</div><div class="nsc-stat-lbl">鸡腿</div></div>
             <div><div class="nsc-stat-val">${info.stars}</div><div class="nsc-stat-lbl">星辰</div></div>
@@ -811,13 +1052,15 @@
         renderModal(info, false);
         renderRightBody();
       });
+      renderRulingStrip(info);
     };
 
     backdrop.classList.add("is-open");
+    const initName = userObj.author || userObj.name || "Seeker";
     renderModal(
       {
         uid: userObj.uid || "",
-        name: userObj.author || userObj.name || "Seeker",
+        name: initName,
         avatar: userObj.avatar || "",
         level: userObj.level || "--",
         days: "--",
@@ -831,13 +1074,20 @@
       },
       true
     );
+    if (state.rulingAutoQuery && initName && initName !== "Seeker") {
+      triggerRulingQuery(initName, false);
+    }
 
-    const fullInfo = await fetchUserProfile(userObj.uid, userObj.author || userObj.name);
+    const fullInfo = await fetchUserProfile(userObj.uid, initName);
+    if (modalSeq !== _profileModalSeq) return;
     if (fullInfo && userObj.uid) {
       syncUserBadgeToChatDom(userObj.uid, fullInfo);
     }
     if (backdrop.classList.contains("is-open")) {
       renderModal(fullInfo, false);
+      if (state.rulingAutoQuery && fullInfo && fullInfo.name && fullInfo.name !== "Seeker" && rulingState.status === "idle") {
+        triggerRulingQuery(fullInfo.name, false);
+      }
       if (fullInfo && fullInfo.uid) {
         preloadUserSpace(fullInfo);
       }

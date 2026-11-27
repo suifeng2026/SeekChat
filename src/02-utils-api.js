@@ -283,12 +283,50 @@
   }
 
   function detectCurrentUser() {
-    const el = document.querySelector("#nsk-right-panel-container .user-card .Username, .nsc-right-user .Username");
+    const el = document.querySelector("#nsk-right-panel-container .user-card .Username, .nsc-right-user .Username, .menu a.Username[href*=\"/space/\"]");
     if (el) {
-      state.currentUser = el.textContent.trim();
+      const name = el.textContent.trim();
       const m = (el.getAttribute("href") || "").match(/\/space\/(\d+)/);
+      if (name) state.currentUser = name;
       if (m) state.currentUserId = Number(m[1]);
+      if (name || m) {
+        const nextViewer = { username: state.currentUser || "", uid: state.currentUserId ? String(state.currentUserId) : "" };
+        if (
+          !state.seekViewerCache ||
+          state.seekViewerCache.username !== nextViewer.username ||
+          state.seekViewerCache.uid !== nextViewer.uid
+        ) {
+          state.seekViewerCache = nextViewer;
+          scheduleSaveJson(LS.SEEK_VIEWER_CACHE, nextViewer);
+        }
+      }
     }
+  }
+
+  function getSeekViewerIdentity() {
+    detectCurrentUser();
+    if (state.currentUser || state.currentUserId) {
+      return {
+        username: state.currentUser || "",
+        uid: state.currentUserId ? String(state.currentUserId) : "",
+      };
+    }
+    const exact = document.querySelector('.menu a.Username[href*="/space/"]');
+    if (exact) {
+      const username = (exact.textContent || "").trim();
+      const m = (exact.getAttribute("href") || "").match(/\/space\/(\d+)/);
+      const v = { username, uid: m ? m[1] : "" };
+      if (v.username || v.uid) {
+        state.seekViewerCache = v;
+        scheduleSaveJson(LS.SEEK_VIEWER_CACHE, v);
+        return v;
+      }
+    }
+    const cached = state.seekViewerCache || loadJson(LS.SEEK_VIEWER_CACHE, {});
+    if (cached && (cached.username || cached.uid)) {
+      return { username: String(cached.username || ""), uid: String(cached.uid || "") };
+    }
+    return { username: "", uid: "" };
   }
 
   function isFriend(name) {
@@ -1192,5 +1230,298 @@
     rootEl.querySelectorAll(
       '[id^="hanabi-"], [class*="hanabi-"], read-frog, [data-wxt-shadow-root], .nsc-hover-bar, .nsc-copy-code-btn'
     ).forEach((n) => n.remove());
+  }
+
+  const JUMP_WHITELIST = new Set([
+    "github.com",
+    "gitlab.com",
+    "docker.com",
+    "mozilla.org",
+    "stackoverflow.com",
+    "t.me",
+    "bilibili.com",
+    "youtube.com",
+    "twitter.com",
+    "facebook.com",
+    "wikipedia.org",
+    "google.com",
+    "nodeseek.com",
+    "nodehatch.com",
+    "namatra.de",
+    "deepflood.com",
+    "nodequality.com",
+  ]);
+
+  function isJumpWhitelisted(targetUrl) {
+    try {
+      const host = new URL(targetUrl).hostname.toLowerCase();
+      const parts = host.split(".");
+      const rootDomain = parts.length >= 2 ? parts.slice(-2).join(".") : host;
+      return JUMP_WHITELIST.has(host) || JUMP_WHITELIST.has(rootDomain);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function parseJumpTargetUrl(rawHref) {
+    if (!rawHref) return null;
+    try {
+      const parsed = new URL(rawHref, location.origin);
+      const host = parsed.hostname.toLowerCase();
+      const isNodeSeek = host === "www.nodeseek.com" || host === "nodeseek.com";
+      if (!isNodeSeek || parsed.pathname !== "/jump") return null;
+      let to = parsed.searchParams.get("to") || "";
+      if (!to) return null;
+      if (/^https?%3A/i.test(to)) {
+        try { to = decodeURIComponent(to); } catch (_) {}
+      }
+      const targetParsed = new URL(to);
+      if (targetParsed.protocol !== "http:" && targetParsed.protocol !== "https:") return null;
+      return {
+        rawHref,
+        targetUrl: targetParsed.toString(),
+        host: targetParsed.hostname,
+        isWhitelisted: isJumpWhitelisted(targetParsed.toString()),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function formatUtcMsToBeijingStr(utcMs) {
+    if (!utcMs || Number.isNaN(utcMs)) return "";
+    const bj = new Date(utcMs + 8 * 3600000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${bj.getUTCFullYear()}-${pad(bj.getUTCMonth() + 1)}-${pad(bj.getUTCDate())} ${pad(bj.getUTCHours())}:${pad(bj.getUTCMinutes())}:${pad(bj.getUTCSeconds())}`;
+  }
+
+  function parseRulingPostTarget(postUrl) {
+    if (!postUrl || typeof postUrl !== "string") return null;
+    const m = postUrl.match(/\/post-(\d+)(?:-(\d+))?(?:#(-?\d+))?/);
+    if (!m) return null;
+    const pid = m[1];
+    if (!pid || Number(pid) <= 0) return null;
+    const page = m[2] && Number(m[2]) > 0 ? m[2] : "1";
+    const floorRaw = m[3];
+    const floorId = floorRaw !== undefined && Number(floorRaw) >= 0 ? String(floorRaw) : "";
+    const href = `/post-${pid}-${page}${floorId !== "" ? `#${floorId}` : ""}`;
+    return {
+      postId: pid,
+      page,
+      floorId,
+      href,
+      label: floorId !== "" ? `帖子 #${pid} · #${floorId}` : `帖子 #${pid}`,
+    };
+  }
+
+  function normalizeRulingRow(row) {
+    const rawActions = String((row && row.actions_text) || "").replace(/\s*\n+\s*/g, " ").trim();
+    const timeRe = /(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)/i;
+    const tm = rawActions.match(timeRe);
+    let utcMs = 0;
+    let beijingTime = "";
+    let relTime = "";
+    let cleanActions = rawActions;
+    if (tm) {
+      const month = Number(tm[1]);
+      const day = Number(tm[2]);
+      const year = Number(tm[3]);
+      let hour = Number(tm[4]);
+      const minute = Number(tm[5]);
+      const second = Number(tm[6]);
+      const ampm = tm[7].toUpperCase();
+      if (ampm === "PM" && hour < 12) hour += 12;
+      if (ampm === "AM" && hour === 12) hour = 0;
+      utcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+      beijingTime = formatUtcMsToBeijingStr(utcMs);
+      relTime = formatRelativeFromMs(utcMs);
+      cleanActions = rawActions.replace(tm[0], "").replace(/\s{2,}/g, " ").trim();
+    }
+    const delta = typeof (row && row.action_points_delta) === "number" ? row.action_points_delta : null;
+    const cat = String((row && row.action_category) || "");
+    let kind = "other";
+    let kindLabel = "管理";
+    if (cat === "punish" || (delta !== null && delta < 0) || (row && row.action_mute_days > 0)) {
+      kind = "punish";
+      kindLabel = "处罚";
+    } else if (cat === "reward" || (delta !== null && delta > 0)) {
+      kind = "reward";
+      kindLabel = "奖励";
+    }
+    return {
+      recordId: row && row.record_id ? String(row.record_id) : "",
+      reasonText: String((row && row.reason_text) || "-").trim(),
+      cleanActions: cleanActions || "-",
+      pointsDelta: delta,
+      muteDays: typeof (row && row.action_mute_days) === "number" ? row.action_mute_days : 0,
+      moveTo: row && row.action_move_to ? String(row.action_move_to) : "",
+      readLevel: row && row.action_read_level !== null && row.action_read_level !== undefined ? row.action_read_level : null,
+      postTarget: parseRulingPostTarget(row && row.post_url),
+      utcMs,
+      beijingTime,
+      relTime,
+      kind,
+      kindLabel,
+    };
+  }
+
+  function summarizeRulingRows(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    let punishCount = 0;
+    let rewardCount = 0;
+    let otherCount = 0;
+    let muteCount = 0;
+    let muteDaysTotal = 0;
+    let moveCount = 0;
+    let pointsDeltaNet = 0;
+    let hasPoints = false;
+
+    for (const r of list) {
+      if (r.kind === "punish") punishCount += 1;
+      else if (r.kind === "reward") rewardCount += 1;
+      else otherCount += 1;
+      if (r.muteDays > 0) {
+        muteCount += 1;
+        muteDaysTotal += r.muteDays;
+      }
+      if (r.moveTo) moveCount += 1;
+      if (typeof r.pointsDelta === "number") {
+        hasPoints = true;
+        pointsDeltaNet += r.pointsDelta;
+      }
+    }
+
+    const tags = [];
+    if (punishCount > 0) tags.push({ key: "punish", label: `处罚 ${punishCount}`, tone: "danger", filter: "punish" });
+    if (muteCount > 0) tags.push({ key: "mute", label: muteDaysTotal > 0 ? `禁言 ${muteCount} (${muteDaysTotal}天)` : `禁言 ${muteCount}`, tone: "warn", filter: "mute" });
+    if (moveCount > 0) tags.push({ key: "move", label: `移版 ${moveCount}`, tone: "indigo", filter: "move" });
+    if (rewardCount > 0) tags.push({ key: "reward", label: `奖励 ${rewardCount}`, tone: "success", filter: "reward" });
+    if (otherCount > 0 && punishCount === 0 && rewardCount === 0) {
+      tags.push({ key: "other", label: `记录 ${otherCount}`, tone: "neutral", filter: "all" });
+    }
+    if (hasPoints && pointsDeltaNet !== 0) {
+      tags.push({
+        key: "points",
+        label: `鸡腿 ${pointsDeltaNet > 0 ? "+" : ""}${pointsDeltaNet}`,
+        tone: pointsDeltaNet < 0 ? "warn" : "success",
+        filter: "all",
+      });
+    }
+    return {
+      total: list.length,
+      punishCount,
+      rewardCount,
+      otherCount,
+      muteCount,
+      muteDaysTotal,
+      moveCount,
+      pointsDeltaNet,
+      tags,
+    };
+  }
+
+  let _rulingCooldownUntil = 0;
+  const _rulingInFlight = new Map();
+  const RULING_CACHE_TTL_MS = 60 * 60 * 1000;
+
+  function gmFetchJson(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest !== "function") {
+        reject(new Error("GM_xmlhttpRequest 不可用"));
+        return;
+      }
+      GM_xmlhttpRequest({
+        method: "GET",
+        url,
+        timeout: 12000,
+        headers: { Accept: "application/json" },
+        onload: (res) => {
+          try {
+            const json = JSON.parse(res.responseText || "{}");
+            resolve(json);
+          } catch (err) {
+            reject(err);
+          }
+        },
+        onerror: () => reject(new Error("网络请求失败")),
+        ontimeout: () => reject(new Error("请求超时")),
+      });
+    });
+  }
+
+  async function fetchUserRulingRecords(username, force = false) {
+    const cleanName = String(username || "").trim();
+    if (!cleanName || cleanName === "Seeker") {
+      return { ok: false, error: "invalid_username", rows: [] };
+    }
+    const cacheKey = cleanName.toLowerCase();
+    const cached = state.rulingCache && state.rulingCache[cacheKey];
+    if (!force && cached && Array.isArray(cached.rows) && Date.now() - (cached.ts || 0) < RULING_CACHE_TTL_MS) {
+      return { ok: true, rows: cached.rows, fromCache: true, ts: cached.ts };
+    }
+
+    if (_rulingCooldownUntil > Date.now()) {
+      const waitSec = Math.max(1, Math.ceil((_rulingCooldownUntil - Date.now()) / 1000));
+      return {
+        ok: false,
+        error: "rate_limited",
+        retryAfter: waitSec,
+        rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
+        fromCache: Boolean(cached && Array.isArray(cached.rows)),
+      };
+    }
+
+    if (!force && _rulingInFlight.has(cacheKey)) {
+      return _rulingInFlight.get(cacheKey);
+    }
+
+    const reqPromise = (async () => {
+      const viewer = getSeekViewerIdentity();
+      const url = `https://api.xxboxx.de/api/seek?username=${encodeURIComponent(cleanName)}&limit=100000&viewer=${encodeURIComponent(viewer.username)}&viewer_uid=${encodeURIComponent(viewer.uid)}`;
+      let data = null;
+      try {
+        const resp = await fetch(url, { cache: "no-store" });
+        data = await resp.json();
+      } catch (_) {
+        data = await gmFetchJson(url);
+      }
+
+      if (!data || !data.ok) {
+        if (data && data.error === "rate_limited") {
+          const retryAfter = Math.max(5, Number(data.retry_after) || 60);
+          _rulingCooldownUntil = Date.now() + retryAfter * 1000;
+          return {
+            ok: false,
+            error: "rate_limited",
+            retryAfter,
+            rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
+            fromCache: Boolean(cached && Array.isArray(cached.rows)),
+          };
+        }
+        throw new Error((data && data.error) || "query_failed");
+      }
+
+      const normalized = (Array.isArray(data.rows) ? data.rows : []).map(normalizeRulingRow);
+      state.rulingCache[cacheKey] = {
+        ts: Date.now(),
+        username: cleanName,
+        rows: normalized,
+      };
+      pruneTimedCache(state.rulingCache, 180, 120);
+      scheduleSaveJson(LS.RULING_CACHE, state.rulingCache);
+      return { ok: true, rows: normalized, fromCache: false, ts: Date.now() };
+    })()
+      .catch((err) => ({
+        ok: false,
+        error: err && err.message ? err.message : "query_failed",
+        rows: cached && Array.isArray(cached.rows) ? cached.rows : [],
+        fromCache: Boolean(cached && Array.isArray(cached.rows)),
+      }))
+      .finally(() => {
+        _rulingInFlight.delete(cacheKey);
+      });
+
+    _rulingInFlight.set(cacheKey, reqPromise);
+    return reqPromise;
   }
 

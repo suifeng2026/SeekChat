@@ -483,6 +483,8 @@
         if (hubBd) hubBd.classList.remove("is-open");
         const spaceBd = document.getElementById("nsc-space-backdrop");
         if (spaceBd) spaceBd.classList.remove("is-open");
+        const jumpBd = document.getElementById("nsc-jump-backdrop");
+        if (jumpBd) jumpBd.classList.remove("is-open");
         if (niBackdrop) niBackdrop.classList.remove("is-open");
       } else if (lightbox.classList.contains("is-open")) {
         if (e.key === "ArrowLeft") stepLightbox(-1);
@@ -498,6 +500,101 @@
       if (e.target === backdrop) backdrop.classList.remove("is-open");
     });
     document.body.appendChild(backdrop);
+
+    const jumpBackdrop = document.createElement("div");
+    jumpBackdrop.id = "nsc-jump-backdrop";
+    jumpBackdrop.innerHTML = `
+      <div class="nsc-jump-modal" role="dialog" aria-label="外链跳转提醒">
+        <div class="nsc-jump-head">
+          <span class="nsc-jump-title">外链跳转提醒</span>
+          <button type="button" class="nsc-jump-close" id="nsc-jump-close" title="关闭 (Esc)">✕</button>
+        </div>
+        <div class="nsc-jump-body">
+          <div class="nsc-jump-hint">即将离开 NodeSeek 前往以下外部站点，请确认目标域名与地址安全：</div>
+          <div class="nsc-jump-host">
+            <span class="nsc-jump-host-name" id="nsc-jump-host-name"></span>
+            <button type="button" class="nsc-mac-btn" id="nsc-jump-copy" style="height:24px;padding:0 9px;font-size:11px;">复制链接</button>
+          </div>
+          <div class="nsc-jump-url-box" id="nsc-jump-url-box"></div>
+        </div>
+        <div class="nsc-jump-foot">
+          <label class="nsc-jump-skip-label">
+            <input type="checkbox" id="nsc-jump-skip-chk" />
+            <span>以后直接跳转，不再提醒</span>
+          </label>
+          <div style="display:inline-flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-mac-btn" id="nsc-jump-cancel">取消</button>
+            <button type="button" class="nsc-mac-btn primary" id="nsc-jump-go">立即前往</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(jumpBackdrop);
+
+    let _pendingJumpUrl = "";
+    const closeJumpModal = () => {
+      jumpBackdrop.classList.remove("is-open");
+      _pendingJumpUrl = "";
+    };
+    const openJumpConfirmModal = (parsed) => {
+      if (!parsed || !parsed.targetUrl) return;
+      _pendingJumpUrl = parsed.targetUrl;
+      const hostEl = jumpBackdrop.querySelector("#nsc-jump-host-name");
+      const urlEl = jumpBackdrop.querySelector("#nsc-jump-url-box");
+      const skipChk = jumpBackdrop.querySelector("#nsc-jump-skip-chk");
+      const copyBtn = jumpBackdrop.querySelector("#nsc-jump-copy");
+      if (hostEl) hostEl.textContent = parsed.host || parsed.targetUrl;
+      if (urlEl) urlEl.textContent = parsed.targetUrl;
+      if (skipChk) skipChk.checked = false;
+      if (copyBtn) copyBtn.textContent = "复制链接";
+      jumpBackdrop.classList.add("is-open");
+    };
+
+    jumpBackdrop.addEventListener("click", (e) => {
+      if (e.target === jumpBackdrop) closeJumpModal();
+    });
+    jumpBackdrop.querySelector("#nsc-jump-close").addEventListener("click", closeJumpModal);
+    jumpBackdrop.querySelector("#nsc-jump-cancel").addEventListener("click", closeJumpModal);
+    jumpBackdrop.querySelector("#nsc-jump-copy").addEventListener("click", async (e) => {
+      if (!_pendingJumpUrl) return;
+      const ok = await copyTextToClipboard(_pendingJumpUrl);
+      if (ok) {
+        e.target.textContent = "已复制";
+        setTimeout(() => { e.target.textContent = "复制链接"; }, 1200);
+      }
+    });
+    jumpBackdrop.querySelector("#nsc-jump-go").addEventListener("click", () => {
+      const target = _pendingJumpUrl;
+      const skip = Boolean(jumpBackdrop.querySelector("#nsc-jump-skip-chk")?.checked);
+      if (skip) {
+        state.jumpLinkMode = "direct";
+        localStorage.setItem(LS.JUMP_MODE, "direct");
+        if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
+      }
+      closeJumpModal();
+      if (target) window.open(target, "_blank", "noopener,noreferrer");
+    });
+
+    if (!document.documentElement.dataset.nscJumpBound) {
+      document.documentElement.dataset.nscJumpBound = "1";
+      document.addEventListener("click", (e) => {
+        if (!state.enabled || !document.body.classList.contains("nsc-app-active")) return;
+        if (state.jumpLinkMode === "native") return;
+        const a = e.target && e.target.closest ? e.target.closest('a[href*="/jump"]') : null;
+        if (!a) return;
+        if (!a.closest("#nsc-app-shell, #nsc-profile-backdrop, #nsc-space-backdrop, #nsc-hub-backdrop")) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        const parsed = parseJumpTargetUrl(a.getAttribute("href") || a.href);
+        if (!parsed) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (state.jumpLinkMode === "direct" || parsed.isWhitelisted) {
+          window.open(parsed.targetUrl, "_blank", "noopener,noreferrer");
+          return;
+        }
+        openJumpConfirmModal(parsed);
+      });
+    }
 
     const npBackdrop = document.createElement("div");
     npBackdrop.id = "nsc-newpost-backdrop";
