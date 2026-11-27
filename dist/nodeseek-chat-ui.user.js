@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.0
+// @version      7.22.1
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -291,7 +291,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.0",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.1",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -2619,52 +2619,61 @@
       }
 
       #nsc-lightbox {
-        position: fixed; inset: 0; z-index: 10000;
+        position: fixed; inset: 0; z-index: 10000; box-sizing: border-box;
         background: rgba(12, 14, 18, 0.88); backdrop-filter: blur(14px);
-        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
-        user-select: none;
+        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 14px 16px;
+        user-select: none; overflow: hidden;
       }
       #nsc-lightbox.is-open { display: flex; }
       .nsc-lightbox-stage {
         position: relative; display: flex; align-items: center; justify-content: center;
-        width: 96vw; height: 82vh; overflow: hidden;
+        flex: 1 1 auto; width: 100%; min-height: 0; overflow: hidden;
       }
       .nsc-lb-frame {
         position: relative; display: inline-flex; align-items: center; justify-content: center;
-        max-width: calc(94vw - 128px); max-height: 82vh;
+        max-width: calc(100% - 136px); max-height: 100%;
       }
+      .nsc-lb-frame.is-zoomed { max-width: none; max-height: none; }
       #nsc-lightbox img {
-        max-width: calc(94vw - 128px); max-height: 82vh; object-fit: contain;
+        width: auto; height: auto; min-width: 0; min-height: 0; padding: 0; border: none; margin: 0;
+        max-width: 100%; max-height: calc(100vh - 110px); object-fit: contain;
         border-radius: 10px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
-        transform-origin: center center; will-change: transform; display: block;
+        transform-origin: center center; display: block;
       }
-      #nsc-lightbox img.is-pannable { cursor: grab; }
-      #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
+      #nsc-lightbox img.is-zoomed-raw {
+        max-width: none !important; max-height: none !important;
+      }
       .nsc-lb-nav {
         position: absolute; top: 50%; transform: translateY(-50%); z-index: 10002;
         width: 44px; height: 44px; border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.28); background: rgba(20,22,28,0.68);
+        border: 1px solid rgba(255,255,255,0.28); background: rgba(20,22,28,0.72);
+        backdrop-filter: blur(8px);
         color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
         transition: background 0.14s ease, transform 0.14s ease;
       }
-      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.82); transform: translateY(-50%) scale(1.06); }
-      .nsc-lb-nav.prev { right: calc(100% + 14px); left: auto; }
-      .nsc-lb-nav.next { left: calc(100% + 14px); right: auto; }
+      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.86); transform: translateY(-50%) scale(1.06); }
+      .nsc-lb-nav.prev { left: 14px; right: auto; }
+      .nsc-lb-nav.next { right: 14px; left: auto; }
       .nsc-lb-nav:disabled { opacity: 0.22; cursor: default; }
       .nsc-lb-top-badge {
-        position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10002;
+        position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10002;
         padding: 4px 14px; border-radius: 999px;
         background: rgba(20, 22, 28, 0.72); border: 1px solid rgba(255,255,255,0.18);
         color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: 0.3px;
+        pointer-events: none;
       }
       .nsc-lb-top-badge:empty { display: none; }
-      .nsc-lightbox-bar { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .nsc-lightbox-bar {
+        flex: 0 0 auto; margin-top: 10px;
+        display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+      }
       .nsc-lightbox-btn {
         padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.22);
         background: rgba(255,255,255,0.12); color: #fff !important; font-size: 12px;
         text-decoration: none !important; cursor: pointer;
       }
       .nsc-lightbox-btn:hover { background: rgba(255,255,255,0.22); }
+      .nsc-lightbox-btn.is-active { background: var(--nsc-accent); border-color: var(--nsc-accent); }
       .nsc-lightbox-count { font-size: 12px; color: rgba(255,255,255,0.78); font-weight: 600; padding: 0 4px; }
 
       #nsc-profile-backdrop {
@@ -3602,7 +3611,9 @@
             grid.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--nsc-muted);">暂无已上传图片</div>`;
             return;
           }
-          for (const im of imgs.slice(0, 30)) {
+          const sliced = imgs.slice(0, 30);
+          const galleryUrls = sliced.map((im) => (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`);
+          for (const im of sliced) {
             const directUrl = (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`;
             const md = (im.links && im.links.markdown) || `![image](${directUrl})`;
             const card = document.createElement("div");
@@ -3622,7 +3633,7 @@
             niImg.addEventListener("click", insFn);
             card.querySelectorAll("button")[0].addEventListener("click", insFn);
             card.querySelectorAll("button")[1].addEventListener("click", () => {
-              if (typeof openLightbox === "function") openLightbox(directUrl);
+              if (typeof openLightbox === "function") openLightbox(directUrl, galleryUrls);
             });
             card.querySelectorAll("button")[2].addEventListener("click", async () => {
               if (!im.image_id) return;
@@ -3918,18 +3929,18 @@
     lightbox.innerHTML = `
       <div id="nsc-lb-top-badge" class="nsc-lb-top-badge"></div>
       <div class="nsc-lightbox-stage" id="nsc-lb-stage">
+        <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
         <div class="nsc-lb-frame" id="nsc-lb-frame">
-          <button type="button" id="nsc-lb-prev" class="nsc-lb-nav prev" title="上一张 (←)">‹</button>
           <img id="nsc-lightbox-img" src="" alt="原图" />
-          <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
         </div>
+        <button type="button" id="nsc-lb-next" class="nsc-lb-nav next" title="下一张 (→)">›</button>
       </div>
       <div class="nsc-lightbox-bar">
         <button type="button" id="nsc-lb-bar-prev" class="nsc-lightbox-btn">‹ 上一张</button>
         <span id="nsc-lb-count" class="nsc-lightbox-count"></span>
         <button type="button" id="nsc-lb-bar-next" class="nsc-lightbox-btn">下一张 ›</button>
         <button type="button" id="nsc-lb-zoom" class="nsc-lightbox-btn" title="点击重置适应窗口">100%</button>
-        <button type="button" id="nsc-lb-orig" class="nsc-lightbox-btn" title="按原图 1:1 尺寸查看并可拖拽">原图 1:1</button>
+        <button type="button" id="nsc-lb-orig" class="nsc-lightbox-btn" title="按原图 1:1 真实像素查看并可拖拽">原图 1:1</button>
         <button type="button" id="nsc-lb-copy" class="nsc-lightbox-btn">复制链接</button>
         <a id="nsc-lightbox-raw" class="nsc-lightbox-btn" href="" target="_blank" rel="noopener noreferrer">新窗口打开原图</a>
         <button type="button" id="nsc-lightbox-close" class="nsc-lightbox-btn">关闭 (Esc)</button>
@@ -3937,14 +3948,67 @@
     `;
     const lbImg = lightbox.querySelector("#nsc-lightbox-img");
     const lbStage = lightbox.querySelector("#nsc-lb-stage");
+    const lbFrame = lightbox.querySelector("#nsc-lb-frame");
+    const getFitScale = () => {
+      const nw = lbImg.naturalWidth || 0;
+      const nh = lbImg.naturalHeight || 0;
+      if (!nw || !nh) return 1;
+      const sr = lbStage.getBoundingClientRect();
+      const maxW = Math.max(200, (sr.width || window.innerWidth) - 136);
+      const maxH = Math.max(200, (sr.height || window.innerHeight - 110) - 8);
+      return Math.min(1, maxW / nw, maxH / nh);
+    };
     const applyLbTransform = () => {
-      lbImg.style.transform = `translate(${_lbTx}px, ${_lbTy}px) scale(${_lbScale})`;
-      lbImg.classList.toggle("is-pannable", _lbScale > 1.02);
-      lbImg.style.cursor = _lbScale > 1.02 ? (_lbDragging ? "grabbing" : "grab") : "zoom-in";
+      const nw = lbImg.naturalWidth || 0;
+      const nh = lbImg.naturalHeight || 0;
+      const fitScale = getFitScale();
       const zBtn = document.getElementById("nsc-lb-zoom");
+      const origBtn = document.getElementById("nsc-lb-orig");
+
+      if (_lbZoomMode === "fit" || !nw || !nh) {
+        _lbScale = fitScale;
+        _lbTx = 0;
+        _lbTy = 0;
+        lbImg.classList.remove("is-zoomed-raw", "is-pannable");
+        if (lbFrame) lbFrame.classList.remove("is-zoomed");
+        lbImg.style.width = "";
+        lbImg.style.height = "";
+        lbImg.style.transform = "";
+        lbImg.style.setProperty("cursor", "zoom-in", "important");
+        if (zBtn) zBtn.textContent = `${nw > 0 ? Math.round(fitScale * 100) : 100}%`;
+        if (origBtn) {
+          origBtn.classList.remove("is-active");
+          origBtn.textContent = "原图 1:1";
+        }
+        return;
+      }
+
+      const targetW = Math.max(24, Math.round(nw * _lbScale));
+      const targetH = Math.max(24, Math.round(nh * _lbScale));
+      lbImg.classList.add("is-zoomed-raw");
+      if (lbFrame) lbFrame.classList.add("is-zoomed");
+      lbImg.style.width = `${targetW}px`;
+      lbImg.style.height = `${targetH}px`;
+
+      const sr = lbStage.getBoundingClientRect();
+      const canPan = targetW > (sr.width - 12) || targetH > (sr.height - 12) || _lbScale > fitScale + 0.02;
+      lbImg.classList.toggle("is-pannable", canPan);
+      lbImg.style.transform = `translate3d(${_lbTx}px, ${_lbTy}px, 0)`;
+      lbImg.style.setProperty("cursor", canPan ? (_lbDragging ? "grabbing" : "grab") : "zoom-out", "important");
       if (zBtn) zBtn.textContent = `${Math.round(_lbScale * 100)}%`;
+      if (origBtn) {
+        const isOrig = Math.abs(_lbScale - 1) < 0.02;
+        origBtn.classList.toggle("is-active", isOrig);
+        origBtn.textContent = isOrig ? "适应窗口" : "原图 1:1";
+      }
     };
     _applyLbTransform = applyLbTransform;
+    lbImg.addEventListener("load", () => {
+      if (lightbox.classList.contains("is-open")) applyLbTransform();
+    });
+    window.addEventListener("resize", () => {
+      if (lightbox.classList.contains("is-open") && _lbZoomMode === "fit") applyLbTransform();
+    });
 
     lightbox.addEventListener("click", (e) => {
       if (e.target === lightbox || e.target === lbStage || e.target.id === "nsc-lightbox-close") {
@@ -3953,9 +4017,20 @@
     });
     lbStage.addEventListener("wheel", (e) => {
       e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.18 : -0.18;
-      _lbScale = Math.min(5, Math.max(0.4, Number((_lbScale + delta).toFixed(2))));
-      if (_lbScale <= 1) { _lbTx = 0; _lbTy = 0; }
+      if (!lbImg.naturalWidth) return;
+      const fitScale = getFitScale();
+      const baseScale = _lbZoomMode === "fit" ? fitScale : _lbScale;
+      const factor = e.deltaY < 0 ? 1.16 : 1 / 1.16;
+      const minScale = Math.min(0.25, fitScale);
+      const next = Math.min(5, Math.max(minScale, Number((baseScale * factor).toFixed(3))));
+      if (e.deltaY > 0 && next <= fitScale + 0.015) {
+        _lbZoomMode = "fit";
+        _lbTx = 0;
+        _lbTy = 0;
+      } else {
+        _lbZoomMode = Math.abs(next - 1) < 0.02 ? "orig" : "custom";
+        _lbScale = next;
+      }
       applyLbTransform();
     }, { passive: false });
 
@@ -3973,7 +4048,7 @@
       const nx = e.clientX - _lbStartX;
       const ny = e.clientY - _lbStartY;
       if (Math.abs(nx - _lbTx) > 3 || Math.abs(ny - _lbTy) > 3) _lbMoved = true;
-      if (_lbScale > 1.02) {
+      if (lbImg.classList.contains("is-pannable")) {
         _lbTx = nx;
         _lbTy = ny;
         applyLbTransform();
@@ -3988,13 +4063,19 @@
     lbImg.addEventListener("click", (e) => {
       e.stopPropagation();
       if (_lbMoved) return;
-      if (_lbScale > 1.02) {
-        _lbScale = 1;
+      if (_lbZoomMode !== "fit") {
+        _lbZoomMode = "fit";
         _lbTx = 0;
         _lbTy = 0;
       } else {
-        const natScale = lbImg.naturalWidth && lbImg.clientWidth ? Math.min(3.5, Math.max(1.5, lbImg.naturalWidth / lbImg.clientWidth)) : 1.8;
-        _lbScale = Number(natScale.toFixed(2));
+        const fitScale = getFitScale();
+        if (fitScale < 0.95) {
+          _lbZoomMode = "orig";
+          _lbScale = 1;
+        } else {
+          _lbZoomMode = "custom";
+          _lbScale = 2;
+        }
         _lbTx = 0;
         _lbTy = 0;
       }
@@ -4002,23 +4083,21 @@
     });
     lightbox.querySelector("#nsc-lb-zoom").addEventListener("click", (e) => {
       e.stopPropagation();
-      _lbScale = 1;
+      _lbZoomMode = "fit";
       _lbTx = 0;
       _lbTy = 0;
       applyLbTransform();
     });
     lightbox.querySelector("#nsc-lb-orig").addEventListener("click", (e) => {
       e.stopPropagation();
-      if (_lbScale > 1.02) {
-        _lbScale = 1;
-        _lbTx = 0;
-        _lbTy = 0;
+      if (_lbZoomMode !== "fit" && Math.abs(_lbScale - 1) < 0.02) {
+        _lbZoomMode = "fit";
       } else {
-        const natScale = lbImg.naturalWidth && lbImg.clientWidth ? Math.min(4, Math.max(1.6, lbImg.naturalWidth / lbImg.clientWidth)) : 2;
-        _lbScale = Number(natScale.toFixed(2));
-        _lbTx = 0;
-        _lbTy = 0;
+        _lbZoomMode = "orig";
+        _lbScale = 1;
       }
+      _lbTx = 0;
+      _lbTy = 0;
       applyLbTransform();
     });
     lightbox.querySelector("#nsc-lb-prev").addEventListener("click", (e) => {
@@ -4670,6 +4749,7 @@
 
   let _lbGallery = [];
   let _lbIndex = 0;
+  let _lbZoomMode = "fit";
   let _lbScale = 1;
   let _lbTx = 0;
   let _lbTy = 0;
@@ -4692,10 +4772,10 @@
     if (!lb || !img || !raw || _lbGallery.length === 0) return;
     _lbIndex = Math.max(0, Math.min(idx, _lbGallery.length - 1));
     const src = _lbGallery[_lbIndex];
+    _lbZoomMode = "fit";
     _lbScale = 1;
     _lbTx = 0;
     _lbTy = 0;
-    if (typeof _applyLbTransform === "function") _applyLbTransform();
     img.src = src;
     raw.href = src;
     const multi = _lbGallery.length > 1;
@@ -4707,6 +4787,7 @@
     if (barPrev) { barPrev.style.display = multi ? "inline-block" : "none"; barPrev.disabled = _lbIndex <= 0; }
     if (barNext) { barNext.style.display = multi ? "inline-block" : "none"; barNext.disabled = _lbIndex >= _lbGallery.length - 1; }
     lb.classList.add("is-open");
+    if (typeof _applyLbTransform === "function") _applyLbTransform();
   }
 
   function stepLightbox(delta) {
@@ -4722,7 +4803,8 @@
       const imgs = Array.from(document.querySelectorAll("#nsc-chat-messages img.nsc-zoomable-img")).map(
         (el) => el.currentSrc || el.getAttribute("src") || ""
       ).filter(Boolean);
-      _lbGallery = imgs.length > 0 ? Array.from(new Set(imgs)) : [src];
+      const uniqueImgs = Array.from(new Set(imgs));
+      _lbGallery = uniqueImgs.includes(src) ? uniqueImgs : [src];
     }
     const idx = _lbGallery.indexOf(src);
     showLightboxAt(idx >= 0 ? idx : 0);

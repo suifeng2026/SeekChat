@@ -1203,52 +1203,61 @@
       }
 
       #nsc-lightbox {
-        position: fixed; inset: 0; z-index: 10000;
+        position: fixed; inset: 0; z-index: 10000; box-sizing: border-box;
         background: rgba(12, 14, 18, 0.88); backdrop-filter: blur(14px);
-        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
-        user-select: none;
+        display: none; flex-direction: column; align-items: center; justify-content: center; padding: 14px 16px;
+        user-select: none; overflow: hidden;
       }
       #nsc-lightbox.is-open { display: flex; }
       .nsc-lightbox-stage {
         position: relative; display: flex; align-items: center; justify-content: center;
-        width: 96vw; height: 82vh; overflow: hidden;
+        flex: 1 1 auto; width: 100%; min-height: 0; overflow: hidden;
       }
       .nsc-lb-frame {
         position: relative; display: inline-flex; align-items: center; justify-content: center;
-        max-width: calc(94vw - 128px); max-height: 82vh;
+        max-width: calc(100% - 136px); max-height: 100%;
       }
+      .nsc-lb-frame.is-zoomed { max-width: none; max-height: none; }
       #nsc-lightbox img {
-        max-width: calc(94vw - 128px); max-height: 82vh; object-fit: contain;
+        width: auto; height: auto; min-width: 0; min-height: 0; padding: 0; border: none; margin: 0;
+        max-width: 100%; max-height: calc(100vh - 110px); object-fit: contain;
         border-radius: 10px; box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55); cursor: zoom-in;
-        transform-origin: center center; will-change: transform; display: block;
+        transform-origin: center center; display: block;
       }
-      #nsc-lightbox img.is-pannable { cursor: grab; }
-      #nsc-lightbox img.is-pannable:active { cursor: grabbing; }
+      #nsc-lightbox img.is-zoomed-raw {
+        max-width: none !important; max-height: none !important;
+      }
       .nsc-lb-nav {
         position: absolute; top: 50%; transform: translateY(-50%); z-index: 10002;
         width: 44px; height: 44px; border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.28); background: rgba(20,22,28,0.68);
+        border: 1px solid rgba(255,255,255,0.28); background: rgba(20,22,28,0.72);
+        backdrop-filter: blur(8px);
         color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
         transition: background 0.14s ease, transform 0.14s ease;
       }
-      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.82); transform: translateY(-50%) scale(1.06); }
-      .nsc-lb-nav.prev { right: calc(100% + 14px); left: auto; }
-      .nsc-lb-nav.next { left: calc(100% + 14px); right: auto; }
+      .nsc-lb-nav:hover:not(:disabled) { background: rgba(0,122,255,0.86); transform: translateY(-50%) scale(1.06); }
+      .nsc-lb-nav.prev { left: 14px; right: auto; }
+      .nsc-lb-nav.next { right: 14px; left: auto; }
       .nsc-lb-nav:disabled { opacity: 0.22; cursor: default; }
       .nsc-lb-top-badge {
-        position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10002;
+        position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10002;
         padding: 4px 14px; border-radius: 999px;
         background: rgba(20, 22, 28, 0.72); border: 1px solid rgba(255,255,255,0.18);
         color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: 0.3px;
+        pointer-events: none;
       }
       .nsc-lb-top-badge:empty { display: none; }
-      .nsc-lightbox-bar { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .nsc-lightbox-bar {
+        flex: 0 0 auto; margin-top: 10px;
+        display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
+      }
       .nsc-lightbox-btn {
         padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.22);
         background: rgba(255,255,255,0.12); color: #fff !important; font-size: 12px;
         text-decoration: none !important; cursor: pointer;
       }
       .nsc-lightbox-btn:hover { background: rgba(255,255,255,0.22); }
+      .nsc-lightbox-btn.is-active { background: var(--nsc-accent); border-color: var(--nsc-accent); }
       .nsc-lightbox-count { font-size: 12px; color: rgba(255,255,255,0.78); font-weight: 600; padding: 0 4px; }
 
       #nsc-profile-backdrop {

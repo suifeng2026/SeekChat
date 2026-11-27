@@ -331,7 +331,9 @@
             grid.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--nsc-muted);">暂无已上传图片</div>`;
             return;
           }
-          for (const im of imgs.slice(0, 30)) {
+          const sliced = imgs.slice(0, 30);
+          const galleryUrls = sliced.map((im) => (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`);
+          for (const im of sliced) {
             const directUrl = (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`;
             const md = (im.links && im.links.markdown) || `![image](${directUrl})`;
             const card = document.createElement("div");
@@ -351,7 +353,7 @@
             niImg.addEventListener("click", insFn);
             card.querySelectorAll("button")[0].addEventListener("click", insFn);
             card.querySelectorAll("button")[1].addEventListener("click", () => {
-              if (typeof openLightbox === "function") openLightbox(directUrl);
+              if (typeof openLightbox === "function") openLightbox(directUrl, galleryUrls);
             });
             card.querySelectorAll("button")[2].addEventListener("click", async () => {
               if (!im.image_id) return;
