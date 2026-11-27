@@ -1,10 +1,11 @@
 {
   "name": "nodeseek-chat-ui",
-  "version": "7.20.0",
+  "version": "7.20.1",
   "description": "SeekChat — NodeSeek 零依赖模块化 macOS 四栏群聊工作台油猴脚本",
   "author": "80hou",
   "scripts": {
     "build": "node build.mjs",
+    "build:local": "node build.mjs --local",
     "check": "node --check dist/nodeseek-chat-ui.user.js"
   },
   "license": "MIT"

@@ -567,8 +567,21 @@
     }
   }
 
-  const SEEKCHAT_META_URL = "https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.meta.js";
-  const SEEKCHAT_USERJS_URL = "https://raw.githubusercontent.com/suifeng2026/SeekChat/main/dist/nodeseek-chat-ui.user.js";
+  function getScriptUpdateTargets() {
+    const script = typeof GM_info !== "undefined" && GM_info.script ? GM_info.script : null;
+    const metaStr = typeof GM_info !== "undefined" && GM_info.scriptMetaStr ? GM_info.scriptMetaStr : "";
+    const parseMetaField = (field) => {
+      const m = metaStr.match(new RegExp(`^\\s*//\\s*@${field}\\s+([^\\s]+)`, "im"));
+      return m ? m[1].trim() : "";
+    };
+    const updateUrl = String((script && script.updateURL) || parseMetaField("updateURL") || "").trim();
+    const downloadUrl = String((script && script.downloadURL) || parseMetaField("downloadURL") || updateUrl || "").trim();
+    const isHttp = (u) => /^https?:\/\//i.test(u);
+    return {
+      metaUrl: isHttp(updateUrl) ? updateUrl : (isHttp(downloadUrl) ? downloadUrl : ""),
+      downloadUrl: isHttp(downloadUrl) ? downloadUrl : (isHttp(updateUrl) ? updateUrl : ""),
+    };
+  }
 
   function compareSemver(a, b) {
     const pa = String(a || "0").replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
@@ -586,7 +599,20 @@
   function renderUpdateButton() {
     const btn = document.getElementById("nsc-update-btn");
     if (!btn) return;
+    const targets = getScriptUpdateTargets();
     const u = state.updateInfo;
+    if (!targets.metaUrl) {
+      btn.classList.remove("has-update");
+      btn.disabled = true;
+      btn.style.opacity = "0.72";
+      btn.style.cursor = "default";
+      btn.title = `当前 v${u.current} · 未配置 @updateURL（本地/独立构建模式，已禁用远程覆盖更新）`;
+      btn.innerHTML = `<span class="nsc-nav-left">${ICONS.update}<span>本地 v${escHtml(u.current)}</span></span>`;
+      return;
+    }
+    btn.disabled = false;
+    btn.style.opacity = "";
+    btn.style.cursor = "";
     btn.classList.toggle("has-update", Boolean(u.hasUpdate));
     if (u.checking) {
       btn.title = `正在检查更新（当前 v${u.current}）...`;
@@ -613,7 +639,10 @@
   }
 
   function openSeekChatUpdateInstall() {
-    const url = `${SEEKCHAT_USERJS_URL}?t=${Date.now()}`;
+    const targets = getScriptUpdateTargets();
+    if (!targets.downloadUrl) return;
+    const sep = targets.downloadUrl.includes("?") ? "&" : "?";
+    const url = `${targets.downloadUrl}${sep}t=${Date.now()}`;
     try {
       if (typeof GM_openInTab === "function") {
         GM_openInTab(url, { active: true, insert: true, setParent: true });
@@ -650,10 +679,23 @@
 
   async function checkSeekChatUpdate(manual = false) {
     const u = state.updateInfo;
+    const targets = getScriptUpdateTargets();
+    if (!targets.metaUrl) {
+      u.hasUpdate = false;
+      u.checking = false;
+      renderUpdateButton();
+      return;
+    }
     if (u.checking) return;
     if (!manual) {
       const cached = loadJson(LS.UPDATE_CHECK, null);
-      if (cached && cached.ts && Date.now() - cached.ts < UPDATE_CHECK_INTERVAL_MS && cached.latest) {
+      if (
+        cached &&
+        cached.ts &&
+        cached.metaUrl === targets.metaUrl &&
+        Date.now() - cached.ts < UPDATE_CHECK_INTERVAL_MS &&
+        cached.latest
+      ) {
         u.latest = cached.latest;
         u.hasUpdate = compareSemver(cached.latest, u.current) > 0;
         renderUpdateButton();
@@ -665,7 +707,8 @@
     u.justChecked = false;
     renderUpdateButton();
     try {
-      const url = manual ? `${SEEKCHAT_META_URL}?_t=${Date.now()}` : SEEKCHAT_META_URL;
+      const sep = targets.metaUrl.includes("?") ? "&" : "?";
+      const url = manual ? `${targets.metaUrl}${sep}_t=${Date.now()}` : targets.metaUrl;
       const text = await fetchRemoteMetaText(url);
       const m = text.match(/\/\/\s*@version\s+([^\s]+)/i);
       const latest = m ? m[1].trim() : "";
@@ -673,7 +716,7 @@
       u.latest = latest;
       u.hasUpdate = compareSemver(latest, u.current) > 0;
       u.justChecked = manual && !u.hasUpdate;
-      saveJson(LS.UPDATE_CHECK, { latest, ts: Date.now() });
+      saveJson(LS.UPDATE_CHECK, { latest, metaUrl: targets.metaUrl, ts: Date.now() });
       if (u.justChecked) {
         setTimeout(() => {
           u.justChecked = false;

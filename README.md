@@ -70,7 +70,11 @@
 ## 本地构建
 
 ```bash
+# 发布构建（生成 dist/nodeseek-chat-ui.user.js 与 .meta.js）
 node build.mjs
+
+# 本地/魔改构建（生成防上游覆盖的 dist/nodeseek-chat-ui.local.user.js）
+node build.mjs --local
 ```
 
 构建会自动生成 `dist/nodeseek-chat-ui.user.js` 与 `dist/nodeseek-chat-ui.meta.js`，并执行 `node --check` 语法校验。

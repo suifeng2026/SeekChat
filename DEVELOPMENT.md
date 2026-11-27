@@ -1,6 +1,6 @@
 # SeekChat 二次开发与架构规范文档
 
-版本基线：`v7.20.0`  
+版本基线：`v7.20.1`  
 目标平台：NodeSeek (`https://www.nodeseek.com/*`) Tampermonkey / Violentmonkey 用户脚本  
 构建产物：`dist/nodeseek-chat-ui.user.js`、`dist/nodeseek-chat-ui.meta.js`
 
@@ -49,16 +49,35 @@ SeekChat 是一个将 NodeSeek 原生论坛界面重构为 macOS 风格四栏桌
 ### 构建与校验命令
 
 ```bash
+# 标准发布构建：输出 dist/nodeseek-chat-ui.user.js 与 .meta.js（保留上游更新地址）
 node build.mjs
+
+# 本地/魔改构建：输出 dist/nodeseek-chat-ui.local.user.js（自动剥离 @updateURL/@downloadURL 并隔离命名空间）
+node build.mjs --local
 ```
 
 `build.mjs` 执行以下确定性步骤：
-1. 读取 `src/00-meta.js` 作为文件头并同步写入 `dist/nodeseek-chat-ui.meta.js`。
+1. 读取 `src/00-meta.js` 作为文件头；若指定 `--local`（或环境变量 `SEEKCHAT_LOCAL=1`），自动移除 `@updateURL`/`@downloadURL` 并在 `@name` 与 `@namespace` 中注入本地隔离标识。
 2. 扫描 `src/` 下所有匹配 `/^\d{2}-.*\.js$/` 且非 `00-meta.js` 的文件并按文件名升序拼接至 `(function () { "use strict"; ... })();`。
-3. 写入 `dist/nodeseek-chat-ui.user.js`（若本地存在 `Temp` 同步目录则一并覆盖）。
-4. 调用 `node --check dist/nodeseek-chat-ui.user.js` 完成语法静态校验。
+3. 写入对应产物（标准模式下同步生成 `dist/nodeseek-chat-ui.meta.js`；若本地存在 `Temp` 同步目录则一并覆盖）。
+4. 调用 `node --check` 完成语法静态校验。
 
 修改 `src/` 后必须重新执行 `node build.mjs`，并同步提交 `src/*`、`package.json` 与 `dist/*`。
+
+---
+
+## 2.1 Fork 与二次开发防覆盖规范（必读）
+
+为避免二次开发或本地魔改版本在原仓库更新后被 Tampermonkey 静默覆盖，项目遵循**更新源单一权威源（Single Source of Truth）**原则：
+
+1. **应用内更新检测自动跟随脚本头**  
+   `02-utils-api.js` 中的 `getScriptUpdateTargets()` 动态读取当前实例 `GM_info.script` 的 `updateURL` / `downloadURL`，不再硬编码官方仓库地址。若未配置远程更新地址，工作台左下角自动显示为「本地 vX.Y.Z」并禁用远程覆写检测。
+2. **两种二次开发场景的操作约定**：
+   - **本地魔改自用（不公开发布）**：执行 `npm run build:local`（即 `node build.mjs --local`）生成 `dist/nodeseek-chat-ui.local.user.js` 安装。该构建自动移除更新地址并改写 `@name` / `@namespace`，既可与原版共存，也不会被上游新版覆盖或污染 Git 跟踪目录。
+   - **Fork 后独立发布分发**：修改 `src/00-meta.js` 中的 `@name`、`@namespace`、`@updateURL` 与 `@downloadURL` 为你的自有仓库地址即可（`02-utils-api.js` 会自动同步指向你的仓库）；如需与原版完全隔离本地缓存，可在 `01-config-icons.js` 中为 `LS` 常量值统一增加前缀。
+3. **基线版本与正式/预览分支建议**：
+   - 使用 Git 标签（如 `v7.20.1`）在 GitHub Releases 固定基线版本源码包，方便二开者按 Tag 检出稳定基线；
+   - 正式版保留在 `main` 分支（`@updateURL` 指向 `main/dist/`），日常实验性改动可在 `dev` 分支或 GitHub Pre-release 验证稳定后再合并至 `main`。
 
 ---
 
@@ -169,7 +188,7 @@ node build.mjs
 
 ## 6. 功能演进路线图
 
-### 6.1 已完成能力（截至 `v7.20.0`）
+### 6.1 已完成能力（截至 `v7.20.1`）
 
 - **桌面化工作台与外观系统**：四栏 macOS 布局、浅色 / 黄昏护眼 / 分层暗黑三态切换、无闪屏启动守卫、零残留退出恢复。
 - **频道浏览与进度追踪**：全部版块瀑布流加载、关键词搜索防抖与自动补页、未读/新回复增量标记、已读足迹本地记录、未读优先排序。
