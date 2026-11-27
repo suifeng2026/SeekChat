@@ -72,7 +72,7 @@
   }
 
   function getEffectiveThemeMode() {
-    if (state.themeMode === "dusk") return "dusk";
+    if (state.themeMode && state.themeMode !== "auto") return state.themeMode;
     return document.body.classList.contains("dark-layout") ? "dark" : "light";
   }
 
@@ -84,40 +84,66 @@
   }
 
   function applyThemeMode(mode) {
-    state.themeMode = mode;
-    localStorage.setItem(LS.THEME, mode);
+    const targetMode = String(mode || "auto");
+    state.themeMode = targetMode;
+    localStorage.setItem(LS.THEME, targetMode);
     const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
     const isDark = document.body.classList.contains("dark-layout");
+    const regTheme = (state.registry.themes || []).find((t) => t.id === targetMode);
+    const effId = targetMode === "auto" ? (isDark ? "dark" : "light") : targetMode;
 
-    if (mode === "dusk") {
-      document.body.classList.add("nsc-theme-dusk");
-      if (isDark) {
-        if (headThemeBtn) headThemeBtn.click();
-        else {
-          document.body.classList.remove("dark-layout");
-          document.body.classList.add("light-layout");
-        }
-      }
-    } else if (mode === "dark") {
-      document.body.classList.remove("nsc-theme-dusk");
-      if (!isDark) {
-        if (headThemeBtn) headThemeBtn.click();
-        else {
-          document.body.classList.remove("light-layout");
-          document.body.classList.add("dark-layout");
-        }
-      }
-    } else {
-      document.body.classList.remove("nsc-theme-dusk");
-      if (isDark) {
-        if (headThemeBtn) headThemeBtn.click();
-        else {
-          document.body.classList.remove("dark-layout");
-          document.body.classList.add("light-layout");
-        }
+    document.body.dataset.nscTheme = effId;
+    document.body.classList.toggle("nsc-theme-dusk", effId === "dusk");
+
+    const wantDark = regTheme ? regTheme.baseScheme === "dark" : effId === "dark";
+    if (targetMode !== "auto" && wantDark !== isDark) {
+      state._suppressThemeObsUntil = Date.now() + 260;
+      if (headThemeBtn) headThemeBtn.click();
+      else {
+        document.body.classList.toggle("dark-layout", wantDark);
+        document.body.classList.toggle("light-layout", !wantDark);
       }
     }
     syncThemeButtons();
+    if (typeof renderUserHubIfOpen === "function" && state.hubTab === "workbench") {
+      renderUserHubIfOpen();
+    }
+  }
+
+  function openWorkbenchBase(section = "theme") {
+    state.workbenchSection = section || "theme";
+    if (typeof openUserHubModal === "function") openUserHubModal("workbench");
+  }
+
+  function renderRightTabs() {
+    const host = document.getElementById("nsc-right-tabs");
+    if (!host) return;
+    const tabs = getOrderedRightTabs(false);
+    if (tabs.length > 0 && !tabs.some((t) => t.id === state.rightTab)) {
+      state.rightTab = tabs[0].id;
+      localStorage.setItem(LS.RIGHT_TAB, state.rightTab);
+    }
+    host.innerHTML = tabs
+      .map((t) => `<button type="button" class="nsc-right-tab ${state.rightTab === t.id ? "is-active" : ""}" data-rtab="${escHtml(t.id)}">${escHtml(t.name)}</button>`)
+      .join("");
+    host.querySelectorAll(".nsc-right-tab").forEach((b) => {
+      b.addEventListener("click", () => {
+        state.rightTab = b.dataset.rtab;
+        localStorage.setItem(LS.RIGHT_TAB, state.rightTab);
+        host.querySelectorAll(".nsc-right-tab").forEach((x) => x.classList.toggle("is-active", x === b));
+        if (state.rightTab === "hot" && !state.hotCache[state.hotTab] && !state.hotLoading) {
+          fetchHotPosts(state.hotTab);
+        } else if (state.rightTab === "friends" && !state.followData.loaded && !state.followData.loading) {
+          fetchFansOrFollow("follow");
+        } else if (state.rightTab === "fans" && !state.fansData.loaded && !state.fansData.loading) {
+          fetchFansOrFollow("fans");
+        } else if (state.rightTab === "blacklist" && !state.blockListState.loaded && !state.blockListState.loading) {
+          fetchServerBlockList(false);
+        } else {
+          renderRightBody();
+        }
+      });
+    });
   }
 
   function buildShellIfNeeded() {
@@ -152,6 +178,9 @@
           <a class="nsc-nav-item group-admin" id="nsc-nf-links" href="/award" target="_blank" rel="noopener noreferrer" title="友站链接">
             <span class="nsc-nav-left">${ICONS.links}<span>友链</span></span>
           </a>
+          <button type="button" class="nsc-nav-item" id="nsc-nav-base-btn" title="工作台主题、分区皮肤、组件调序与自定义基座">
+            <span class="nsc-nav-left">${ICONS.sliders}<span>基座</span></span>
+          </button>
           <button type="button" class="nsc-nav-item nsc-update-btn" id="nsc-update-btn" title="检查脚本更新">
             <span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>
           </button>
@@ -162,8 +191,9 @@
         <div class="nsc-list-head">
           <div class="nsc-list-title-row">
             <span id="nsc-channel-title">首页</span>
-            <div style="display:inline-flex;align-items:center;gap:6px;">
+            <div style="display:inline-flex;align-items:center;gap:5px;">
               <span id="nsc-channel-sub" style="font-size:11px;color:var(--nsc-muted);font-weight:500;"></span>
+              <button type="button" class="nsc-pane-gear-btn" id="nsc-list-gear-btn" title="帖子区皮肤与导航设置">${ICONS.sliders}</button>
               <button type="button" class="nsc-newpost-btn" id="nsc-newpost-open-btn" title="发布新主题帖">+ 发帖</button>
             </div>
           </div>
@@ -180,6 +210,7 @@
             <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
           </div>
           <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
+          <button type="button" class="nsc-pane-gear-btn" id="nsc-chat-gear-btn" title="聊天区排版、表情与底图设置">${ICONS.sliders}</button>
         </div>
         <div class="nsc-chat-messages" id="nsc-chat-messages">
           <div class="nsc-empty-state">点击左侧任意版块与帖子主题，即可在中间窗口阅读与讨论</div>
@@ -197,11 +228,9 @@
           <a class="nsc-quick-btn" id="nsc-qb-lucky" href="/lucky" target="_blank" rel="noopener noreferrer" title="幸运抽奖">抽奖</a>
           <a class="nsc-quick-btn" id="nsc-qb-invite" href="/invite" target="_blank" rel="noopener noreferrer" title="邀请好友">邀请</a>
         </div>
-        <div class="nsc-right-tabs">
-          <button type="button" class="nsc-right-tab ${state.rightTab === "hot" ? "is-active" : ""}" data-rtab="hot">热榜</button>
-          <button type="button" class="nsc-right-tab ${state.rightTab === "friends" ? "is-active" : ""}" data-rtab="friends">好友</button>
-          <button type="button" class="nsc-right-tab ${state.rightTab === "fans" ? "is-active" : ""}" data-rtab="fans">粉丝</button>
-          <button type="button" class="nsc-right-tab ${state.rightTab === "blacklist" ? "is-active" : ""}" data-rtab="blacklist">黑名单</button>
+        <div style="display:flex;align-items:center;gap:4px;margin:7px 10px 3px;">
+          <div class="nsc-right-tabs" id="nsc-right-tabs" style="margin:0;flex:1;"></div>
+          <button type="button" class="nsc-pane-gear-btn" id="nsc-right-gear-btn" title="右栏组件顺序、开关与皮肤设置">${ICONS.sliders}</button>
         </div>
         <div class="nsc-right-scroll" id="nsc-right-scroll"></div>
       </aside>
@@ -540,24 +569,11 @@
       }, 140);
     });
 
-    shell.querySelectorAll(".nsc-right-tab").forEach((b) => {
-      b.addEventListener("click", () => {
-        state.rightTab = b.dataset.rtab;
-        localStorage.setItem(LS.RIGHT_TAB, state.rightTab);
-        shell.querySelectorAll(".nsc-right-tab").forEach((x) => x.classList.toggle("is-active", x === b));
-        if (state.rightTab === "hot" && !state.hotCache[state.hotTab] && !state.hotLoading) {
-          fetchHotPosts(state.hotTab);
-        } else if (state.rightTab === "friends" && !state.followData.loaded && !state.followData.loading) {
-          fetchFansOrFollow("follow");
-        } else if (state.rightTab === "fans" && !state.fansData.loaded && !state.fansData.loading) {
-          fetchFansOrFollow("fans");
-        } else if (state.rightTab === "blacklist" && !state.blockListState.loaded && !state.blockListState.loading) {
-          fetchServerBlockList(false);
-        } else {
-          renderRightBody();
-        }
-      });
-    });
+    renderRightTabs();
+    shell.querySelector("#nsc-nav-base-btn")?.addEventListener("click", () => openWorkbenchBase("theme"));
+    shell.querySelector("#nsc-list-gear-btn")?.addEventListener("click", () => openWorkbenchBase("skin"));
+    shell.querySelector("#nsc-chat-gear-btn")?.addEventListener("click", () => openWorkbenchBase("chat"));
+    shell.querySelector("#nsc-right-gear-btn")?.addEventListener("click", () => openWorkbenchBase("layout"));
 
     const topicScroll = shell.querySelector("#nsc-topic-scroll");
     let topicScrollRaf = 0;
@@ -597,11 +613,13 @@
     shell.querySelectorAll("#nsc-theme-seg .nsc-theme-btn").forEach((b) => {
       b.addEventListener("click", () => applyThemeMode(b.dataset.theme));
     });
-    if (state.themeMode === "dusk") {
-      applyThemeMode("dusk");
+    if (state.themeMode && state.themeMode !== "auto") {
+      applyThemeMode(state.themeMode);
     } else {
       syncThemeButtons();
     }
+    applyPaneSkinsToDom();
+    applyChatPrefsToDom();
 
     const updBtn = shell.querySelector("#nsc-update-btn");
     if (updBtn) {
@@ -623,20 +641,48 @@
     if (!btnEl || !textareaEl || !hostEl) return;
     const pop = document.createElement("div");
     pop.className = "nsc-fb-exp-pop";
-    let activeId = STICKER_GROUPS[0].id;
-    pop.innerHTML = `
-      <div class="nsc-fb-exp-tabs">
-        ${STICKER_GROUPS.map((g) => `<button type="button" class="nsc-fb-exp-tab ${g.id === activeId ? "is-active" : ""}" data-sg="${g.id}">${g.label}</button>`).join("")}
-      </div>
-      <div class="nsc-fb-exp-grid"></div>
-    `;
+    pop.innerHTML = `<div class="nsc-fb-exp-tabs"></div><div class="nsc-fb-exp-grid"></div>`;
+    const tabsEl = pop.querySelector(".nsc-fb-exp-tabs");
     const grid = pop.querySelector(".nsc-fb-exp-grid");
+    let activeId = "";
+
     const renderStickers = (gid) => {
-      activeId = gid;
-      pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => t.classList.toggle("is-active", t.dataset.sg === gid));
-      const grp = STICKER_GROUPS.find((g) => g.id === gid) || STICKER_GROUPS[0];
+      const groups = getEffectiveStickerGroups();
+      const grp = groups.find((g) => g.id === gid) || groups[0];
+      if (!grp) return;
+      activeId = grp.id;
+      tabsEl.innerHTML = groups
+        .map((g) => `<button type="button" class="nsc-fb-exp-tab ${g.id === activeId ? "is-active" : ""}" data-sg="${escHtml(g.id)}">${escHtml(g.label)}</button>`)
+        .join("");
+      tabsEl.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => {
+        t.addEventListener("click", (e) => {
+          e.stopPropagation();
+          renderStickers(t.dataset.sg);
+        });
+      });
       grid.innerHTML = "";
-      for (const file of grp.files) {
+      if (Array.isArray(grp.items)) {
+        for (const it of grp.items) {
+          if (!it || !it.url) continue;
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nsc-fb-exp-item";
+          b.title = it.name || it.url;
+          b.innerHTML = `<img src="${escHtml(it.url)}" loading="lazy" alt="" />`;
+          b.addEventListener("click", () => {
+            const md = `![${it.name || "sticker"}](${it.url})`;
+            const s = textareaEl.selectionStart || 0;
+            const e = textareaEl.selectionEnd || 0;
+            textareaEl.setRangeText(md, s, e, "end");
+            textareaEl.dispatchEvent(new Event("input", { bubbles: true }));
+            pop.classList.remove("is-open");
+            textareaEl.focus({ preventScroll: true });
+          });
+          grid.appendChild(b);
+        }
+        return;
+      }
+      for (const file of grp.files || []) {
         const codeNum = file.replace(/\.[^.]+$/, "");
         const shortcode = `:${grp.id}${codeNum}:`;
         const b = document.createElement("button");
@@ -655,15 +701,9 @@
         grid.appendChild(b);
       }
     };
-    pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => {
-      t.addEventListener("click", (e) => {
-        e.stopPropagation();
-        renderStickers(t.dataset.sg);
-      });
-    });
     btnEl.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (!grid.hasChildNodes()) renderStickers(activeId);
+      renderStickers(activeId);
       pop.classList.toggle("is-open");
     });
     document.addEventListener("click", (e) => {
@@ -1790,4 +1830,9 @@
       }
     }
   }
+
+  registerBubbleEnhancer({ id: "nsapp", priority: 10, run: enhanceNsApps });
+  registerBubbleEnhancer({ id: "magic-tabs", priority: 30, run: enhanceMagicTabs });
+  registerBubbleEnhancer({ id: "code-blocks", priority: 40, run: enhanceCodeBlocks });
+  registerBubbleEnhancer({ id: "images", priority: 50, run: processBubbleImages });
 

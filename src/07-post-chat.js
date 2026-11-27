@@ -1268,11 +1268,7 @@
         bq.classList.toggle("is-expanded");
       });
     }
-    enhanceNsApps(bubble);
-    linkifyFloorReferences(bubble);
-    enhanceMagicTabs(bubble);
-    enhanceCodeBlocks(bubble);
-    processBubbleImages(bubble);
+    runBubbleEnhancers(bubble, { isThread: false, isOpCard, obj });
 
     const reactionsEl = document.createElement("div");
     reactionsEl.className = "nsc-reactions";
@@ -1324,11 +1320,7 @@
         ti.querySelector(".nsc-msg-author").addEventListener("click", () => openUserProfileModal(ch));
         ti.querySelector(".nsc-floor-tag").addEventListener("click", () => jumpToFloor(ch.floorId));
         const tc = ti.querySelector(".nsc-thread-content");
-        enhanceNsApps(tc);
-        linkifyFloorReferences(tc);
-        enhanceMagicTabs(tc);
-        enhanceCodeBlocks(tc);
-        processBubbleImages(tc);
+        runBubbleEnhancers(tc, { isThread: true, isOpCard: false, obj: ch });
         const chReactions = ti.querySelector(".nsc-reactions");
         renderReactionPills(chReactions, ch, isNativePage);
         const chBar = buildHoverBar(ch, isNativePage, chReactions, true);
@@ -1565,4 +1557,6 @@
       msg.classList.toggle("is-hidden-filter", hide);
     }
   }
+
+  registerBubbleEnhancer({ id: "floor-ref", priority: 20, run: linkifyFloorReferences });
 

@@ -17,6 +17,11 @@
     AUTO_CHECKIN_MODE: "nsc_v7_auto_checkin_mode",
     AUTO_CHECKIN_DATE: "nsc_v7_auto_checkin_date",
     UPDATE_CHECK: "nsc_v7_update_check",
+    PANE_SKINS: "nsc_v7_pane_skins",
+    NAV_CONFIG: "nsc_v7_nav_config",
+    RIGHT_CONFIG: "nsc_v7_right_config",
+    CHAT_PREFS: "nsc_v7_chat_prefs",
+    CUSTOM_STICKERS: "nsc_v7_custom_stickers",
   };
 
   function isBrowsePath(pathname) {
@@ -91,6 +96,10 @@
     update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
     stardust: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 5.3L19.5 10l-5.3 2.2L12 17.5l-2.2-5.3L4.5 10l5.3-1.7L12 3z"/><path d="M19 16l.9 2.1L22 19l-2.1.9L19 22l-.9-2.1L16 19l2.1-.9L19 16z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
+    sliders: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`,
+    palette: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.6-10-8.6z"/></svg>`,
+    up: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`,
+    down: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -147,6 +156,20 @@
     { id: "expose", name: "曝光", icon: ICONS.expose, path: "/categories/expose" },
     { id: "inside", name: "内版", icon: ICONS.inside, path: "/categories/inside" },
     { id: "sandbox", name: "沙盒", icon: ICONS.sandbox, path: "/categories/sandbox" },
+  ];
+
+  const RIGHT_TABS = [
+    { id: "hot", name: "热榜" },
+    { id: "friends", name: "好友" },
+    { id: "fans", name: "粉丝" },
+    { id: "blacklist", name: "黑名单" },
+  ];
+
+  const PANE_SKIN_SPECS = [
+    { id: "nav", label: "导航区", selector: ".nsc-pane-nav", recSize: "360×1080 ~ 450×1440", ratio: "1:3 竖版" },
+    { id: "list", label: "帖子区", selector: ".nsc-pane-list", recSize: "600×1200 ~ 720×1440", ratio: "1:2 竖版" },
+    { id: "chat", label: "聊天底图", selector: ".nsc-pane-chat", recSize: "1600×1080 ~ 1920×1080", ratio: "16:9 / 3:2 宽幅" },
+    { id: "right", label: "个人信息区", selector: ".nsc-pane-right", recSize: "600×1200 ~ 720×1440", ratio: "1:2 竖版" },
   ];
 
 
@@ -213,12 +236,25 @@
     hubNotifSub: "reply-me",
     _lastRenderedHubTab: "",
     _hubFansMode: "fans",
+    workbenchSection: "theme",
+    paneSkins: loadJson(LS.PANE_SKINS, {}),
+    navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
+    rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
+    chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
+    customStickers: loadJson(LS.CUSTOM_STICKERS, []),
+    registry: {
+      themes: [],
+      hubTabs: [],
+      bubbleEnhancers: [],
+      userActions: [],
+      navItems: [],
+    },
     autoCheckin: localStorage.getItem(LS.AUTO_CHECKIN) === "1",
     autoCheckinMode: localStorage.getItem(LS.AUTO_CHECKIN_MODE) || "fixed",
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.20.2",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.21.0",
       latest: "",
       hasUpdate: false,
       checking: false,

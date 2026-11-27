@@ -199,7 +199,27 @@
         background: var(--nsc-bg-nav); backdrop-filter: blur(28px) saturate(180%);
         border-right: 1px solid var(--nsc-border);
         display: flex; flex-direction: column;
-        padding: 8px 7px 6px; gap: 2px; overflow-y: auto;
+        padding: 8px 7px 6px; gap: 2px; overflow: hidden;
+        position: relative; isolation: isolate;
+      }
+      .nsc-pane-list,
+      .nsc-pane-chat,
+      .nsc-pane-right {
+        position: relative; isolation: isolate; overflow: hidden;
+      }
+      .nsc-pane-nav::before,
+      .nsc-pane-list::before,
+      .nsc-pane-chat::before,
+      .nsc-pane-right::before {
+        content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+        background-image: var(--nsc-pane-bg-img, none);
+        background-size: var(--nsc-pane-bg-size, cover);
+        background-position: center center;
+        background-repeat: var(--nsc-pane-bg-repeat, no-repeat);
+        opacity: var(--nsc-pane-bg-opacity, 0);
+        filter: blur(var(--nsc-pane-bg-blur, 0px));
+        transform: scale(1.03);
+        transition: opacity 0.18s ease;
       }
       .nsc-mac-traffic {
         display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 1px 4px 6px 6px; flex: 0 0 auto;
@@ -226,7 +246,7 @@
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
       }
 
-      .nsc-nav-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+      .nsc-nav-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overflow-x: hidden; }
       .nsc-nav-item {
         width: 100%; box-sizing: border-box; flex: 1 1 0; min-height: 24px; max-height: 36px;
         padding: 0 9px; border-radius: 7px;
@@ -427,7 +447,7 @@
 
       .nsc-chat-messages {
         flex: 1; overflow-y: auto; padding: 14px 18px 18px;
-        display: flex; flex-direction: column; gap: 12px; position: relative;
+        display: flex; flex-direction: column; gap: var(--nsc-chat-msg-gap, 12px); position: relative;
       }
       .nsc-empty-state { margin: auto; text-align: center; color: var(--nsc-muted); padding: 26px; font-size: 13px; }
 
@@ -477,7 +497,7 @@
       .nsc-bubble {
         background: var(--nsc-bubble-other); color: var(--nsc-text);
         border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 14px 14px 14px 4px;
-        padding: 8px 13px; font-size: 13.5px; line-height: 1.55; word-break: break-word;
+        padding: 8px 13px; font-size: 13.5px; line-height: var(--nsc-chat-line-height, 1.55); word-break: break-word;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px rgba(0, 0, 0, 0.025);
         width: fit-content; max-width: 100%;
       }
@@ -506,7 +526,7 @@
       .nsc-bubble img.nsc-zoomable-img,
       .nsc-thread-content img,
       .nsc-thread-content img.nsc-zoomable-img {
-        max-width: min(100%, 480px) !important; max-height: 320px !important;
+        max-width: min(100%, var(--nsc-chat-img-max-w, 480px)) !important; max-height: var(--nsc-chat-img-max-h, 320px) !important;
         width: auto !important; height: auto !important; object-fit: contain;
         border-radius: 10px; display: block; margin: 6px 0; cursor: zoom-in;
         border: 1px solid var(--nsc-border); background: rgba(0, 0, 0, 0.02);
@@ -1543,6 +1563,67 @@
       }
       .nsc-vote-confirm-btns { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
+      /* 工作台共享基座配置中心与分区快捷入口 */
+      .nsc-pane-gear-btn {
+        width: 22px; height: 22px; padding: 0; border-radius: 6px;
+        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; flex: 0 0 22px; transition: all 0.12s ease;
+      }
+      .nsc-pane-gear-btn svg { width: 13px; height: 13px; }
+      .nsc-pane-gear-btn:hover { background: var(--nsc-hover); color: var(--nsc-accent); border-color: var(--nsc-border); }
+
+      .nsc-base-section {
+        margin-bottom: 12px; padding: 12px 14px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-base-title {
+        font-size: 13px; font-weight: 700; color: var(--nsc-text);
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        margin-bottom: 8px;
+      }
+      .nsc-base-sub { font-size: 11.5px; color: var(--nsc-muted); line-height: 1.45; margin-bottom: 10px; }
+      .nsc-base-grid-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; }
+      .nsc-base-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 9px; }
+      .nsc-base-theme-card {
+        display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
+        border-radius: 11px; border: 1px solid var(--nsc-border); background: var(--nsc-hover);
+        cursor: pointer; text-align: left; transition: all 0.13s ease; font-family: var(--mac-font);
+      }
+      .nsc-base-theme-card:hover { border-color: var(--nsc-accent); }
+      .nsc-base-theme-card.is-active {
+        border-color: var(--nsc-accent); background: var(--nsc-accent-soft);
+        box-shadow: 0 2px 8px rgba(0, 122, 255, 0.14);
+      }
+      .nsc-base-swatch-row { display: flex; align-items: center; gap: 4px; }
+      .nsc-base-swatch {
+        width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(128,128,128,0.28);
+        display: inline-block;
+      }
+      .nsc-base-ctrl-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        margin-top: 7px; font-size: 12px; color: var(--nsc-text);
+      }
+      .nsc-base-ctrl-row label { color: var(--nsc-muted); font-size: 11.5px; flex: 0 0 74px; }
+      .nsc-base-range { flex: 1; accent-color: var(--nsc-accent); cursor: pointer; }
+      .nsc-base-val { width: 46px; text-align: right; font-size: 11px; color: var(--nsc-muted); font-variant-numeric: tabular-nums; }
+      .nsc-base-order-list { display: flex; flex-direction: column; gap: 5px; }
+      .nsc-base-order-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 7px 10px; border-radius: 9px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-hover); font-size: 12.5px; color: var(--nsc-text);
+      }
+      .nsc-base-order-ops { display: inline-flex; align-items: center; gap: 5px; }
+      .nsc-base-sticker-preview {
+        display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+      }
+      .nsc-base-sticker-chip {
+        display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;
+        border-radius: 8px; border: 1px solid var(--nsc-border); background: var(--nsc-hover);
+        font-size: 11px; color: var(--nsc-text);
+      }
+      .nsc-base-sticker-chip img { width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
+
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
         100% { box-shadow: 0 0 0 0 transparent; }
@@ -1550,5 +1631,30 @@
       .nsc-flash .nsc-bubble { animation: nscFlash 1.5s ease; }
     `;
     document.head.appendChild(style);
+    if (typeof syncRegisteredThemesCss === "function") syncRegisteredThemesCss();
+  }
+
+  function syncRegisteredThemesCss() {
+    if (!document.head) return;
+    let st = document.getElementById("nsc-registered-themes-style");
+    if (!st) {
+      st = document.createElement("style");
+      st.id = "nsc-registered-themes-style";
+      document.head.appendChild(st);
+    }
+    const rules = [];
+    for (const theme of state.registry.themes || []) {
+      const safeId = String(theme.id || "").replace(/[^a-z0-9_-]/gi, "");
+      if (!safeId) continue;
+      const entries = Object.entries(theme.tokens || {});
+      if (entries.length > 0) {
+        const decls = entries.map(([k, v]) => `${k}: ${v};`).join(" ");
+        rules.push(`body.nsc-app-active[data-nsc-theme="${safeId}"] { ${decls} }`);
+      }
+      if (theme.extraCss) {
+        rules.push(String(theme.extraCss));
+      }
+    }
+    st.textContent = rules.join("\n");
   }
 

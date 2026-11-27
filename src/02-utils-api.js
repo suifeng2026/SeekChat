@@ -748,3 +748,322 @@
     return count;
   }
 
+  // =========================================================================
+  // 扩展插槽注册表与共享 FeedEngine 底座
+  // =========================================================================
+  function upsertRegistryItem(list, item, sortFn = null) {
+    if (!item || !item.id) return;
+    const idx = list.findIndex((x) => x.id === item.id);
+    if (idx >= 0) list[idx] = { ...list[idx], ...item };
+    else list.push(item);
+    if (typeof sortFn === "function") list.sort(sortFn);
+  }
+
+  function registerTheme(manifest) {
+    if (!manifest || !manifest.id || !manifest.name) return;
+    upsertRegistryItem(state.registry.themes, {
+      baseScheme: "light",
+      tokens: {},
+      extraCss: "",
+      order: 50,
+      ...manifest,
+    }, (a, b) => (a.order ?? 50) - (b.order ?? 50));
+    if (typeof syncRegisteredThemesCss === "function") syncRegisteredThemesCss();
+  }
+
+  function registerHubTab(tabSpec) {
+    if (!tabSpec || !tabSpec.id || !tabSpec.label) return;
+    upsertRegistryItem(state.registry.hubTabs, { order: 80, ...tabSpec }, (a, b) => (a.order ?? 80) - (b.order ?? 80));
+  }
+
+  function registerBubbleEnhancer(spec) {
+    if (!spec || !spec.id || typeof spec.run !== "function") return;
+    upsertRegistryItem(state.registry.bubbleEnhancers, { priority: 50, ...spec }, (a, b) => (a.priority ?? 50) - (b.priority ?? 50));
+  }
+
+  function registerUserAction(spec) {
+    if (!spec || !spec.id || typeof spec.onClick !== "function") return;
+    upsertRegistryItem(state.registry.userActions, { order: 50, places: ["profile"], ...spec }, (a, b) => (a.order ?? 50) - (b.order ?? 50));
+  }
+
+  function registerNavItem(spec) {
+    if (!spec || !spec.id || !spec.name) return;
+    upsertRegistryItem(state.registry.navItems, { order: 90, group: "board", ...spec }, (a, b) => (a.order ?? 90) - (b.order ?? 90));
+  }
+
+  function runBubbleEnhancers(containerEl, ctx = {}) {
+    if (!containerEl) return;
+    for (const enh of state.registry.bubbleEnhancers) {
+      try {
+        enh.run(containerEl, ctx);
+      } catch (_) {}
+    }
+  }
+
+  function applyOrderedConfig(baseList, cfg, protectedIds = []) {
+    const order = Array.isArray(cfg && cfg.order) ? cfg.order : [];
+    const hiddenSet = new Set(Array.isArray(cfg && cfg.hidden) ? cfg.hidden : []);
+    for (const pid of protectedIds) hiddenSet.delete(pid);
+    const rankMap = new Map(order.map((id, idx) => [id, idx]));
+    const sorted = [...baseList].sort((a, b) => {
+      const ra = rankMap.has(a.id) ? rankMap.get(a.id) : 10000 + baseList.indexOf(a);
+      const rb = rankMap.has(b.id) ? rankMap.get(b.id) : 10000 + baseList.indexOf(b);
+      return ra - rb;
+    });
+    return sorted.map((item) => ({ ...item, hidden: hiddenSet.has(item.id) }));
+  }
+
+  function getOrderedChannels(includeHidden = false) {
+    const merged = [...CHANNELS, ...state.registry.navItems];
+    const items = applyOrderedConfig(merged, state.navConfig, ["home"]);
+    return includeHidden ? items : items.filter((x) => !x.hidden);
+  }
+
+  function getOrderedRightTabs(includeHidden = false) {
+    const items = applyOrderedConfig(RIGHT_TABS, state.rightConfig, []);
+    if (includeHidden) return items;
+    const visible = items.filter((x) => !x.hidden);
+    return visible.length > 0 ? visible : [items[0]].filter(Boolean);
+  }
+
+  function getEffectiveStickerGroups() {
+    const custom = Array.isArray(state.customStickers) ? state.customStickers : [];
+    const validCustom = custom
+      .filter((g) => g && g.id && g.label && Array.isArray(g.items) && g.items.length > 0)
+      .map((g) => ({ ...g, isCustom: true }));
+    return [...STICKER_GROUPS, ...validCustom];
+  }
+
+  const _feedMutexLocks = new Map();
+  const _feedEngines = new Map();
+
+  function createFeedEngine(spec) {
+    if (!spec || !spec.key || typeof spec.fetchPage !== "function") {
+      throw new Error("createFeedEngine requires key and fetchPage");
+    }
+    if (_feedEngines.has(spec.key)) return _feedEngines.get(spec.key);
+
+    const st = {
+      items: [],
+      seenKeys: new Set(),
+      page: 0,
+      cursor: null,
+      hasMore: true,
+      loading: false,
+      running: false,
+      error: null,
+      progress: { done: 0, total: 0 },
+      runSeq: 0,
+      abortCtrl: null,
+      lastDoneAt: 0,
+    };
+
+    const notify = () => {
+      if (typeof spec.onUpdate === "function") {
+        try { spec.onUpdate(getSnapshot()); } catch (_) {}
+      }
+    };
+
+    const getSnapshot = () => ({
+      items: st.items,
+      page: st.page,
+      cursor: st.cursor,
+      hasMore: st.hasMore,
+      loading: st.loading,
+      running: st.running,
+      error: st.error,
+      progress: { ...st.progress },
+      lastDoneAt: st.lastDoneAt,
+    });
+
+    const abort = () => {
+      st.runSeq += 1;
+      if (st.abortCtrl) {
+        try { st.abortCtrl.abort(); } catch (_) {}
+        st.abortCtrl = null;
+      }
+      st.loading = false;
+      st.running = false;
+      if (spec.mutexGroup && _feedMutexLocks.get(spec.mutexGroup) === spec.key) {
+        _feedMutexLocks.delete(spec.mutexGroup);
+      }
+      notify();
+    };
+
+    const reset = () => {
+      abort();
+      st.items = [];
+      st.seenKeys.clear();
+      st.page = 0;
+      st.cursor = null;
+      st.hasMore = true;
+      st.error = null;
+      st.progress = { done: 0, total: 0 };
+      st.lastDoneAt = 0;
+      notify();
+    };
+
+    const appendRows = (rows) => {
+      let added = 0;
+      for (const r of rows || []) {
+        const k = typeof spec.keyOf === "function" ? spec.keyOf(r) : null;
+        if (k !== null && k !== undefined) {
+          const sk = String(k);
+          if (st.seenKeys.has(sk)) continue;
+          st.seenKeys.add(sk);
+        }
+        st.items.push(r);
+        added++;
+      }
+      return added;
+    };
+
+    const loadNext = async () => {
+      if (st.loading || !st.hasMore) return getSnapshot();
+      const seq = ++st.runSeq;
+      st.loading = true;
+      st.error = null;
+      st.abortCtrl = new AbortController();
+      notify();
+      try {
+        const nextPage = st.page + 1;
+        const res = await spec.fetchPage({ page: nextPage, cursor: st.cursor, signal: st.abortCtrl.signal });
+        if (seq !== st.runSeq) return getSnapshot();
+        const rows = (res && Array.isArray(res.rows)) ? res.rows : [];
+        const added = appendRows(rows);
+        st.page = nextPage;
+        st.cursor = res && res.nextCursor !== undefined ? res.nextCursor : st.cursor;
+        st.hasMore = Boolean(res && res.hasMore) && rows.length > 0 && (typeof spec.keyOf !== "function" || added > 0);
+      } catch (err) {
+        if (seq !== st.runSeq || (err && err.name === "AbortError")) return getSnapshot();
+        st.error = err && err.message ? err.message : "加载失败";
+      } finally {
+        if (seq === st.runSeq) {
+          st.loading = false;
+          st.abortCtrl = null;
+          notify();
+        }
+      }
+      return getSnapshot();
+    };
+
+    const runBatch = async ({ maxPages = 100, delayMs = spec.delayMs ?? 150 } = {}) => {
+      if (st.running) return getSnapshot();
+      if (spec.mutexGroup) {
+        const holder = _feedMutexLocks.get(spec.mutexGroup);
+        if (holder && holder !== spec.key) {
+          st.error = `已有同类扫描任务运行中 (${holder})，请稍候`;
+          notify();
+          return getSnapshot();
+        }
+        _feedMutexLocks.set(spec.mutexGroup, spec.key);
+      }
+      const seq = ++st.runSeq;
+      st.items = [];
+      st.seenKeys.clear();
+      st.page = 0;
+      st.cursor = null;
+      st.hasMore = true;
+      st.running = true;
+      st.loading = true;
+      st.error = null;
+      st.progress = { done: 0, total: maxPages };
+      st.abortCtrl = new AbortController();
+      notify();
+
+      try {
+        for (let p = 1; p <= maxPages; p++) {
+          if (seq !== st.runSeq) break;
+          const res = await spec.fetchPage({ page: p, cursor: st.cursor, signal: st.abortCtrl.signal });
+          if (seq !== st.runSeq) break;
+          const rows = (res && Array.isArray(res.rows)) ? res.rows : [];
+          if (rows.length === 0) {
+            st.hasMore = false;
+            st.progress.done = p;
+            break;
+          }
+          appendRows(rows);
+          st.page = p;
+          st.cursor = res && res.nextCursor !== undefined ? res.nextCursor : st.cursor;
+          st.hasMore = Boolean(res && res.hasMore);
+          st.progress.done = p;
+          notify();
+          if (!st.hasMore || p >= maxPages) break;
+          if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+        }
+        if (seq === st.runSeq) st.lastDoneAt = Date.now();
+      } catch (err) {
+        if (seq === st.runSeq && !(err && err.name === "AbortError")) {
+          st.error = err && err.message ? err.message : "批量拉取失败";
+        }
+      } finally {
+        if (seq === st.runSeq) {
+          st.loading = false;
+          st.running = false;
+          st.abortCtrl = null;
+          if (spec.mutexGroup && _feedMutexLocks.get(spec.mutexGroup) === spec.key) {
+            _feedMutexLocks.delete(spec.mutexGroup);
+          }
+          notify();
+        }
+      }
+      return getSnapshot();
+    };
+
+    const api = { loadNext, runBatch, abort, reset, getState: getSnapshot };
+    _feedEngines.set(spec.key, api);
+    return api;
+  }
+
+  function bindWaterfallScroll(scrollEl, getEngineFn, thresholdPx = 200) {
+    if (!scrollEl || scrollEl.dataset.nscWfBound === "1") return;
+    scrollEl.dataset.nscWfBound = "1";
+    let rafId = 0;
+    scrollEl.addEventListener("scroll", () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const eng = typeof getEngineFn === "function" ? getEngineFn() : getEngineFn;
+        if (!eng) return;
+        if (scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < thresholdPx) {
+          eng.loadNext();
+        }
+      });
+    });
+  }
+
+  function applyPaneSkinsToDom() {
+    const skins = state.paneSkins || {};
+    for (const spec of PANE_SKIN_SPECS) {
+      const el = document.querySelector(spec.selector);
+      if (!el) continue;
+      const cfg = skins[spec.id] || {};
+      const url = String(cfg.url || "").trim();
+      const safeCssUrl = url && !/[()"'\n\r]/.test(url) ? `url("${url}")` : (url ? `url("${url.replace(/"/g, "%22")}")` : "none");
+      const opacity = url ? Math.min(1, Math.max(0, Number(cfg.opacity ?? 0.25))) : 0;
+      const blur = Math.min(24, Math.max(0, Number(cfg.blur ?? 0)));
+      const fit = cfg.fit === "contain" ? "contain" : cfg.fit === "repeat" ? "auto" : "cover";
+      const rep = cfg.fit === "repeat" ? "repeat" : "no-repeat";
+      el.classList.toggle("has-pane-skin", Boolean(url && opacity > 0));
+      el.style.setProperty("--nsc-pane-bg-img", url ? safeCssUrl : "none");
+      el.style.setProperty("--nsc-pane-bg-opacity", String(opacity));
+      el.style.setProperty("--nsc-pane-bg-blur", `${blur}px`);
+      el.style.setProperty("--nsc-pane-bg-size", fit);
+      el.style.setProperty("--nsc-pane-bg-repeat", rep);
+    }
+  }
+
+  function applyChatPrefsToDom() {
+    const p = state.chatPrefs || {};
+    const root = document.documentElement;
+    if (!root) return;
+    const lh = Math.min(2.2, Math.max(1.2, Number(p.lineHeight || 1.55)));
+    const gap = Math.min(28, Math.max(4, Number(p.msgGap || 12)));
+    const mw = Math.min(720, Math.max(220, Number(p.imgMaxW || 480)));
+    const mh = Math.min(680, Math.max(160, Number(p.imgMaxH || 320)));
+    root.style.setProperty("--nsc-chat-line-height", String(lh));
+    root.style.setProperty("--nsc-chat-msg-gap", `${gap}px`);
+    root.style.setProperty("--nsc-chat-img-max-w", `${mw}px`);
+    root.style.setProperty("--nsc-chat-img-max-h", `${mh}px`);
+  }
+

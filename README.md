@@ -81,4 +81,5 @@ node build.mjs --local
 
 ## 二次开发
 
-模块边界定义、NodeSeek 接口契约及演进路线图请参阅 [DEVELOPMENT.md](DEVELOPMENT.md)。
+- 模块边界定义、插槽架构、NodeSeek 接口契约及演进路线图请参阅 [DEVELOPMENT.md](DEVELOPMENT.md)。
+- 浏览器 MCP 制作、接入与 Agent 联调调试流程请参阅 [MCP_AGENT_GUIDE.md](MCP_AGENT_GUIDE.md)。

@@ -1,9 +1,10 @@
 # SeekChat 二次开发与架构规范
 
-- **当前基线**：`v7.20.2`
+- **当前基线**：`v7.21.0`（分支策略：`main` 存放正式发布版与基线 Tag；`dev` 分支用于日常测试与实验迭代，验证通过后合并至 `main`）
 - **目标平台**：NodeSeek（`https://www.nodeseek.com/*`、`https://nodeseek.com/*`）Tampermonkey / Violentmonkey
 - **构建产物**：`dist/nodeseek-chat-ui.user.js`、`dist/nodeseek-chat-ui.meta.js`
-- **工程定位**：零运行时依赖、词法模块化、高性能并发安全、macOS 风格美化
+- **工程定位**：零运行时依赖、词法模块化、插槽式可扩展、高性能并发安全、macOS 风格美化
+- **MCP 调试指南**：浏览器 MCP 搭建、自制扩展桥接与 Agent 联调流程参阅 [MCP_AGENT_GUIDE.md](MCP_AGENT_GUIDE.md)
 
 ---
 
@@ -47,20 +48,25 @@
 ├── package.json                   # 版本号与 build / build:local / check 脚本入口
 ├── README.md                      # 安装指南与功能概览
 ├── DEVELOPMENT.md                 # 本文档：架构规范、接口契约与开发路线图
+├── MCP_AGENT_GUIDE.md             # 浏览器 MCP 制作、接入与 Agent 联调教程
 ├── dist/
 │   ├── nodeseek-chat-ui.meta.js   # Tampermonkey 更新检测元文件
 │   └── nodeseek-chat-ui.user.js   # 正式发布单文件脚本
 └── src/
     ├── 00-meta.js                 # UserScript 元信息（@name / @version / @grant / 更新源）
     ├── 01-config-icons.js         # LS 存储键、防闪屏守卫、SVG 图标集、频道表与全局 state
-    ├── 02-utils-api.js            # 缓存治理、API 封装、x-dynamic-sign 签名、名单与更新检测
-    ├── 03-styles.js               # CSS 变量、Light/Dusk/Dark 主题、四栏布局与弹窗/卡片样式
+    ├── 02-utils-api.js            # 缓存治理、API 封装、签名、插槽注册表与共享 FeedEngine
+    ├── 03-styles.js               # CSS 变量、四分区皮肤底层、三主题与卡片/基座样式
     ├── 04-nodeimage.js            # NodeImage 图床授权、上传、图库管理、粘贴/拖拽监听
-    ├── 05-shell-composer.js       # 四栏骨架、外观切换、编辑器调度、发帖弹窗、灯箱与内容增强器
-    ├── 06-channels-messages.js    # 左侧导航、版块瀑布流、@我/回复我/私信/系统通知(5230)
+    ├── 05-shell-composer.js       # 四栏骨架、动态右栏/主题调度、发帖弹窗、灯箱与内容增强器
+    ├── 06-channels-messages.js    # 左侧动态导航、版块瀑布流、@我/回复我/私信/系统通知(5230)
     ├── 07-post-chat.js            # 帖子解析、双向瀑布流、楼中楼构建、楼层互动与编辑弹窗
     ├── 08-profile-right.js        # 名片弹窗、右栏(热榜/好友/粉丝/黑名单)、悬浮个人中心与签到
-    └── 09-main.js                 # SPA 路由劫持、DOM 观察器与启动入口
+    ├── themes/                    # 主题插槽目录（build.mjs 自动扫描，custom-* 后置加载）
+    │   └── mac-default.js         # 默认 macOS 浅色 / 黄昏护眼 / 分层暗黑主题包
+    ├── plugins/                   # 功能插件插槽目录（build.mjs 自动扫描，custom-* 后置加载）
+    │   └── core-workbench-base.js # 内置基座配置中心（主题/四区皮肤透明度/调序/排版表情/插槽）
+    └── 09-main.js                 # 末位启动：SPA 路由劫持、DOM 观察器与启动入口
 ```
 
 ### 2.1 构建命令
@@ -169,44 +175,22 @@ node build.mjs --local
 2. 在 `src/08-profile-right.js` 编写加载函数（分页场景复用 `loadPaginatedHubStore`）。
 3. 在 `renderUserHub()` 的 `nativeHrefMap`、`tabs`、`persistentBody` 触底瀑布流分发器及 `openUserHubModal()` 中完成注册。
 
-### 5.3 插槽化扩展与零冲突升级架构推演（演进设计）
+### 5.3 插槽化扩展与零冲突升级架构（已落地基础底座）
 
-当前 `05`、`06`、`08` 模块内部仍存在硬编码分支（例如 `renderUserHub()` 的标签枚举、`applyThemeMode()` 的三态判断、多处重复的分页与批量抓取逻辑）。当后续新增全量账本统计、UI 分区皮肤、自定义主题或外部二开功能时，直接修改核心文件会导致上游更新与二开分支产生合并冲突。
-
-为实现**「功能即独立模块、共用底层瀑布流、上游升级不覆盖二开代码」**，后续重构按以下三部分推进：
+自 `v7.21.0` 起，核心底座已落地「目录自动发现 + 插槽注册表 + 共享 `FeedEngine` + 末位启动」基础架构：
 
 #### 5.3.1 核心与插槽目录分层（Build-Time Isolation）
 
-将现有扁平的 `src/00..09` 演进为「核心底座 + 插件插槽 + 末位启动」拓扑，`build.mjs` 按固定阶段拼接：
-
-```text
-src/
-├── 00-meta.js                 # 脚本头与更新源
-├── 01-config-icons.js         # 核心配置、LS 键前缀、state 与全局插槽容器
-├── 02-utils-api.js            # 核心网络、签名、缓存、FeedEngine 调度器与 Registry API
-├── 03-styles.js               # 结构骨架 CSS 与主题令牌编译器
-├── 04-nodeimage.js            # 图床基础服务
-├── 05-shell-composer.js       # 四栏宿主容器、编辑器与插槽挂载点
-├── 06-channels-messages.js    # 频道与消息主流程
-├── 07-post-chat.js            # 帖子阅读与楼层模型
-├── 08-profile-right.js        # 右栏宿主与 Hub 容器框架
-├── themes/                    # 主题包插槽（按文件顺序注册）
-│   ├── mac-default.js         # 内置 macOS 浅色 / 黄昏 / 分层暗黑主题包
-│   └── custom-*.js            # 二开自定义主题包（上游更新不触碰）
-├── plugins/                   # 功能模块插槽（按文件顺序注册）
-│   ├── core-*.js              # 官方标准功能插件（全量星辰、百页鸡腿、分区皮肤、管理查询等）
-│   └── custom-*.js            # 二开自定义功能插件（上游更新不触碰）
-└── 09-main.js                 # 末位启动：待所有 themes/ 与 plugins/ 注册完毕后统一挂载
-```
+`build.mjs` 按固定四阶段拼接源码：`01..08` 核心 -> `src/themes/*.js` -> `src/plugins/*.js`（同目录下非 `custom-` 文件先加载，`custom-*` 文件后加载）-> 自动注入 `NSC_DISCOVERED_MODULES` 清单 -> `09-main.js` 末位启动。
 
 **上游更新与二开同步保障机制**：
-1. 约定 `src/themes/custom-*.js` 与 `src/plugins/custom-*.js` 为**二开保留命名空间**，上游主线永不创建或修改 `custom-*` 前缀文件；
-2. 宿主层（`03`、`05`、`07`、`08`）不再硬编码功能列表，仅通过统一注册表遍历已挂载插件；
-3. 当主线发布新版（例如新增 `plugins/core-stardust-ledger.js` 或修复 `07-post-chat.js`）时，二开者只需同步主线代码（`git pull` 或覆盖 `01..08` 与 `core-*.js`）再运行 `node build.mjs --local`，其自研的 `custom-*.js` 自动接入新版本宿主，无需逐行解决代码冲突。
+1. `src/themes/custom-*.js` 与 `src/plugins/custom-*.js` 为**二开保留命名空间**，上游主线永不创建或修改 `custom-*` 前缀文件；
+2. 宿主层（`03`、`05`、`06`、`07`、`08`）通过统一注册表遍历已挂载插件与主题；
+3. 当主线发布新版时，二开者同步主线代码后执行 `node build.mjs --local`，自研 `custom-*.js` 自动挂载生效，避免直接改动核心文件造成的合并冲突。
 
 #### 5.3.2 共享深度模块：`FeedEngine`（统一瀑布流与限频批处理）
 
-针对「版块列表、Hub 瀑布流、近 100 页鸡腿统计、全量星辰账本、管理记录查询」共用的分页与抓取需求，在 `02-utils-api.js` 抽象单一深度模块 `createFeedEngine(spec)`，收敛所有并发、节流与状态机细节：
+`02-utils-api.js` 已提供 `createFeedEngine(spec)` 与 `bindWaterfallScroll(scrollEl, getEngineFn)`：
 
 ```text
 ┌───────────────────────────────────────────────────────────────────┐
@@ -215,27 +199,23 @@ src/
 │   State:   { items, page, cursor, hasMore, running, progress }    │
 ├───────────────────────────────────────────────────────────────────┤
 │ Deep Implementation (隐藏全部防冲突细节):                          │
-│   1. 单例互斥锁：同域重度任务（如百页统计 / 全量星辰）共享限频队列 │
-│   2. 序列号 + AbortController：切换标签或取消时立即中断在途请求    │
+│   1. mutexGroup 单例互斥锁：同域重度批处理任务避免并发触发风控     │
+│   2. runSeq + AbortController：切换视图或取消立即中断在途请求      │
 │   3. 通用去重与分页适配：同时兼容 page 页码翻页与 before_id 游标   │
-│   4. 统一 rAF 触底监听绑定器：bindWaterfallScroll(scrollEl, engine)│
-│   5. 结果 TTL 内存缓存与防抖渲染回调（onUpdate）                   │
+│   4. 统一 rAF 触底监听绑定与状态更新回调                           │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-**防冲突要点**：
-- 任何触底瀑布流只需声明 `fetchPage({ page, cursor, signal }) -> { rows, nextCursor, hasMore }` 即可复用，消除各模块自写 `scroll` 监听与 `loading` 锁；
-- 重度批处理任务（如 100 页鸡腿拉取与全量星辰拉取）通过共享限频队列串行/可控并发执行，防止同时触发站内请求频控导致 `403` / `429`。
+#### 5.3.3 标准扩展插槽（Extension Seams）
 
-#### 5.3.3 五大标准扩展插槽（Extension Seams）
-
-| 插槽接口 | 宿主位置 | 适配器契约（Adapter Shape） | 用途示例 |
+| 插槽接口 | 宿主位置 | 适配器契约（Adapter Shape） | 当前状态 |
 | :--- | :--- | :--- | :--- |
-| `registerTheme(manifest)` | `03-styles.js` | `{ id, name, scheme: "light"\|"dark", tokens, extraCss? }` | 抽离默认 macOS 主题为专有主题模块，第三方主题零侵入接入设置列表 |
-| `PaneSkinManager` | `03-styles.js`、`05` | `panes: { nav, list, chat, right } -> { url, opacity, blur, fit }` | 四分区独立背景图、透明度滑块与尺寸推荐校验 |
-| `registerHubTab(tabSpec)` | `08-profile-right.js` | `{ id, label, order, badgeFn?, feed?, renderSubbar, renderBody }` | 鸡腿深度统计、全量星辰账本、管理记录均作为独立插件挂载至个人中心 |
-| `registerBubbleEnhancer(fn)` | `05`、`06`、`07` | `{ id, priority, run(el, ctx) }` | 按优先级接管气泡渲染，避免增删增强器时修改 `createMessageNode` |
-| `registerUserAction(act)` | `07`、`08` | `{ id, places: ["profile","hover","pm"], labelFn, visibleFn, onClick }` | 快捷关注/取关、屏蔽按钮按声明位置自动渲染，无需改动弹窗或气泡模板 |
+| `registerTheme(manifest)` | `03-styles.js`、`05` | `{ id, name, desc?, baseScheme: "light"\|"dark", order?, tokens, extraCss? }` | 已接入并运行于 `src/themes/mac-default.js` |
+| `PaneSkinManager` (`applyPaneSkinsToDom`) | `02`、`03`、`plugins/core-workbench-base.js` | `panes: { nav, list, chat, right } -> { url, opacity, blur, fit }` | 已接入四分区 `::before` 底层与统一调节面板 |
+| `registerHubTab(tabSpec)` | `08-profile-right.js` | `{ id, label, order, badgeFn?, nativeHref?, onOpen?, onScrollEnd?, renderSubbar, renderBody }` | 已接入 `workbench`（「基座」）插件标签页 |
+| `registerBubbleEnhancer(spec)` | `05`、`06`、`07` | `{ id, priority, run(el, ctx) }` | 已全量接管 `nsapp` / `floor-ref` / `magic-tabs` / `code-blocks` / `images` |
+| `registerUserAction(spec)` | `02`、`08` | `{ id, places: ["profile"], order?, labelFn, visibleFn?, onClick }` | 名片弹窗已接入，其余位置按需扩展 |
+| `registerNavItem(spec)` | `02`、`06` | `{ id, name, icon, path, group, order?, onClick? }` | 左侧栏与调序基座已接入 |
 
 ---
 
@@ -243,11 +223,19 @@ src/
 
 状态约定：`- [x]` 表示已合入主线并随基线构建验证；`- [ ]` 表示规划待实现需求，**开发前需先补全或确认其「实现方式」条目中的接口与交互细节**。
 
-### 6.1 已完成能力清单（基线：`v7.20.2`）
+### 6.1 已完成能力清单（基线：`v7.21.0`）
 
-#### 工作台骨架与外观主题
+#### 工作台骨架、基座中心与外观主题
 - [x] macOS 四栏桌面布局与防闪屏启动守卫，支持「群聊模式 / 原版论坛」零残留切换（`01`、`03`、`05`、`06`、`09`）
-- [x] 浅色（Light）、黄昏护眼（Dusk）、分层暗黑（Dark）三态主题与左侧栏快捷切换开关（`01`、`03`、`05`）
+- [x] `ThemeRegistry` 主题注册中心与默认 macOS 三态主题抽离（`03-styles.js`、`src/themes/mac-default.js`、`05`、`06`）
+- [x] `build.mjs` 目录自动发现（`src/themes/*.js`、`src/plugins/*.js`、`custom-*` 后置隔离与 `NSC_DISCOVERED_MODULES` 清单注入）
+- [x] 共享 `FeedEngine`（瀑布流分页 + `mutexGroup` 限频批处理 + `AbortController`）与五大扩展插槽（`02-utils-api.js`、`05`、`06`、`07`、`08`）
+- [x] 工作台统一「基座」配置中心（`src/plugins/core-workbench-base.js`）及四分区快捷设置入口：
+  - [x] 主题选择中心（自动识别内置与扩展主题）
+  - [x] 四分区皮肤基座（导航区 / 帖子区 / 聊天底图 / 个人信息区独立图片 URL/本地图 + 共享透明度/模糊度滑块 + 推荐尺寸提示）
+  - [x] 组件调序与显隐基座（左侧导航排序/显隐 + 右侧栏 `热榜/好友/粉丝/黑名单` 排序/显隐）
+  - [x] 聊天排版与回复区基座（正文行距 / 消息间距 / 图片最大尺寸滑块 + 自定义表情分组管理器）
+  - [x] 扩展插槽与目录探测状态面板
 - [x] 个人中心设置 / 幸运抽奖 / 邀请好友同源 iframe 换肤适配（`08-profile-right.js: mountHubThemedIframe`）
 
 #### 频道浏览、帖子阅读与交互
@@ -274,29 +262,11 @@ src/
 
 > **开发者与 Agent 协作提示**：本节用于承接后续功能迭代。在认领某项 `- [ ]` 任务并开始编码前，请确认其「实现方式（待补充）」已补齐具体接口或产品交互约束。
 
-- [ ] **架构前置：插槽注册表与共享 `FeedEngine` 底座**
-  - **现状与约束**：当前功能直接硬编码在 `03`、`05`、`06`、`08` 中，`build.mjs` 仅平铺扫描 `src/\d{2}-*.js`；各分页加载与批量拉取缺乏统一的限频互斥与中止机制。
-  - **目标范围**：按 5.3 节方案升级 `build.mjs`（支持 `src/themes/*.js`、`src/plugins/*.js` 与 `09-main.js` 末位启动），在 `02-utils-api.js` 落地 `createFeedEngine` 与 `registerTheme` / `registerHubTab` / `registerBubbleEnhancer` / `registerUserAction` 五个插槽接口，确保后续功能与二开模块零冲突热插拔。
-  - **实现方式（待补充）**：
-    - 迁移节奏：`<待确认：一次性重构核心挂载点，或随首个插件模块渐进迁出>`
+- [x] 核心底座前置：插槽注册表、`themes/` 与 `plugins/` 自动扫描、四区皮肤/组件调序/排版表情共享基座与 `FeedEngine` 引擎已落地于 `v7.21.0`（后续具体业务插件按下方条目逐个接入）
 
-- [ ] **UI 皮肤系统：四分区独立背景图、透明度调节与尺寸建议**
-  - **目标范围**：支持对工作台四个独立区域分别配置背景图、透明度（`0% ~ 100%`）、背景模糊度与填充方式（铺满 `cover` / 完整 `contain` / 平铺），并在设置界面标注各区推荐分辨率与宽高比：
-    1. **导航区（`.nsc-pane-nav`，154px 窄竖栏）**：建议竖屏尺寸 `360×1080` ~ `450×1440`（约 `1:3`）
-    2. **帖子列表区（`.nsc-pane-list`，294px 竖栏）**：建议竖屏尺寸 `600×1200` ~ `720×1440`（约 `1:2`）
-    3. **聊天主视区（`.nsc-pane-chat`，弹性主区）**：建议横屏或宽幅底图 `1600×1080` ~ `1920×1080`（`16:9` / `3:2`）
-    4. **个人信息与右栏区（`.nsc-pane-right`，288px 竖栏）**：建议竖屏尺寸 `600×1200` ~ `720×1440`（约 `1:2`）
-  - **技术约束**：背景图须渲染于独立底层伪元素（`::before`），其上叠加半透明遮罩与 `backdrop-filter`，保证浅色/黄昏/暗黑三套文字对比度不被图片花纹破坏；支持图床直链或本地文件转压缩 DataURL 存储。
-  - **实现方式（待补充）**：
-    - 设置入口位置：`<待补充：个人中心设置页新增「外观皮肤」子面板或独立皮肤弹窗>`
-    - 预设/重置策略：`<待补充：是否内置少量默认壁纸或支持一键导出/导入皮肤配置 JSON>`
+- [x] **UI 皮肤系统基础框架（已于 `v7.21.0` 完成基座，待按需微调预设）**：四分区底层 `::before` 隔离渲染、透明度/模糊度/填充方式共享滑块、推荐尺寸标识与本地图片导入已落地于 `src/plugins/core-workbench-base.js`；后续仅需按实际视觉反馈微调默认预设或导出/导入 JSON。
 
-- [ ] **主题插件化：默认 macOS 专有主题抽离与可扩展主题中心**
-  - **现状与约束**：当前浅色、黄昏、暗黑样式分散写死在 `03-styles.js` 的 CSS 选择器与 `05-shell-composer.js` 的三态开关中，不便于新增第四套及以上主题。
-  - **目标范围**：将默认 macOS 主题（Light / Dusk / Dark）拆分为独立 `themes/mac-default.js` 主题包；构建统一 `ThemeRegistry` 选择器，二开者或用户后续放入自定义主题包（如极简纸墨、高对比暗色、莫兰迪等）即可直接在外观设置下拉/卡片列表中切换生效。
-  - **实现方式（待补充）**：
-    - 主题包标准字段：`<待补充：是否允许主题附带自定义圆角/字体/气泡配色覆盖>`
-    - 左侧栏快捷按钮交互：`<待补充：保留三态快切，或扩展主题后切换为弹窗/菜单选取>`
+- [x] **主题插件化基础框架（已于 `v7.21.0` 完成基座，后续可扩充更多主题包）**：默认 macOS 三套主题已抽离至 `src/themes/mac-default.js` 并接入 `ThemeRegistry`，在「基座 -> 主题中心」可直接切换任意自动扫描到的主题包。
 
 - [ ] **星辰全量账本分析面板（macOS 风格重构）**
   - **参考原型**：`.jeikcode_store/全量星辰账本分析.txt`（已核对核心算法与统计口径）。

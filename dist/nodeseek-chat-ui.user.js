@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.20.2
+// @version      7.21.0
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -47,6 +47,11 @@
     AUTO_CHECKIN_MODE: "nsc_v7_auto_checkin_mode",
     AUTO_CHECKIN_DATE: "nsc_v7_auto_checkin_date",
     UPDATE_CHECK: "nsc_v7_update_check",
+    PANE_SKINS: "nsc_v7_pane_skins",
+    NAV_CONFIG: "nsc_v7_nav_config",
+    RIGHT_CONFIG: "nsc_v7_right_config",
+    CHAT_PREFS: "nsc_v7_chat_prefs",
+    CUSTOM_STICKERS: "nsc_v7_custom_stickers",
   };
 
   function isBrowsePath(pathname) {
@@ -121,6 +126,10 @@
     update: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
     stardust: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 5.3L19.5 10l-5.3 2.2L12 17.5l-2.2-5.3L4.5 10l5.3-1.7L12 3z"/><path d="M19 16l.9 2.1L22 19l-2.1.9L19 22l-.9-2.1L16 19l2.1-.9L19 16z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
+    sliders: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`,
+    palette: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.6-10-8.6z"/></svg>`,
+    up: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`,
+    down: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -177,6 +186,20 @@
     { id: "expose", name: "曝光", icon: ICONS.expose, path: "/categories/expose" },
     { id: "inside", name: "内版", icon: ICONS.inside, path: "/categories/inside" },
     { id: "sandbox", name: "沙盒", icon: ICONS.sandbox, path: "/categories/sandbox" },
+  ];
+
+  const RIGHT_TABS = [
+    { id: "hot", name: "热榜" },
+    { id: "friends", name: "好友" },
+    { id: "fans", name: "粉丝" },
+    { id: "blacklist", name: "黑名单" },
+  ];
+
+  const PANE_SKIN_SPECS = [
+    { id: "nav", label: "导航区", selector: ".nsc-pane-nav", recSize: "360×1080 ~ 450×1440", ratio: "1:3 竖版" },
+    { id: "list", label: "帖子区", selector: ".nsc-pane-list", recSize: "600×1200 ~ 720×1440", ratio: "1:2 竖版" },
+    { id: "chat", label: "聊天底图", selector: ".nsc-pane-chat", recSize: "1600×1080 ~ 1920×1080", ratio: "16:9 / 3:2 宽幅" },
+    { id: "right", label: "个人信息区", selector: ".nsc-pane-right", recSize: "600×1200 ~ 720×1440", ratio: "1:2 竖版" },
   ];
 
 
@@ -243,12 +266,25 @@
     hubNotifSub: "reply-me",
     _lastRenderedHubTab: "",
     _hubFansMode: "fans",
+    workbenchSection: "theme",
+    paneSkins: loadJson(LS.PANE_SKINS, {}),
+    navConfig: loadJson(LS.NAV_CONFIG, { order: [], hidden: [] }),
+    rightConfig: loadJson(LS.RIGHT_CONFIG, { order: [], hidden: [] }),
+    chatPrefs: loadJson(LS.CHAT_PREFS, { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 }),
+    customStickers: loadJson(LS.CUSTOM_STICKERS, []),
+    registry: {
+      themes: [],
+      hubTabs: [],
+      bubbleEnhancers: [],
+      userActions: [],
+      navItems: [],
+    },
     autoCheckin: localStorage.getItem(LS.AUTO_CHECKIN) === "1",
     autoCheckinMode: localStorage.getItem(LS.AUTO_CHECKIN_MODE) || "fixed",
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.20.2",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.21.0",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -1021,6 +1057,325 @@
     return count;
   }
 
+  // =========================================================================
+  // 扩展插槽注册表与共享 FeedEngine 底座
+  // =========================================================================
+  function upsertRegistryItem(list, item, sortFn = null) {
+    if (!item || !item.id) return;
+    const idx = list.findIndex((x) => x.id === item.id);
+    if (idx >= 0) list[idx] = { ...list[idx], ...item };
+    else list.push(item);
+    if (typeof sortFn === "function") list.sort(sortFn);
+  }
+
+  function registerTheme(manifest) {
+    if (!manifest || !manifest.id || !manifest.name) return;
+    upsertRegistryItem(state.registry.themes, {
+      baseScheme: "light",
+      tokens: {},
+      extraCss: "",
+      order: 50,
+      ...manifest,
+    }, (a, b) => (a.order ?? 50) - (b.order ?? 50));
+    if (typeof syncRegisteredThemesCss === "function") syncRegisteredThemesCss();
+  }
+
+  function registerHubTab(tabSpec) {
+    if (!tabSpec || !tabSpec.id || !tabSpec.label) return;
+    upsertRegistryItem(state.registry.hubTabs, { order: 80, ...tabSpec }, (a, b) => (a.order ?? 80) - (b.order ?? 80));
+  }
+
+  function registerBubbleEnhancer(spec) {
+    if (!spec || !spec.id || typeof spec.run !== "function") return;
+    upsertRegistryItem(state.registry.bubbleEnhancers, { priority: 50, ...spec }, (a, b) => (a.priority ?? 50) - (b.priority ?? 50));
+  }
+
+  function registerUserAction(spec) {
+    if (!spec || !spec.id || typeof spec.onClick !== "function") return;
+    upsertRegistryItem(state.registry.userActions, { order: 50, places: ["profile"], ...spec }, (a, b) => (a.order ?? 50) - (b.order ?? 50));
+  }
+
+  function registerNavItem(spec) {
+    if (!spec || !spec.id || !spec.name) return;
+    upsertRegistryItem(state.registry.navItems, { order: 90, group: "board", ...spec }, (a, b) => (a.order ?? 90) - (b.order ?? 90));
+  }
+
+  function runBubbleEnhancers(containerEl, ctx = {}) {
+    if (!containerEl) return;
+    for (const enh of state.registry.bubbleEnhancers) {
+      try {
+        enh.run(containerEl, ctx);
+      } catch (_) {}
+    }
+  }
+
+  function applyOrderedConfig(baseList, cfg, protectedIds = []) {
+    const order = Array.isArray(cfg && cfg.order) ? cfg.order : [];
+    const hiddenSet = new Set(Array.isArray(cfg && cfg.hidden) ? cfg.hidden : []);
+    for (const pid of protectedIds) hiddenSet.delete(pid);
+    const rankMap = new Map(order.map((id, idx) => [id, idx]));
+    const sorted = [...baseList].sort((a, b) => {
+      const ra = rankMap.has(a.id) ? rankMap.get(a.id) : 10000 + baseList.indexOf(a);
+      const rb = rankMap.has(b.id) ? rankMap.get(b.id) : 10000 + baseList.indexOf(b);
+      return ra - rb;
+    });
+    return sorted.map((item) => ({ ...item, hidden: hiddenSet.has(item.id) }));
+  }
+
+  function getOrderedChannels(includeHidden = false) {
+    const merged = [...CHANNELS, ...state.registry.navItems];
+    const items = applyOrderedConfig(merged, state.navConfig, ["home"]);
+    return includeHidden ? items : items.filter((x) => !x.hidden);
+  }
+
+  function getOrderedRightTabs(includeHidden = false) {
+    const items = applyOrderedConfig(RIGHT_TABS, state.rightConfig, []);
+    if (includeHidden) return items;
+    const visible = items.filter((x) => !x.hidden);
+    return visible.length > 0 ? visible : [items[0]].filter(Boolean);
+  }
+
+  function getEffectiveStickerGroups() {
+    const custom = Array.isArray(state.customStickers) ? state.customStickers : [];
+    const validCustom = custom
+      .filter((g) => g && g.id && g.label && Array.isArray(g.items) && g.items.length > 0)
+      .map((g) => ({ ...g, isCustom: true }));
+    return [...STICKER_GROUPS, ...validCustom];
+  }
+
+  const _feedMutexLocks = new Map();
+  const _feedEngines = new Map();
+
+  function createFeedEngine(spec) {
+    if (!spec || !spec.key || typeof spec.fetchPage !== "function") {
+      throw new Error("createFeedEngine requires key and fetchPage");
+    }
+    if (_feedEngines.has(spec.key)) return _feedEngines.get(spec.key);
+
+    const st = {
+      items: [],
+      seenKeys: new Set(),
+      page: 0,
+      cursor: null,
+      hasMore: true,
+      loading: false,
+      running: false,
+      error: null,
+      progress: { done: 0, total: 0 },
+      runSeq: 0,
+      abortCtrl: null,
+      lastDoneAt: 0,
+    };
+
+    const notify = () => {
+      if (typeof spec.onUpdate === "function") {
+        try { spec.onUpdate(getSnapshot()); } catch (_) {}
+      }
+    };
+
+    const getSnapshot = () => ({
+      items: st.items,
+      page: st.page,
+      cursor: st.cursor,
+      hasMore: st.hasMore,
+      loading: st.loading,
+      running: st.running,
+      error: st.error,
+      progress: { ...st.progress },
+      lastDoneAt: st.lastDoneAt,
+    });
+
+    const abort = () => {
+      st.runSeq += 1;
+      if (st.abortCtrl) {
+        try { st.abortCtrl.abort(); } catch (_) {}
+        st.abortCtrl = null;
+      }
+      st.loading = false;
+      st.running = false;
+      if (spec.mutexGroup && _feedMutexLocks.get(spec.mutexGroup) === spec.key) {
+        _feedMutexLocks.delete(spec.mutexGroup);
+      }
+      notify();
+    };
+
+    const reset = () => {
+      abort();
+      st.items = [];
+      st.seenKeys.clear();
+      st.page = 0;
+      st.cursor = null;
+      st.hasMore = true;
+      st.error = null;
+      st.progress = { done: 0, total: 0 };
+      st.lastDoneAt = 0;
+      notify();
+    };
+
+    const appendRows = (rows) => {
+      let added = 0;
+      for (const r of rows || []) {
+        const k = typeof spec.keyOf === "function" ? spec.keyOf(r) : null;
+        if (k !== null && k !== undefined) {
+          const sk = String(k);
+          if (st.seenKeys.has(sk)) continue;
+          st.seenKeys.add(sk);
+        }
+        st.items.push(r);
+        added++;
+      }
+      return added;
+    };
+
+    const loadNext = async () => {
+      if (st.loading || !st.hasMore) return getSnapshot();
+      const seq = ++st.runSeq;
+      st.loading = true;
+      st.error = null;
+      st.abortCtrl = new AbortController();
+      notify();
+      try {
+        const nextPage = st.page + 1;
+        const res = await spec.fetchPage({ page: nextPage, cursor: st.cursor, signal: st.abortCtrl.signal });
+        if (seq !== st.runSeq) return getSnapshot();
+        const rows = (res && Array.isArray(res.rows)) ? res.rows : [];
+        const added = appendRows(rows);
+        st.page = nextPage;
+        st.cursor = res && res.nextCursor !== undefined ? res.nextCursor : st.cursor;
+        st.hasMore = Boolean(res && res.hasMore) && rows.length > 0 && (typeof spec.keyOf !== "function" || added > 0);
+      } catch (err) {
+        if (seq !== st.runSeq || (err && err.name === "AbortError")) return getSnapshot();
+        st.error = err && err.message ? err.message : "加载失败";
+      } finally {
+        if (seq === st.runSeq) {
+          st.loading = false;
+          st.abortCtrl = null;
+          notify();
+        }
+      }
+      return getSnapshot();
+    };
+
+    const runBatch = async ({ maxPages = 100, delayMs = spec.delayMs ?? 150 } = {}) => {
+      if (st.running) return getSnapshot();
+      if (spec.mutexGroup) {
+        const holder = _feedMutexLocks.get(spec.mutexGroup);
+        if (holder && holder !== spec.key) {
+          st.error = `已有同类扫描任务运行中 (${holder})，请稍候`;
+          notify();
+          return getSnapshot();
+        }
+        _feedMutexLocks.set(spec.mutexGroup, spec.key);
+      }
+      const seq = ++st.runSeq;
+      st.items = [];
+      st.seenKeys.clear();
+      st.page = 0;
+      st.cursor = null;
+      st.hasMore = true;
+      st.running = true;
+      st.loading = true;
+      st.error = null;
+      st.progress = { done: 0, total: maxPages };
+      st.abortCtrl = new AbortController();
+      notify();
+
+      try {
+        for (let p = 1; p <= maxPages; p++) {
+          if (seq !== st.runSeq) break;
+          const res = await spec.fetchPage({ page: p, cursor: st.cursor, signal: st.abortCtrl.signal });
+          if (seq !== st.runSeq) break;
+          const rows = (res && Array.isArray(res.rows)) ? res.rows : [];
+          if (rows.length === 0) {
+            st.hasMore = false;
+            st.progress.done = p;
+            break;
+          }
+          appendRows(rows);
+          st.page = p;
+          st.cursor = res && res.nextCursor !== undefined ? res.nextCursor : st.cursor;
+          st.hasMore = Boolean(res && res.hasMore);
+          st.progress.done = p;
+          notify();
+          if (!st.hasMore || p >= maxPages) break;
+          if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+        }
+        if (seq === st.runSeq) st.lastDoneAt = Date.now();
+      } catch (err) {
+        if (seq === st.runSeq && !(err && err.name === "AbortError")) {
+          st.error = err && err.message ? err.message : "批量拉取失败";
+        }
+      } finally {
+        if (seq === st.runSeq) {
+          st.loading = false;
+          st.running = false;
+          st.abortCtrl = null;
+          if (spec.mutexGroup && _feedMutexLocks.get(spec.mutexGroup) === spec.key) {
+            _feedMutexLocks.delete(spec.mutexGroup);
+          }
+          notify();
+        }
+      }
+      return getSnapshot();
+    };
+
+    const api = { loadNext, runBatch, abort, reset, getState: getSnapshot };
+    _feedEngines.set(spec.key, api);
+    return api;
+  }
+
+  function bindWaterfallScroll(scrollEl, getEngineFn, thresholdPx = 200) {
+    if (!scrollEl || scrollEl.dataset.nscWfBound === "1") return;
+    scrollEl.dataset.nscWfBound = "1";
+    let rafId = 0;
+    scrollEl.addEventListener("scroll", () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const eng = typeof getEngineFn === "function" ? getEngineFn() : getEngineFn;
+        if (!eng) return;
+        if (scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < thresholdPx) {
+          eng.loadNext();
+        }
+      });
+    });
+  }
+
+  function applyPaneSkinsToDom() {
+    const skins = state.paneSkins || {};
+    for (const spec of PANE_SKIN_SPECS) {
+      const el = document.querySelector(spec.selector);
+      if (!el) continue;
+      const cfg = skins[spec.id] || {};
+      const url = String(cfg.url || "").trim();
+      const safeCssUrl = url && !/[()"'\n\r]/.test(url) ? `url("${url}")` : (url ? `url("${url.replace(/"/g, "%22")}")` : "none");
+      const opacity = url ? Math.min(1, Math.max(0, Number(cfg.opacity ?? 0.25))) : 0;
+      const blur = Math.min(24, Math.max(0, Number(cfg.blur ?? 0)));
+      const fit = cfg.fit === "contain" ? "contain" : cfg.fit === "repeat" ? "auto" : "cover";
+      const rep = cfg.fit === "repeat" ? "repeat" : "no-repeat";
+      el.classList.toggle("has-pane-skin", Boolean(url && opacity > 0));
+      el.style.setProperty("--nsc-pane-bg-img", url ? safeCssUrl : "none");
+      el.style.setProperty("--nsc-pane-bg-opacity", String(opacity));
+      el.style.setProperty("--nsc-pane-bg-blur", `${blur}px`);
+      el.style.setProperty("--nsc-pane-bg-size", fit);
+      el.style.setProperty("--nsc-pane-bg-repeat", rep);
+    }
+  }
+
+  function applyChatPrefsToDom() {
+    const p = state.chatPrefs || {};
+    const root = document.documentElement;
+    if (!root) return;
+    const lh = Math.min(2.2, Math.max(1.2, Number(p.lineHeight || 1.55)));
+    const gap = Math.min(28, Math.max(4, Number(p.msgGap || 12)));
+    const mw = Math.min(720, Math.max(220, Number(p.imgMaxW || 480)));
+    const mh = Math.min(680, Math.max(160, Number(p.imgMaxH || 320)));
+    root.style.setProperty("--nsc-chat-line-height", String(lh));
+    root.style.setProperty("--nsc-chat-msg-gap", `${gap}px`);
+    root.style.setProperty("--nsc-chat-img-max-w", `${mw}px`);
+    root.style.setProperty("--nsc-chat-img-max-h", `${mh}px`);
+  }
+
   // ==========================================================================
   // Module: 03-styles.js
   // ==========================================================================
@@ -1225,7 +1580,27 @@
         background: var(--nsc-bg-nav); backdrop-filter: blur(28px) saturate(180%);
         border-right: 1px solid var(--nsc-border);
         display: flex; flex-direction: column;
-        padding: 8px 7px 6px; gap: 2px; overflow-y: auto;
+        padding: 8px 7px 6px; gap: 2px; overflow: hidden;
+        position: relative; isolation: isolate;
+      }
+      .nsc-pane-list,
+      .nsc-pane-chat,
+      .nsc-pane-right {
+        position: relative; isolation: isolate; overflow: hidden;
+      }
+      .nsc-pane-nav::before,
+      .nsc-pane-list::before,
+      .nsc-pane-chat::before,
+      .nsc-pane-right::before {
+        content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+        background-image: var(--nsc-pane-bg-img, none);
+        background-size: var(--nsc-pane-bg-size, cover);
+        background-position: center center;
+        background-repeat: var(--nsc-pane-bg-repeat, no-repeat);
+        opacity: var(--nsc-pane-bg-opacity, 0);
+        filter: blur(var(--nsc-pane-bg-blur, 0px));
+        transform: scale(1.03);
+        transition: opacity 0.18s ease;
       }
       .nsc-mac-traffic {
         display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 1px 4px 6px 6px; flex: 0 0 auto;
@@ -1252,7 +1627,7 @@
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
       }
 
-      .nsc-nav-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+      .nsc-nav-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overflow-x: hidden; }
       .nsc-nav-item {
         width: 100%; box-sizing: border-box; flex: 1 1 0; min-height: 24px; max-height: 36px;
         padding: 0 9px; border-radius: 7px;
@@ -1453,7 +1828,7 @@
 
       .nsc-chat-messages {
         flex: 1; overflow-y: auto; padding: 14px 18px 18px;
-        display: flex; flex-direction: column; gap: 12px; position: relative;
+        display: flex; flex-direction: column; gap: var(--nsc-chat-msg-gap, 12px); position: relative;
       }
       .nsc-empty-state { margin: auto; text-align: center; color: var(--nsc-muted); padding: 26px; font-size: 13px; }
 
@@ -1503,7 +1878,7 @@
       .nsc-bubble {
         background: var(--nsc-bubble-other); color: var(--nsc-text);
         border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 14px 14px 14px 4px;
-        padding: 8px 13px; font-size: 13.5px; line-height: 1.55; word-break: break-word;
+        padding: 8px 13px; font-size: 13.5px; line-height: var(--nsc-chat-line-height, 1.55); word-break: break-word;
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px rgba(0, 0, 0, 0.025);
         width: fit-content; max-width: 100%;
       }
@@ -1532,7 +1907,7 @@
       .nsc-bubble img.nsc-zoomable-img,
       .nsc-thread-content img,
       .nsc-thread-content img.nsc-zoomable-img {
-        max-width: min(100%, 480px) !important; max-height: 320px !important;
+        max-width: min(100%, var(--nsc-chat-img-max-w, 480px)) !important; max-height: var(--nsc-chat-img-max-h, 320px) !important;
         width: auto !important; height: auto !important; object-fit: contain;
         border-radius: 10px; display: block; margin: 6px 0; cursor: zoom-in;
         border: 1px solid var(--nsc-border); background: rgba(0, 0, 0, 0.02);
@@ -2569,6 +2944,67 @@
       }
       .nsc-vote-confirm-btns { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
+      /* 工作台共享基座配置中心与分区快捷入口 */
+      .nsc-pane-gear-btn {
+        width: 22px; height: 22px; padding: 0; border-radius: 6px;
+        border: 1px solid transparent; background: transparent; color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; flex: 0 0 22px; transition: all 0.12s ease;
+      }
+      .nsc-pane-gear-btn svg { width: 13px; height: 13px; }
+      .nsc-pane-gear-btn:hover { background: var(--nsc-hover); color: var(--nsc-accent); border-color: var(--nsc-border); }
+
+      .nsc-base-section {
+        margin-bottom: 12px; padding: 12px 14px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-base-title {
+        font-size: 13px; font-weight: 700; color: var(--nsc-text);
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        margin-bottom: 8px;
+      }
+      .nsc-base-sub { font-size: 11.5px; color: var(--nsc-muted); line-height: 1.45; margin-bottom: 10px; }
+      .nsc-base-grid-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; }
+      .nsc-base-theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 9px; }
+      .nsc-base-theme-card {
+        display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
+        border-radius: 11px; border: 1px solid var(--nsc-border); background: var(--nsc-hover);
+        cursor: pointer; text-align: left; transition: all 0.13s ease; font-family: var(--mac-font);
+      }
+      .nsc-base-theme-card:hover { border-color: var(--nsc-accent); }
+      .nsc-base-theme-card.is-active {
+        border-color: var(--nsc-accent); background: var(--nsc-accent-soft);
+        box-shadow: 0 2px 8px rgba(0, 122, 255, 0.14);
+      }
+      .nsc-base-swatch-row { display: flex; align-items: center; gap: 4px; }
+      .nsc-base-swatch {
+        width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(128,128,128,0.28);
+        display: inline-block;
+      }
+      .nsc-base-ctrl-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        margin-top: 7px; font-size: 12px; color: var(--nsc-text);
+      }
+      .nsc-base-ctrl-row label { color: var(--nsc-muted); font-size: 11.5px; flex: 0 0 74px; }
+      .nsc-base-range { flex: 1; accent-color: var(--nsc-accent); cursor: pointer; }
+      .nsc-base-val { width: 46px; text-align: right; font-size: 11px; color: var(--nsc-muted); font-variant-numeric: tabular-nums; }
+      .nsc-base-order-list { display: flex; flex-direction: column; gap: 5px; }
+      .nsc-base-order-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding: 7px 10px; border-radius: 9px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-hover); font-size: 12.5px; color: var(--nsc-text);
+      }
+      .nsc-base-order-ops { display: inline-flex; align-items: center; gap: 5px; }
+      .nsc-base-sticker-preview {
+        display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+      }
+      .nsc-base-sticker-chip {
+        display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;
+        border-radius: 8px; border: 1px solid var(--nsc-border); background: var(--nsc-hover);
+        font-size: 11px; color: var(--nsc-text);
+      }
+      .nsc-base-sticker-chip img { width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
+
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
         100% { box-shadow: 0 0 0 0 transparent; }
@@ -2576,6 +3012,31 @@
       .nsc-flash .nsc-bubble { animation: nscFlash 1.5s ease; }
     `;
     document.head.appendChild(style);
+    if (typeof syncRegisteredThemesCss === "function") syncRegisteredThemesCss();
+  }
+
+  function syncRegisteredThemesCss() {
+    if (!document.head) return;
+    let st = document.getElementById("nsc-registered-themes-style");
+    if (!st) {
+      st = document.createElement("style");
+      st.id = "nsc-registered-themes-style";
+      document.head.appendChild(st);
+    }
+    const rules = [];
+    for (const theme of state.registry.themes || []) {
+      const safeId = String(theme.id || "").replace(/[^a-z0-9_-]/gi, "");
+      if (!safeId) continue;
+      const entries = Object.entries(theme.tokens || {});
+      if (entries.length > 0) {
+        const decls = entries.map(([k, v]) => `${k}: ${v};`).join(" ");
+        rules.push(`body.nsc-app-active[data-nsc-theme="${safeId}"] { ${decls} }`);
+      }
+      if (theme.extraCss) {
+        rules.push(String(theme.extraCss));
+      }
+    }
+    st.textContent = rules.join("\n");
   }
 
   // ==========================================================================
@@ -3066,7 +3527,7 @@
   }
 
   function getEffectiveThemeMode() {
-    if (state.themeMode === "dusk") return "dusk";
+    if (state.themeMode && state.themeMode !== "auto") return state.themeMode;
     return document.body.classList.contains("dark-layout") ? "dark" : "light";
   }
 
@@ -3078,40 +3539,66 @@
   }
 
   function applyThemeMode(mode) {
-    state.themeMode = mode;
-    localStorage.setItem(LS.THEME, mode);
+    const targetMode = String(mode || "auto");
+    state.themeMode = targetMode;
+    localStorage.setItem(LS.THEME, targetMode);
     const headThemeBtn = document.querySelector("#nsk-head .color-theme-switcher");
     const isDark = document.body.classList.contains("dark-layout");
+    const regTheme = (state.registry.themes || []).find((t) => t.id === targetMode);
+    const effId = targetMode === "auto" ? (isDark ? "dark" : "light") : targetMode;
 
-    if (mode === "dusk") {
-      document.body.classList.add("nsc-theme-dusk");
-      if (isDark) {
-        if (headThemeBtn) headThemeBtn.click();
-        else {
-          document.body.classList.remove("dark-layout");
-          document.body.classList.add("light-layout");
-        }
-      }
-    } else if (mode === "dark") {
-      document.body.classList.remove("nsc-theme-dusk");
-      if (!isDark) {
-        if (headThemeBtn) headThemeBtn.click();
-        else {
-          document.body.classList.remove("light-layout");
-          document.body.classList.add("dark-layout");
-        }
-      }
-    } else {
-      document.body.classList.remove("nsc-theme-dusk");
-      if (isDark) {
-        if (headThemeBtn) headThemeBtn.click();
-        else {
-          document.body.classList.remove("dark-layout");
-          document.body.classList.add("light-layout");
-        }
+    document.body.dataset.nscTheme = effId;
+    document.body.classList.toggle("nsc-theme-dusk", effId === "dusk");
+
+    const wantDark = regTheme ? regTheme.baseScheme === "dark" : effId === "dark";
+    if (targetMode !== "auto" && wantDark !== isDark) {
+      state._suppressThemeObsUntil = Date.now() + 260;
+      if (headThemeBtn) headThemeBtn.click();
+      else {
+        document.body.classList.toggle("dark-layout", wantDark);
+        document.body.classList.toggle("light-layout", !wantDark);
       }
     }
     syncThemeButtons();
+    if (typeof renderUserHubIfOpen === "function" && state.hubTab === "workbench") {
+      renderUserHubIfOpen();
+    }
+  }
+
+  function openWorkbenchBase(section = "theme") {
+    state.workbenchSection = section || "theme";
+    if (typeof openUserHubModal === "function") openUserHubModal("workbench");
+  }
+
+  function renderRightTabs() {
+    const host = document.getElementById("nsc-right-tabs");
+    if (!host) return;
+    const tabs = getOrderedRightTabs(false);
+    if (tabs.length > 0 && !tabs.some((t) => t.id === state.rightTab)) {
+      state.rightTab = tabs[0].id;
+      localStorage.setItem(LS.RIGHT_TAB, state.rightTab);
+    }
+    host.innerHTML = tabs
+      .map((t) => `<button type="button" class="nsc-right-tab ${state.rightTab === t.id ? "is-active" : ""}" data-rtab="${escHtml(t.id)}">${escHtml(t.name)}</button>`)
+      .join("");
+    host.querySelectorAll(".nsc-right-tab").forEach((b) => {
+      b.addEventListener("click", () => {
+        state.rightTab = b.dataset.rtab;
+        localStorage.setItem(LS.RIGHT_TAB, state.rightTab);
+        host.querySelectorAll(".nsc-right-tab").forEach((x) => x.classList.toggle("is-active", x === b));
+        if (state.rightTab === "hot" && !state.hotCache[state.hotTab] && !state.hotLoading) {
+          fetchHotPosts(state.hotTab);
+        } else if (state.rightTab === "friends" && !state.followData.loaded && !state.followData.loading) {
+          fetchFansOrFollow("follow");
+        } else if (state.rightTab === "fans" && !state.fansData.loaded && !state.fansData.loading) {
+          fetchFansOrFollow("fans");
+        } else if (state.rightTab === "blacklist" && !state.blockListState.loaded && !state.blockListState.loading) {
+          fetchServerBlockList(false);
+        } else {
+          renderRightBody();
+        }
+      });
+    });
   }
 
   function buildShellIfNeeded() {
@@ -3146,6 +3633,9 @@
           <a class="nsc-nav-item group-admin" id="nsc-nf-links" href="/award" target="_blank" rel="noopener noreferrer" title="友站链接">
             <span class="nsc-nav-left">${ICONS.links}<span>友链</span></span>
           </a>
+          <button type="button" class="nsc-nav-item" id="nsc-nav-base-btn" title="工作台主题、分区皮肤、组件调序与自定义基座">
+            <span class="nsc-nav-left">${ICONS.sliders}<span>基座</span></span>
+          </button>
           <button type="button" class="nsc-nav-item nsc-update-btn" id="nsc-update-btn" title="检查脚本更新">
             <span class="nsc-nav-left">${ICONS.update}<span>检查更新</span></span>
           </button>
@@ -3156,8 +3646,9 @@
         <div class="nsc-list-head">
           <div class="nsc-list-title-row">
             <span id="nsc-channel-title">首页</span>
-            <div style="display:inline-flex;align-items:center;gap:6px;">
+            <div style="display:inline-flex;align-items:center;gap:5px;">
               <span id="nsc-channel-sub" style="font-size:11px;color:var(--nsc-muted);font-weight:500;"></span>
+              <button type="button" class="nsc-pane-gear-btn" id="nsc-list-gear-btn" title="帖子区皮肤与导航设置">${ICONS.sliders}</button>
               <button type="button" class="nsc-newpost-btn" id="nsc-newpost-open-btn" title="发布新主题帖">+ 发帖</button>
             </div>
           </div>
@@ -3174,6 +3665,7 @@
             <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
           </div>
           <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
+          <button type="button" class="nsc-pane-gear-btn" id="nsc-chat-gear-btn" title="聊天区排版、表情与底图设置">${ICONS.sliders}</button>
         </div>
         <div class="nsc-chat-messages" id="nsc-chat-messages">
           <div class="nsc-empty-state">点击左侧任意版块与帖子主题，即可在中间窗口阅读与讨论</div>
@@ -3191,11 +3683,9 @@
           <a class="nsc-quick-btn" id="nsc-qb-lucky" href="/lucky" target="_blank" rel="noopener noreferrer" title="幸运抽奖">抽奖</a>
           <a class="nsc-quick-btn" id="nsc-qb-invite" href="/invite" target="_blank" rel="noopener noreferrer" title="邀请好友">邀请</a>
         </div>
-        <div class="nsc-right-tabs">
-          <button type="button" class="nsc-right-tab ${state.rightTab === "hot" ? "is-active" : ""}" data-rtab="hot">热榜</button>
-          <button type="button" class="nsc-right-tab ${state.rightTab === "friends" ? "is-active" : ""}" data-rtab="friends">好友</button>
-          <button type="button" class="nsc-right-tab ${state.rightTab === "fans" ? "is-active" : ""}" data-rtab="fans">粉丝</button>
-          <button type="button" class="nsc-right-tab ${state.rightTab === "blacklist" ? "is-active" : ""}" data-rtab="blacklist">黑名单</button>
+        <div style="display:flex;align-items:center;gap:4px;margin:7px 10px 3px;">
+          <div class="nsc-right-tabs" id="nsc-right-tabs" style="margin:0;flex:1;"></div>
+          <button type="button" class="nsc-pane-gear-btn" id="nsc-right-gear-btn" title="右栏组件顺序、开关与皮肤设置">${ICONS.sliders}</button>
         </div>
         <div class="nsc-right-scroll" id="nsc-right-scroll"></div>
       </aside>
@@ -3534,24 +4024,11 @@
       }, 140);
     });
 
-    shell.querySelectorAll(".nsc-right-tab").forEach((b) => {
-      b.addEventListener("click", () => {
-        state.rightTab = b.dataset.rtab;
-        localStorage.setItem(LS.RIGHT_TAB, state.rightTab);
-        shell.querySelectorAll(".nsc-right-tab").forEach((x) => x.classList.toggle("is-active", x === b));
-        if (state.rightTab === "hot" && !state.hotCache[state.hotTab] && !state.hotLoading) {
-          fetchHotPosts(state.hotTab);
-        } else if (state.rightTab === "friends" && !state.followData.loaded && !state.followData.loading) {
-          fetchFansOrFollow("follow");
-        } else if (state.rightTab === "fans" && !state.fansData.loaded && !state.fansData.loading) {
-          fetchFansOrFollow("fans");
-        } else if (state.rightTab === "blacklist" && !state.blockListState.loaded && !state.blockListState.loading) {
-          fetchServerBlockList(false);
-        } else {
-          renderRightBody();
-        }
-      });
-    });
+    renderRightTabs();
+    shell.querySelector("#nsc-nav-base-btn")?.addEventListener("click", () => openWorkbenchBase("theme"));
+    shell.querySelector("#nsc-list-gear-btn")?.addEventListener("click", () => openWorkbenchBase("skin"));
+    shell.querySelector("#nsc-chat-gear-btn")?.addEventListener("click", () => openWorkbenchBase("chat"));
+    shell.querySelector("#nsc-right-gear-btn")?.addEventListener("click", () => openWorkbenchBase("layout"));
 
     const topicScroll = shell.querySelector("#nsc-topic-scroll");
     let topicScrollRaf = 0;
@@ -3591,11 +4068,13 @@
     shell.querySelectorAll("#nsc-theme-seg .nsc-theme-btn").forEach((b) => {
       b.addEventListener("click", () => applyThemeMode(b.dataset.theme));
     });
-    if (state.themeMode === "dusk") {
-      applyThemeMode("dusk");
+    if (state.themeMode && state.themeMode !== "auto") {
+      applyThemeMode(state.themeMode);
     } else {
       syncThemeButtons();
     }
+    applyPaneSkinsToDom();
+    applyChatPrefsToDom();
 
     const updBtn = shell.querySelector("#nsc-update-btn");
     if (updBtn) {
@@ -3617,20 +4096,48 @@
     if (!btnEl || !textareaEl || !hostEl) return;
     const pop = document.createElement("div");
     pop.className = "nsc-fb-exp-pop";
-    let activeId = STICKER_GROUPS[0].id;
-    pop.innerHTML = `
-      <div class="nsc-fb-exp-tabs">
-        ${STICKER_GROUPS.map((g) => `<button type="button" class="nsc-fb-exp-tab ${g.id === activeId ? "is-active" : ""}" data-sg="${g.id}">${g.label}</button>`).join("")}
-      </div>
-      <div class="nsc-fb-exp-grid"></div>
-    `;
+    pop.innerHTML = `<div class="nsc-fb-exp-tabs"></div><div class="nsc-fb-exp-grid"></div>`;
+    const tabsEl = pop.querySelector(".nsc-fb-exp-tabs");
     const grid = pop.querySelector(".nsc-fb-exp-grid");
+    let activeId = "";
+
     const renderStickers = (gid) => {
-      activeId = gid;
-      pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => t.classList.toggle("is-active", t.dataset.sg === gid));
-      const grp = STICKER_GROUPS.find((g) => g.id === gid) || STICKER_GROUPS[0];
+      const groups = getEffectiveStickerGroups();
+      const grp = groups.find((g) => g.id === gid) || groups[0];
+      if (!grp) return;
+      activeId = grp.id;
+      tabsEl.innerHTML = groups
+        .map((g) => `<button type="button" class="nsc-fb-exp-tab ${g.id === activeId ? "is-active" : ""}" data-sg="${escHtml(g.id)}">${escHtml(g.label)}</button>`)
+        .join("");
+      tabsEl.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => {
+        t.addEventListener("click", (e) => {
+          e.stopPropagation();
+          renderStickers(t.dataset.sg);
+        });
+      });
       grid.innerHTML = "";
-      for (const file of grp.files) {
+      if (Array.isArray(grp.items)) {
+        for (const it of grp.items) {
+          if (!it || !it.url) continue;
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nsc-fb-exp-item";
+          b.title = it.name || it.url;
+          b.innerHTML = `<img src="${escHtml(it.url)}" loading="lazy" alt="" />`;
+          b.addEventListener("click", () => {
+            const md = `![${it.name || "sticker"}](${it.url})`;
+            const s = textareaEl.selectionStart || 0;
+            const e = textareaEl.selectionEnd || 0;
+            textareaEl.setRangeText(md, s, e, "end");
+            textareaEl.dispatchEvent(new Event("input", { bubbles: true }));
+            pop.classList.remove("is-open");
+            textareaEl.focus({ preventScroll: true });
+          });
+          grid.appendChild(b);
+        }
+        return;
+      }
+      for (const file of grp.files || []) {
         const codeNum = file.replace(/\.[^.]+$/, "");
         const shortcode = `:${grp.id}${codeNum}:`;
         const b = document.createElement("button");
@@ -3649,15 +4156,9 @@
         grid.appendChild(b);
       }
     };
-    pop.querySelectorAll(".nsc-fb-exp-tab").forEach((t) => {
-      t.addEventListener("click", (e) => {
-        e.stopPropagation();
-        renderStickers(t.dataset.sg);
-      });
-    });
     btnEl.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (!grid.hasChildNodes()) renderStickers(activeId);
+      renderStickers(activeId);
       pop.classList.toggle("is-open");
     });
     document.addEventListener("click", (e) => {
@@ -4785,6 +5286,11 @@
     }
   }
 
+  registerBubbleEnhancer({ id: "nsapp", priority: 10, run: enhanceNsApps });
+  registerBubbleEnhancer({ id: "magic-tabs", priority: 30, run: enhanceMagicTabs });
+  registerBubbleEnhancer({ id: "code-blocks", priority: 40, run: enhanceCodeBlocks });
+  registerBubbleEnhancer({ id: "images", priority: 50, run: processBubbleImages });
+
   // ==========================================================================
   // Module: 06-channels-messages.js
   // ==========================================================================
@@ -4793,22 +5299,29 @@
     if (!nav) return;
     nav.innerHTML = "";
 
-    CHANNELS.forEach((ch, idx) => {
-      if (idx === 3 || idx === 7) {
+    const items = getOrderedChannels(false);
+    let lastGroup = null;
+    items.forEach((ch, idx) => {
+      const grp = ch.group || "board";
+      if (idx > 0 && grp !== lastGroup && (grp === "msg" || lastGroup === "msg")) {
         const div = document.createElement("div");
         div.className = "nsc-nav-divider";
         nav.appendChild(div);
       }
+      lastGroup = grp;
       const btn = document.createElement("button");
       btn.type = "button";
-      const grpCls = `group-${ch.group || "board"}`;
+      const grpCls = `group-${grp}`;
       btn.className = `nsc-nav-item ${grpCls}` + (state.activeChannel === ch.id ? " is-active" : "");
       const unread = getChannelUnreadCount(ch.id);
       btn.innerHTML = `
-        <span class="nsc-nav-left">${ch.icon}<span>${ch.name}</span></span>
+        <span class="nsc-nav-left">${ch.icon || ICONS.layers}<span>${escHtml(ch.name)}</span></span>
         ${unread > 0 ? `<span class="nsc-nav-badge">${unread > 99 ? "99+" : unread}</span>` : ""}
       `;
-      btn.addEventListener("click", () => switchChannel(ch.id));
+      btn.addEventListener("click", () => {
+        if (typeof ch.onClick === "function") ch.onClick();
+        else switchChannel(ch.id);
+      });
       nav.appendChild(btn);
     });
   }
@@ -4905,20 +5418,27 @@
     if (headThemeBtn && headThemeBtn.dataset.nscThemeObs !== "1") {
       headThemeBtn.dataset.nscThemeObs = "1";
       headThemeBtn.addEventListener("click", () => {
+        if (Date.now() < (state._suppressThemeObsUntil || 0)) return;
         setTimeout(() => {
+          if (Date.now() < (state._suppressThemeObsUntil || 0)) return;
           document.body.classList.remove("nsc-theme-dusk");
           const nextMode = document.body.classList.contains("dark-layout") ? "dark" : "light";
           state.themeMode = nextMode;
+          document.body.dataset.nscTheme = nextMode;
           localStorage.setItem(LS.THEME, nextMode);
           syncThemeButtons();
         }, 40);
       });
     }
 
-    if (state.themeMode === "dusk") {
-      document.body.classList.add("nsc-theme-dusk");
+    if (state.themeMode && state.themeMode !== "auto") {
+      applyThemeMode(state.themeMode);
+    } else {
+      syncThemeButtons();
     }
-    syncThemeButtons();
+    applyPaneSkinsToDom();
+    applyChatPrefsToDom();
+    if (typeof renderRightTabs === "function") renderRightTabs();
     syncUserCardNotifyBadge();
 
     const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
@@ -4966,6 +5486,7 @@
 
   function restoreNativeWidgets() {
     document.body.classList.remove("nsc-theme-dusk");
+    delete document.body.dataset.nscTheme;
     const rightPanel = document.getElementById("nsk-right-panel-container");
     const userCard = document.querySelector("#nsc-right-user .user-card");
     if (rightPanel && userCard) {
@@ -5544,9 +6065,7 @@
       });
       const pmBubble = wrap.querySelector(".nsc-bubble");
       if (pmBubble) {
-        enhanceNsApps(pmBubble);
-        enhanceCodeBlocks(pmBubble);
-        processBubbleImages(pmBubble);
+        runBubbleEnhancers(pmBubble, { isPm: true });
       }
       msgsEl.appendChild(wrap);
     }
@@ -7808,11 +8327,7 @@
         bq.classList.toggle("is-expanded");
       });
     }
-    enhanceNsApps(bubble);
-    linkifyFloorReferences(bubble);
-    enhanceMagicTabs(bubble);
-    enhanceCodeBlocks(bubble);
-    processBubbleImages(bubble);
+    runBubbleEnhancers(bubble, { isThread: false, isOpCard, obj });
 
     const reactionsEl = document.createElement("div");
     reactionsEl.className = "nsc-reactions";
@@ -7864,11 +8379,7 @@
         ti.querySelector(".nsc-msg-author").addEventListener("click", () => openUserProfileModal(ch));
         ti.querySelector(".nsc-floor-tag").addEventListener("click", () => jumpToFloor(ch.floorId));
         const tc = ti.querySelector(".nsc-thread-content");
-        enhanceNsApps(tc);
-        linkifyFloorReferences(tc);
-        enhanceMagicTabs(tc);
-        enhanceCodeBlocks(tc);
-        processBubbleImages(tc);
+        runBubbleEnhancers(tc, { isThread: true, isOpCard: false, obj: ch });
         const chReactions = ti.querySelector(".nsc-reactions");
         renderReactionPills(chReactions, ch, isNativePage);
         const chBar = buildHoverBar(ch, isNativePage, chReactions, true);
@@ -8105,6 +8616,8 @@
       msg.classList.toggle("is-hidden-filter", hide);
     }
   }
+
+  registerBubbleEnhancer({ id: "floor-ref", priority: 20, run: linkifyFloorReferences });
 
   // ==========================================================================
   // Module: 08-profile-right.js
@@ -8425,6 +8938,16 @@
           </div>
         </div>
       `;
+      const btnsEl = modal.querySelector(".nsc-profile-btns");
+      for (const act of state.registry.userActions || []) {
+        if (!act.places || !act.places.includes("profile")) continue;
+        if (typeof act.visibleFn === "function" && !act.visibleFn(info)) continue;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = typeof act.labelFn === "function" ? act.labelFn(info) : (act.label || act.id);
+        b.addEventListener("click", () => act.onClick(info, { refresh: () => renderModal(info, false) }));
+        btnsEl.appendChild(b);
+      }
       modal.querySelector(".nsc-profile-head div div:first-child").textContent = info.name;
       modal.querySelector("#nsc-p-close").addEventListener("click", () => backdrop.classList.remove("is-open"));
       const pmBtn = modal.querySelector("#nsc-p-pm");
@@ -9166,18 +9689,20 @@
       invite: "/invite",
     };
 
-    const tabs = [
-      { id: "notif", label: "通知", cnt: totalNotif },
-      { id: "posts", label: "主题帖" },
-      { id: "comments", label: "评论" },
-      { id: "collections", label: "收藏" },
-      { id: "credit", label: "鸡腿" },
-      { id: "stardust", label: "星辰" },
-      { id: "fans", label: "粉丝" },
-      { id: "attendance", label: "签到" },
-      { id: "progress", label: "等级" },
-      { id: "setting", label: "设置" },
+    const baseTabs = [
+      { id: "notif", label: "通知", order: 10, cnt: totalNotif },
+      { id: "posts", label: "主题帖", order: 20 },
+      { id: "comments", label: "评论", order: 30 },
+      { id: "collections", label: "收藏", order: 40 },
+      { id: "credit", label: "鸡腿", order: 50 },
+      { id: "stardust", label: "星辰", order: 60 },
+      { id: "fans", label: "粉丝", order: 70 },
+      { id: "attendance", label: "签到", order: 80 },
+      { id: "progress", label: "等级", order: 90 },
+      { id: "setting", label: "设置", order: 100 },
     ];
+    const tabs = [...baseTabs, ...(state.registry.hubTabs || [])].sort((a, b) => (a.order ?? 80) - (b.order ?? 80));
+    const tabSig = tabs.map((t) => t.id).join(",");
 
     const uInfo = uid && state.userCache[String(uid)];
     if (!modal.dataset.nscShellInit) {
@@ -9199,21 +9724,11 @@
             <button type="button" class="nsc-mini-btn" id="nsc-hub-close" style="padding:3px 9px;">✕</button>
           </div>
         </div>
-        <div class="nsc-hub-tabs" id="nsc-hub-tabs">
-          ${tabs.map((t) => `
-            <button type="button" class="nsc-hub-tab" data-htab="${t.id}">
-              <span>${t.label}</span>
-              <span class="nsc-hub-tab-cnt" style="display:none;"></span>
-            </button>
-          `).join("")}
-        </div>
+        <div class="nsc-hub-tabs" id="nsc-hub-tabs"></div>
         <div class="nsc-hub-subbar" id="nsc-hub-subbar"></div>
         <div class="nsc-hub-body" id="nsc-hub-body"></div>
       `;
       modal.querySelector("#nsc-hub-close").addEventListener("click", () => bd.classList.remove("is-open"));
-      modal.querySelectorAll("[data-htab]").forEach((btn) => {
-        btn.addEventListener("click", () => openUserHubModal(btn.dataset.htab));
-      });
       const persistentBody = modal.querySelector("#nsc-hub-body");
       let hubScrollRaf = 0;
       persistentBody.addEventListener("scroll", () => {
@@ -9227,9 +9742,33 @@
             else if (state.hubTab === "credit") loadHubCredit(false);
             else if (state.hubTab === "stardust") loadHubStardust(false);
             else if (state.hubTab === "attendance") loadHubAttendanceBoard(false);
+            else {
+              const regTab = (state.registry.hubTabs || []).find((t) => t.id === state.hubTab);
+              if (regTab && typeof regTab.onScrollEnd === "function") regTab.onScrollEnd(persistentBody);
+            }
           }
         });
       });
+    }
+
+    if (modal.dataset.nscTabSig !== tabSig) {
+      modal.dataset.nscTabSig = tabSig;
+      const tabsHost = modal.querySelector("#nsc-hub-tabs");
+      if (tabsHost) {
+        tabsHost.innerHTML = tabs
+          .map(
+            (t) => `
+            <button type="button" class="nsc-hub-tab" data-htab="${escHtml(t.id)}">
+              <span>${escHtml(t.label)}</span>
+              <span class="nsc-hub-tab-cnt" style="display:none;"></span>
+            </button>
+          `
+          )
+          .join("");
+        tabsHost.querySelectorAll("[data-htab]").forEach((btn) => {
+          btn.addEventListener("click", () => openUserHubModal(btn.dataset.htab));
+        });
+      }
     }
 
     const closeHub = () => bd.classList.remove("is-open");
@@ -9245,14 +9784,16 @@
     const uSubEl = modal.querySelector("#nsc-hub-usub");
     if (uSubEl) uSubEl.textContent = `UID: ${uid || "-"} · macOS 工作台个人空间`;
     const nativeLnk = modal.querySelector("#nsc-hub-native-link");
-    if (nativeLnk) nativeLnk.href = nativeHrefMap[state.hubTab] || "/notification";
+    const customHubTab = (state.registry.hubTabs || []).find((t) => t.id === state.hubTab);
+    if (nativeLnk) nativeLnk.href = (customHubTab && customHubTab.nativeHref) || nativeHrefMap[state.hubTab] || "/notification";
 
     modal.querySelectorAll("[data-htab]").forEach((btn) => {
       const tid = btn.dataset.htab;
+      const tSpec = tabs.find((t) => t.id === tid);
       btn.classList.toggle("is-active", state.hubTab === tid);
       const cntEl = btn.querySelector(".nsc-hub-tab-cnt");
       if (cntEl) {
-        const cntVal = tid === "notif" ? totalNotif : 0;
+        const cntVal = tid === "notif" ? totalNotif : (tSpec && typeof tSpec.badgeFn === "function" ? Number(tSpec.badgeFn()) || 0 : 0);
         if (cntVal > 0) {
           cntEl.textContent = cntVal > 99 ? "99+" : String(cntVal);
           cntEl.style.display = "inline-block";
@@ -9950,6 +10491,13 @@
           </div>
         ` : ""}
       `;
+      return;
+    }
+
+    if (customHubTab) {
+      if (typeof customHubTab.renderSubbar === "function") customHubTab.renderSubbar(subbar, body);
+      if (typeof customHubTab.renderBody === "function") customHubTab.renderBody(body, subbar);
+      restoreHubScroll();
     }
   }
 
@@ -9994,10 +10542,583 @@
       loadHubAttendanceBoard(true);
     } else if (tab === "progress") {
       loadHubProgress(false);
+    } else {
+      const customTab = (state.registry.hubTabs || []).find((t) => t.id === tab);
+      if (customTab && typeof customTab.onOpen === "function") customTab.onOpen();
     }
 
     renderUserHub();
   }
+
+  // ==========================================================================
+  // Module: themes/mac-default.js
+  // ==========================================================================
+  // 内置默认 macOS 主题包（作为 ThemeRegistry 的标准范例，外部主题可放入 src/themes/*.js 自动发现）
+  registerTheme({
+    id: "light",
+    name: "macOS 浅色",
+    desc: "经典通透白玻璃与访达蓝点缀",
+    baseScheme: "light",
+    order: 10,
+    tokens: {
+      "--nsc-bg-nav": "rgba(242, 244, 247, 0.80)",
+      "--nsc-bg-list": "rgba(251, 252, 254, 0.88)",
+      "--nsc-bg-chat": "rgba(245, 246, 248, 0.84)",
+      "--nsc-bg-right": "rgba(251, 252, 254, 0.88)",
+      "--nsc-bg-card": "rgba(255, 255, 255, 0.96)",
+      "--nsc-bubble-other": "#ffffff",
+      "--nsc-bubble-self": "#007aff",
+      "--nsc-bubble-op": "#fffdf6",
+      "--nsc-text": "#1d1d1f",
+      "--nsc-accent": "#007aff",
+    },
+  });
+
+  registerTheme({
+    id: "dusk",
+    name: "黄昏护眼",
+    desc: "暖羊皮纸色调，降低夜间阅读对比刺激",
+    baseScheme: "light",
+    order: 20,
+    tokens: {
+      "--nsc-bg-nav": "rgba(232, 221, 203, 0.92)",
+      "--nsc-bg-list": "rgba(244, 236, 223, 0.96)",
+      "--nsc-bg-chat": "rgba(239, 230, 214, 0.96)",
+      "--nsc-bg-right": "rgba(244, 236, 223, 0.96)",
+      "--nsc-bg-card": "#faf4e8",
+      "--nsc-bubble-other": "#faf4e8",
+      "--nsc-bubble-self": "#44689e",
+      "--nsc-bubble-op": "#f9ebd0",
+      "--nsc-text": "#3a3025",
+      "--nsc-accent": "#b8621c",
+    },
+  });
+
+  registerTheme({
+    id: "dark",
+    name: "macOS 暗黑",
+    desc: "分层深灰毛玻璃，拒绝死黑高对比压迫感",
+    baseScheme: "dark",
+    order: 30,
+    tokens: {
+      "--nsc-bg-nav": "rgba(42, 45, 53, 0.88)",
+      "--nsc-bg-list": "rgba(33, 36, 42, 0.94)",
+      "--nsc-bg-chat": "rgba(27, 29, 35, 0.96)",
+      "--nsc-bg-right": "rgba(36, 39, 46, 0.94)",
+      "--nsc-bg-card": "#2f333d",
+      "--nsc-bubble-other": "#2f333d",
+      "--nsc-bubble-self": "#0a84ff",
+      "--nsc-bubble-op": "#342e23",
+      "--nsc-text": "#f2f2f7",
+      "--nsc-accent": "#0a84ff",
+    },
+  });
+
+  // ==========================================================================
+  // Module: plugins/core-workbench-base.js
+  // ==========================================================================
+  // 官方内置基座配置中心插件：主题中心 / 四区皮肤透明度基座 / 组件调序基座 / 排版与自定义表情基座 / 插槽探测
+  (function initWorkbenchBasePlugin() {
+    const SECTIONS = [
+      { id: "theme", label: "主题中心" },
+      { id: "skin", label: "分区皮肤" },
+      { id: "layout", label: "组件调序" },
+      { id: "chat", label: "排版与回复" },
+      { id: "slots", label: "扩展插槽" },
+    ];
+
+    function buildRangeControl({ label, min, max, step, value, unit = "", onLive, onCommit }) {
+      const row = document.createElement("div");
+      row.className = "nsc-base-ctrl-row";
+      row.innerHTML = `
+        <label>${escHtml(label)}</label>
+        <input type="range" class="nsc-base-range" min="${min}" max="${max}" step="${step}" value="${value}" />
+        <span class="nsc-base-val">${escHtml(String(value))}${escHtml(unit)}</span>
+      `;
+      const inp = row.querySelector("input");
+      const valEl = row.querySelector(".nsc-base-val");
+      inp.addEventListener("input", () => {
+        valEl.textContent = `${inp.value}${unit}`;
+        if (typeof onLive === "function") onLive(Number(inp.value));
+      });
+      inp.addEventListener("change", () => {
+        if (typeof onCommit === "function") onCommit(Number(inp.value));
+      });
+      return row;
+    }
+
+    function buildOrderedListCard({ title, subtitle, items, protectedIds = [], minVisible = 1, onChange, onReset }) {
+      const box = document.createElement("div");
+      box.className = "nsc-base-section";
+      box.innerHTML = `
+        <div class="nsc-base-title">
+          <span>${escHtml(title)}</span>
+          <button type="button" class="nsc-mini-btn nsc-ord-reset">恢复默认</button>
+        </div>
+        ${subtitle ? `<div class="nsc-base-sub">${escHtml(subtitle)}</div>` : ""}
+        <div class="nsc-base-order-list"></div>
+      `;
+      box.querySelector(".nsc-ord-reset").addEventListener("click", () => onReset());
+      const listEl = box.querySelector(".nsc-base-order-list");
+
+      const visibleCount = items.filter((x) => !x.hidden).length;
+      items.forEach((it, idx) => {
+        const isProtected = protectedIds.includes(it.id);
+        const canHide = !isProtected && (it.hidden || visibleCount > minVisible);
+        const row = document.createElement("div");
+        row.className = "nsc-base-order-row";
+        row.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+            <span style="font-size:11px;color:var(--nsc-muted);width:18px;">${idx + 1}.</span>
+            <span style="font-weight:600;${it.hidden ? "opacity:0.5;text-decoration:line-through;" : ""}">${escHtml(it.name || it.label || it.id)}</span>
+            ${isProtected ? `<span class="nsc-badge-read">必留</span>` : ""}
+          </div>
+          <div class="nsc-base-order-ops">
+            <button type="button" class="nsc-icon-btn" data-dir="-1" title="上移" ${idx === 0 ? "disabled" : ""}>${ICONS.up}</button>
+            <button type="button" class="nsc-icon-btn" data-dir="1" title="下移" ${idx === items.length - 1 ? "disabled" : ""}>${ICONS.down}</button>
+            <button type="button" class="nsc-switch ${!it.hidden ? "is-on" : ""}" ${!canHide ? "disabled style=\"opacity:0.45;cursor:not-allowed;\"" : ""} title="${!it.hidden ? "点击隐藏" : "点击启用"}"><span class="nsc-switch-knob"></span></button>
+          </div>
+        `;
+        row.querySelectorAll("[data-dir]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const dir = Number(btn.dataset.dir);
+            const targetIdx = idx + dir;
+            if (targetIdx < 0 || targetIdx >= items.length) return;
+            const nextOrder = items.map((x) => x.id);
+            const tmp = nextOrder[idx];
+            nextOrder[idx] = nextOrder[targetIdx];
+            nextOrder[targetIdx] = tmp;
+            const nextHidden = items.filter((x) => x.hidden).map((x) => x.id);
+            onChange({ order: nextOrder, hidden: nextHidden });
+          });
+        });
+        const sw = row.querySelector(".nsc-switch");
+        sw.addEventListener("click", () => {
+          if (!canHide) return;
+          const nextHiddenSet = new Set(items.filter((x) => x.hidden).map((x) => x.id));
+          if (nextHiddenSet.has(it.id)) nextHiddenSet.delete(it.id);
+          else nextHiddenSet.add(it.id);
+          onChange({ order: items.map((x) => x.id), hidden: Array.from(nextHiddenSet) });
+        });
+        listEl.appendChild(row);
+      });
+      return box;
+    }
+
+    function renderThemeSection(body) {
+      const themes = state.registry.themes || [];
+      const curId = getEffectiveThemeMode();
+      const sec = document.createElement("div");
+      sec.className = "nsc-base-section";
+      sec.innerHTML = `
+        <div class="nsc-base-title">
+          <span>外观主题注册中心（已识别 ${themes.length} 套）</span>
+          <button type="button" class="nsc-mini-btn" id="nsc-base-theme-auto">跟随原站 (${state.themeMode === "auto" ? "当前" : "重置"})</button>
+        </div>
+        <div class="nsc-base-sub">默认提供 macOS 浅色、黄昏护眼与分层暗黑三套主题；后续放入 src/themes/*.js 的自定义主题会自动出现在下方列表中。</div>
+        <div class="nsc-base-theme-grid"></div>
+      `;
+      sec.querySelector("#nsc-base-theme-auto").addEventListener("click", () => {
+        applyThemeMode("auto");
+        renderUserHubIfOpen();
+      });
+      const grid = sec.querySelector(".nsc-base-theme-grid");
+      for (const th of themes) {
+        const isAct = curId === th.id;
+        const tk = th.tokens || {};
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "nsc-base-theme-card" + (isAct ? " is-active" : "");
+        card.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+            <span style="font-size:13px;font-weight:700;color:var(--nsc-text);">${escHtml(th.name)}</span>
+            <span class="nsc-badge-read">${th.baseScheme === "dark" ? "暗色基调" : "浅色基调"}</span>
+          </div>
+          <div style="font-size:11px;color:var(--nsc-muted);line-height:1.4;">${escHtml(th.desc || th.id)}</div>
+          <div class="nsc-base-swatch-row">
+            <span class="nsc-base-swatch" style="background:${escHtml(tk["--nsc-bg-nav"] || "#eee")};"></span>
+            <span class="nsc-base-swatch" style="background:${escHtml(tk["--nsc-bg-chat"] || "#f5f5f5")};"></span>
+            <span class="nsc-base-swatch" style="background:${escHtml(tk["--nsc-bubble-self"] || "#007aff")};"></span>
+            <span class="nsc-base-swatch" style="background:${escHtml(tk["--nsc-accent"] || "#007aff")};"></span>
+          </div>
+        `;
+        card.addEventListener("click", () => {
+          applyThemeMode(th.id);
+          renderUserHubIfOpen();
+        });
+        grid.appendChild(card);
+      }
+      body.appendChild(sec);
+    }
+
+    function renderSkinSection(body) {
+      const intro = document.createElement("div");
+      intro.className = "nsc-base-section";
+      intro.innerHTML = `
+        <div class="nsc-base-title">
+          <span>四分区背景皮肤与透明度调节基座</span>
+          <button type="button" class="nsc-mini-btn" id="nsc-skin-clear-all">一键还原默认磨砂</button>
+        </div>
+        <div class="nsc-base-sub">未设置背景图时保持原版 macOS 半透明磨砂效果；支持为导航、帖子、聊天底图、个人信息四个区域分别输入图片 URL 或上传本地图片，并独立微调透明度与模糊度。</div>
+      `;
+      intro.querySelector("#nsc-skin-clear-all").addEventListener("click", () => {
+        state.paneSkins = {};
+        saveJson(LS.PANE_SKINS, state.paneSkins);
+        applyPaneSkinsToDom();
+        renderUserHubIfOpen();
+      });
+      body.appendChild(intro);
+
+      const grid = document.createElement("div");
+      grid.className = "nsc-base-grid-2";
+
+      for (const spec of PANE_SKIN_SPECS) {
+        const cfg = state.paneSkins[spec.id] || {};
+        const opVal = Math.round(Math.min(1, Math.max(0, Number(cfg.opacity ?? 0.25))) * 100);
+        const blurVal = Math.min(24, Math.max(0, Number(cfg.blur ?? 0)));
+        const fitVal = cfg.fit || "cover";
+
+        const card = document.createElement("div");
+        card.className = "nsc-base-section";
+        card.style.marginBottom = "0";
+        card.innerHTML = `
+          <div class="nsc-base-title">
+            <span>${escHtml(spec.label)}</span>
+            <span class="nsc-badge-read" title="推荐图片尺寸与比例">${escHtml(spec.ratio)} · ${escHtml(spec.recSize)}</span>
+          </div>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <input type="text" class="nsc-search-input nsc-skin-url" placeholder="输入背景图 URL（支持图床直链）..." value="${escHtml(cfg.url || "")}" style="flex:1;height:27px;" />
+            <button type="button" class="nsc-mini-btn nsc-skin-pick">本地图</button>
+            <button type="button" class="nsc-mini-btn nsc-skin-clear">清除</button>
+            <input type="file" accept="image/*" class="nsc-skin-file" style="display:none;" />
+          </div>
+          <div class="nsc-base-ctrl-row" style="margin-top:8px;">
+            <label>填充方式</label>
+            <div class="nsc-seg-tabs">
+              <button type="button" class="nsc-seg-btn ${fitVal === "cover" ? "is-active" : ""}" data-fit="cover">铺满</button>
+              <button type="button" class="nsc-seg-btn ${fitVal === "contain" ? "is-active" : ""}" data-fit="contain">完整</button>
+              <button type="button" class="nsc-seg-btn ${fitVal === "repeat" ? "is-active" : ""}" data-fit="repeat">平铺</button>
+            </div>
+            <span class="nsc-base-val"></span>
+          </div>
+        `;
+
+        const updatePaneSkin = (patch, rerender = false) => {
+          state.paneSkins[spec.id] = { opacity: 0.25, blur: 0, fit: "cover", ...(state.paneSkins[spec.id] || {}), ...patch };
+          saveJson(LS.PANE_SKINS, state.paneSkins);
+          applyPaneSkinsToDom();
+          if (rerender) renderUserHubIfOpen();
+        };
+
+        const urlInp = card.querySelector(".nsc-skin-url");
+        urlInp.addEventListener("change", () => updatePaneSkin({ url: urlInp.value.trim() }));
+
+        const fileInp = card.querySelector(".nsc-skin-file");
+        card.querySelector(".nsc-skin-pick").addEventListener("click", () => fileInp.click());
+        fileInp.addEventListener("change", () => {
+          const f = fileInp.files && fileInp.files[0];
+          fileInp.value = "";
+          if (!f) return;
+          if (f.size > 1.5 * 1024 * 1024) {
+            urlInp.value = "";
+            urlInp.placeholder = "图片超过 1.5MB，建议先上传图床后粘贴直链";
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === "string") {
+              urlInp.value = reader.result;
+              updatePaneSkin({ url: reader.result });
+            }
+          };
+          reader.readAsDataURL(f);
+        });
+
+        card.querySelector(".nsc-skin-clear").addEventListener("click", () => {
+          delete state.paneSkins[spec.id];
+          saveJson(LS.PANE_SKINS, state.paneSkins);
+          applyPaneSkinsToDom();
+          renderUserHubIfOpen();
+        });
+
+        card.querySelectorAll("[data-fit]").forEach((fb) => {
+          fb.addEventListener("click", () => {
+            updatePaneSkin({ fit: fb.dataset.fit }, true);
+          });
+        });
+
+        card.appendChild(
+          buildRangeControl({
+            label: "图片透明度",
+            min: 0,
+            max: 100,
+            step: 2,
+            value: opVal,
+            unit: "%",
+            onLive: (v) => {
+              state.paneSkins[spec.id] = { ...(state.paneSkins[spec.id] || {}), opacity: v / 100 };
+              applyPaneSkinsToDom();
+            },
+            onCommit: (v) => updatePaneSkin({ opacity: v / 100 }),
+          })
+        );
+
+        card.appendChild(
+          buildRangeControl({
+            label: "背景模糊度",
+            min: 0,
+            max: 24,
+            step: 1,
+            value: blurVal,
+            unit: "px",
+            onLive: (v) => {
+              state.paneSkins[spec.id] = { ...(state.paneSkins[spec.id] || {}), blur: v };
+              applyPaneSkinsToDom();
+            },
+            onCommit: (v) => updatePaneSkin({ blur: v }),
+          })
+        );
+
+        grid.appendChild(card);
+      }
+      body.appendChild(grid);
+    }
+
+    function renderLayoutSection(body) {
+      const rightItems = getOrderedRightTabs(true);
+      body.appendChild(
+        buildOrderedListCard({
+          title: "右侧栏标签顺序与显隐控制",
+          subtitle: "调整右侧栏（热榜 / 好友 / 粉丝 / 黑名单）排列位置或关闭暂不需要的面板（至少保留一项）。",
+          items: rightItems,
+          minVisible: 1,
+          onChange: (cfg) => {
+            state.rightConfig = cfg;
+            saveJson(LS.RIGHT_CONFIG, cfg);
+            renderRightTabs();
+            renderRightBody();
+            renderUserHubIfOpen();
+          },
+          onReset: () => {
+            state.rightConfig = { order: [], hidden: [] };
+            saveJson(LS.RIGHT_CONFIG, state.rightConfig);
+            renderRightTabs();
+            renderRightBody();
+            renderUserHubIfOpen();
+          },
+        })
+      );
+
+      const navItems = getOrderedChannels(true);
+      body.appendChild(
+        buildOrderedListCard({
+          title: "左侧导航功能顺序与显隐控制",
+          subtitle: "支持调整版块与消息入口排序，或隐藏不常逛的版块（「首页」保持必留）。",
+          items: navItems,
+          protectedIds: ["home"],
+          minVisible: 1,
+          onChange: (cfg) => {
+            state.navConfig = cfg;
+            saveJson(LS.NAV_CONFIG, cfg);
+            renderLeftNav();
+            renderUserHubIfOpen();
+          },
+          onReset: () => {
+            state.navConfig = { order: [], hidden: [] };
+            saveJson(LS.NAV_CONFIG, state.navConfig);
+            renderLeftNav();
+            renderUserHubIfOpen();
+          },
+        })
+      );
+    }
+
+    function renderChatAndComposerSection(body) {
+      const p = state.chatPrefs || { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 };
+      const typoBox = document.createElement("div");
+      typoBox.className = "nsc-base-section";
+      typoBox.innerHTML = `
+        <div class="nsc-base-title">
+          <span>聊天区排版与图片尺寸基座</span>
+          <button type="button" class="nsc-mini-btn" id="nsc-chat-pref-reset">恢复默认</button>
+        </div>
+        <div class="nsc-base-sub">实时调整消息行高、楼层间距及聊天框内普通图片显示上限（不影响灯箱原图查看与魔术标签页长图）。</div>
+      `;
+      typoBox.querySelector("#nsc-chat-pref-reset").addEventListener("click", () => {
+        state.chatPrefs = { lineHeight: 1.55, msgGap: 12, imgMaxW: 480, imgMaxH: 320 };
+        saveJson(LS.CHAT_PREFS, state.chatPrefs);
+        applyChatPrefsToDom();
+        renderUserHubIfOpen();
+      });
+
+      const commitPref = (patch) => {
+        state.chatPrefs = { ...state.chatPrefs, ...patch };
+        saveJson(LS.CHAT_PREFS, state.chatPrefs);
+        applyChatPrefsToDom();
+      };
+
+      typoBox.appendChild(buildRangeControl({
+        label: "正文行间距",
+        min: 1.25, max: 2.0, step: 0.05, value: Number(p.lineHeight || 1.55),
+        onLive: (v) => { state.chatPrefs.lineHeight = v; applyChatPrefsToDom(); },
+        onCommit: (v) => commitPref({ lineHeight: v }),
+      }));
+      typoBox.appendChild(buildRangeControl({
+        label: "消息间距",
+        min: 4, max: 24, step: 1, value: Number(p.msgGap || 12), unit: "px",
+        onLive: (v) => { state.chatPrefs.msgGap = v; applyChatPrefsToDom(); },
+        onCommit: (v) => commitPref({ msgGap: v }),
+      }));
+      typoBox.appendChild(buildRangeControl({
+        label: "图片最大宽",
+        min: 260, max: 700, step: 20, value: Number(p.imgMaxW || 480), unit: "px",
+        onLive: (v) => { state.chatPrefs.imgMaxW = v; applyChatPrefsToDom(); },
+        onCommit: (v) => commitPref({ imgMaxW: v }),
+      }));
+      typoBox.appendChild(buildRangeControl({
+        label: "图片最大高",
+        min: 180, max: 640, step: 20, value: Number(p.imgMaxH || 320), unit: "px",
+        onLive: (v) => { state.chatPrefs.imgMaxH = v; applyChatPrefsToDom(); },
+        onCommit: (v) => commitPref({ imgMaxH: v }),
+      }));
+      body.appendChild(typoBox);
+
+      const stkBox = document.createElement("div");
+      stkBox.className = "nsc-base-section";
+      stkBox.innerHTML = `
+        <div class="nsc-base-title">
+          <span>回复区自定义表情分组基座</span>
+          <span class="nsc-badge-read">共 ${state.customStickers.length} 个自定义分组</span>
+        </div>
+        <div class="nsc-base-sub">新增的表情分组会自动同步至发帖、编辑与评论回复表情选择器中（格式为标准 Markdown 图片，支持外链贴图与 NodeImage 图床链接）。</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+          <input type="text" id="nsc-stk-grp-name" class="nsc-search-input" placeholder="分组名称（如：常用梗图）" style="flex:1;min-width:140px;height:27px;" />
+          <input type="text" id="nsc-stk-item-name" class="nsc-search-input" placeholder="表情名称（可选）" style="width:120px;height:27px;" />
+          <input type="text" id="nsc-stk-item-url" class="nsc-search-input" placeholder="粘贴图片 URL（https://...）" style="flex:2;min-width:190px;height:27px;" />
+          <button type="button" class="nsc-send-btn" id="nsc-stk-add-btn" style="height:27px;">添加表情</button>
+        </div>
+        <div id="nsc-stk-list"></div>
+      `;
+      stkBox.querySelector("#nsc-stk-add-btn").addEventListener("click", () => {
+        const gLabel = stkBox.querySelector("#nsc-stk-grp-name").value.trim() || "自定义表情";
+        const iName = stkBox.querySelector("#nsc-stk-item-name").value.trim() || "sticker";
+        const iUrl = stkBox.querySelector("#nsc-stk-item-url").value.trim();
+        if (!/^https?:\/\//i.test(iUrl)) return;
+        let grp = state.customStickers.find((g) => g.label === gLabel);
+        if (!grp) {
+          grp = { id: `custom_${Date.now().toString(36)}`, label: gLabel, items: [] };
+          state.customStickers.push(grp);
+        }
+        grp.items.push({ name: iName, url: iUrl });
+        saveJson(LS.CUSTOM_STICKERS, state.customStickers);
+        renderUserHubIfOpen();
+      });
+
+      const listEl = stkBox.querySelector("#nsc-stk-list");
+      if (state.customStickers.length === 0) {
+        listEl.innerHTML = `<div style="font-size:11.5px;color:var(--nsc-muted);">暂无自定义表情分组，可在上方输入分组名与图片 URL 添加。</div>`;
+      } else {
+        state.customStickers.forEach((grp, gIdx) => {
+          const gRow = document.createElement("div");
+          gRow.className = "nsc-base-section";
+          gRow.style.cssText = "padding:8px 10px;margin-bottom:6px;background:var(--nsc-hover);";
+          gRow.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <strong style="font-size:12px;">${escHtml(grp.label)} (${grp.items.length})</strong>
+              <button type="button" class="nsc-mini-btn nsc-stk-del-grp" style="color:#ff3b30;">删除分组</button>
+            </div>
+            <div class="nsc-base-sticker-preview"></div>
+          `;
+          gRow.querySelector(".nsc-stk-del-grp").addEventListener("click", () => {
+            state.customStickers.splice(gIdx, 1);
+            saveJson(LS.CUSTOM_STICKERS, state.customStickers);
+            renderUserHubIfOpen();
+          });
+          const prevEl = gRow.querySelector(".nsc-base-sticker-preview");
+          grp.items.forEach((it, iIdx) => {
+            const chip = document.createElement("span");
+            chip.className = "nsc-base-sticker-chip";
+            chip.innerHTML = `<img src="${escHtml(it.url)}" alt="" /><span>${escHtml(it.name || "贴图")}</span><button type="button" style="border:none;background:transparent;color:var(--nsc-muted);cursor:pointer;padding:0 2px;">✕</button>`;
+            chip.querySelector("button").addEventListener("click", () => {
+              grp.items.splice(iIdx, 1);
+              if (grp.items.length === 0) state.customStickers.splice(gIdx, 1);
+              saveJson(LS.CUSTOM_STICKERS, state.customStickers);
+              renderUserHubIfOpen();
+            });
+            prevEl.appendChild(chip);
+          });
+          listEl.appendChild(gRow);
+        });
+      }
+      body.appendChild(stkBox);
+    }
+
+    function renderSlotsSection(body) {
+      const manifest = typeof NSC_DISCOVERED_MODULES !== "undefined" ? NSC_DISCOVERED_MODULES : { mode: "unknown", themes: [], plugins: [] };
+      const reg = state.registry;
+      const box = document.createElement("div");
+      box.className = "nsc-base-section";
+      box.innerHTML = `
+        <div class="nsc-base-title">
+          <span>目录自动发现与扩展插槽状态</span>
+          <span class="nsc-badge-read">构建模式：${escHtml(manifest.mode || "release")}</span>
+        </div>
+        <div class="nsc-base-sub">build.mjs 在构建时自动扫描 src/themes/*.js 与 src/plugins/*.js。二开者使用 custom-*.js 命名插件或主题，可在上游更新后无冲突保留扩展能力。</div>
+        <div class="nsc-hub-kpi-grid">
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">已发现主题文件</div><div class="nsc-hub-kpi-val">${manifest.themes.length}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">已发现插件文件</div><div class="nsc-hub-kpi-val">${manifest.plugins.length}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">注册主题 / Hub 插槽</div><div class="nsc-hub-kpi-val">${reg.themes.length} / ${reg.hubTabs.length}</div></div>
+          <div class="nsc-hub-kpi"><div class="nsc-hub-kpi-lbl">气泡增强器 / 动作插槽</div><div class="nsc-hub-kpi-val">${reg.bubbleEnhancers.length} / ${reg.userActions.length}</div></div>
+        </div>
+        <div class="nsc-base-order-list">
+          <div class="nsc-base-order-row"><span>themes/ 目录模块</span><span class="nsc-vote-note">${escHtml(manifest.themes.join(", ") || "无")}</span></div>
+          <div class="nsc-base-order-row"><span>plugins/ 目录模块</span><span class="nsc-vote-note">${escHtml(manifest.plugins.join(", ") || "无")}</span></div>
+          <div class="nsc-base-order-row"><span>已注册气泡增强管线（按优先级）</span><span class="nsc-vote-note">${escHtml(reg.bubbleEnhancers.map((e) => `${e.priority}:${e.id}`).join(" → "))}</span></div>
+        </div>
+      `;
+      body.appendChild(box);
+    }
+
+    registerHubTab({
+      id: "workbench",
+      label: "基座",
+      order: 95,
+      nativeHref: "/setting",
+      renderSubbar(subbar) {
+        const seg = document.createElement("div");
+        seg.className = "nsc-seg-tabs";
+        for (const s of SECTIONS) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "nsc-seg-btn" + (state.workbenchSection === s.id ? " is-active" : "");
+          b.textContent = s.label;
+          b.addEventListener("click", () => {
+            state.workbenchSection = s.id;
+            renderUserHub();
+          });
+          seg.appendChild(b);
+        }
+        subbar.appendChild(seg);
+        const tip = document.createElement("span");
+        tip.style.cssText = "font-size:11px;color:var(--nsc-muted);";
+        tip.textContent = "零依赖共享基座 · 所有配置即时保存本地";
+        subbar.appendChild(tip);
+      },
+      renderBody(body) {
+        const sec = state.workbenchSection || "theme";
+        if (sec === "theme") renderThemeSection(body);
+        else if (sec === "skin") renderSkinSection(body);
+        else if (sec === "layout") renderLayoutSection(body);
+        else if (sec === "chat") renderChatAndComposerSection(body);
+        else renderSlotsSection(body);
+      },
+    });
+  })();
+
+  // ==========================================================================
+  // Build Manifest
+  // ==========================================================================
+  const NSC_DISCOVERED_MODULES = {"mode":"release","themes":["themes/mac-default.js"],"plugins":["plugins/core-workbench-base.js"]};
 
   // ==========================================================================
   // Module: 09-main.js

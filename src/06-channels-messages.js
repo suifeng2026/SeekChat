@@ -3,22 +3,29 @@
     if (!nav) return;
     nav.innerHTML = "";
 
-    CHANNELS.forEach((ch, idx) => {
-      if (idx === 3 || idx === 7) {
+    const items = getOrderedChannels(false);
+    let lastGroup = null;
+    items.forEach((ch, idx) => {
+      const grp = ch.group || "board";
+      if (idx > 0 && grp !== lastGroup && (grp === "msg" || lastGroup === "msg")) {
         const div = document.createElement("div");
         div.className = "nsc-nav-divider";
         nav.appendChild(div);
       }
+      lastGroup = grp;
       const btn = document.createElement("button");
       btn.type = "button";
-      const grpCls = `group-${ch.group || "board"}`;
+      const grpCls = `group-${grp}`;
       btn.className = `nsc-nav-item ${grpCls}` + (state.activeChannel === ch.id ? " is-active" : "");
       const unread = getChannelUnreadCount(ch.id);
       btn.innerHTML = `
-        <span class="nsc-nav-left">${ch.icon}<span>${ch.name}</span></span>
+        <span class="nsc-nav-left">${ch.icon || ICONS.layers}<span>${escHtml(ch.name)}</span></span>
         ${unread > 0 ? `<span class="nsc-nav-badge">${unread > 99 ? "99+" : unread}</span>` : ""}
       `;
-      btn.addEventListener("click", () => switchChannel(ch.id));
+      btn.addEventListener("click", () => {
+        if (typeof ch.onClick === "function") ch.onClick();
+        else switchChannel(ch.id);
+      });
       nav.appendChild(btn);
     });
   }
@@ -115,20 +122,27 @@
     if (headThemeBtn && headThemeBtn.dataset.nscThemeObs !== "1") {
       headThemeBtn.dataset.nscThemeObs = "1";
       headThemeBtn.addEventListener("click", () => {
+        if (Date.now() < (state._suppressThemeObsUntil || 0)) return;
         setTimeout(() => {
+          if (Date.now() < (state._suppressThemeObsUntil || 0)) return;
           document.body.classList.remove("nsc-theme-dusk");
           const nextMode = document.body.classList.contains("dark-layout") ? "dark" : "light";
           state.themeMode = nextMode;
+          document.body.dataset.nscTheme = nextMode;
           localStorage.setItem(LS.THEME, nextMode);
           syncThemeButtons();
         }, 40);
       });
     }
 
-    if (state.themeMode === "dusk") {
-      document.body.classList.add("nsc-theme-dusk");
+    if (state.themeMode && state.themeMode !== "auto") {
+      applyThemeMode(state.themeMode);
+    } else {
+      syncThemeButtons();
     }
-    syncThemeButtons();
+    applyPaneSkinsToDom();
+    applyChatPrefsToDom();
+    if (typeof renderRightTabs === "function") renderRightTabs();
     syncUserCardNotifyBadge();
 
     const syncPanelLink = (panelSelector, targetId, fallbackHref) => {
@@ -176,6 +190,7 @@
 
   function restoreNativeWidgets() {
     document.body.classList.remove("nsc-theme-dusk");
+    delete document.body.dataset.nscTheme;
     const rightPanel = document.getElementById("nsk-right-panel-container");
     const userCard = document.querySelector("#nsc-right-user .user-card");
     if (rightPanel && userCard) {
@@ -754,9 +769,7 @@
       });
       const pmBubble = wrap.querySelector(".nsc-bubble");
       if (pmBubble) {
-        enhanceNsApps(pmBubble);
-        enhanceCodeBlocks(pmBubble);
-        processBubbleImages(pmBubble);
+        runBubbleEnhancers(pmBubble, { isPm: true });
       }
       msgsEl.appendChild(wrap);
     }

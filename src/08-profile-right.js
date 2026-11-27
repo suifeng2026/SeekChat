@@ -314,6 +314,16 @@
           </div>
         </div>
       `;
+      const btnsEl = modal.querySelector(".nsc-profile-btns");
+      for (const act of state.registry.userActions || []) {
+        if (!act.places || !act.places.includes("profile")) continue;
+        if (typeof act.visibleFn === "function" && !act.visibleFn(info)) continue;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = typeof act.labelFn === "function" ? act.labelFn(info) : (act.label || act.id);
+        b.addEventListener("click", () => act.onClick(info, { refresh: () => renderModal(info, false) }));
+        btnsEl.appendChild(b);
+      }
       modal.querySelector(".nsc-profile-head div div:first-child").textContent = info.name;
       modal.querySelector("#nsc-p-close").addEventListener("click", () => backdrop.classList.remove("is-open"));
       const pmBtn = modal.querySelector("#nsc-p-pm");
@@ -1055,18 +1065,20 @@
       invite: "/invite",
     };
 
-    const tabs = [
-      { id: "notif", label: "通知", cnt: totalNotif },
-      { id: "posts", label: "主题帖" },
-      { id: "comments", label: "评论" },
-      { id: "collections", label: "收藏" },
-      { id: "credit", label: "鸡腿" },
-      { id: "stardust", label: "星辰" },
-      { id: "fans", label: "粉丝" },
-      { id: "attendance", label: "签到" },
-      { id: "progress", label: "等级" },
-      { id: "setting", label: "设置" },
+    const baseTabs = [
+      { id: "notif", label: "通知", order: 10, cnt: totalNotif },
+      { id: "posts", label: "主题帖", order: 20 },
+      { id: "comments", label: "评论", order: 30 },
+      { id: "collections", label: "收藏", order: 40 },
+      { id: "credit", label: "鸡腿", order: 50 },
+      { id: "stardust", label: "星辰", order: 60 },
+      { id: "fans", label: "粉丝", order: 70 },
+      { id: "attendance", label: "签到", order: 80 },
+      { id: "progress", label: "等级", order: 90 },
+      { id: "setting", label: "设置", order: 100 },
     ];
+    const tabs = [...baseTabs, ...(state.registry.hubTabs || [])].sort((a, b) => (a.order ?? 80) - (b.order ?? 80));
+    const tabSig = tabs.map((t) => t.id).join(",");
 
     const uInfo = uid && state.userCache[String(uid)];
     if (!modal.dataset.nscShellInit) {
@@ -1088,21 +1100,11 @@
             <button type="button" class="nsc-mini-btn" id="nsc-hub-close" style="padding:3px 9px;">✕</button>
           </div>
         </div>
-        <div class="nsc-hub-tabs" id="nsc-hub-tabs">
-          ${tabs.map((t) => `
-            <button type="button" class="nsc-hub-tab" data-htab="${t.id}">
-              <span>${t.label}</span>
-              <span class="nsc-hub-tab-cnt" style="display:none;"></span>
-            </button>
-          `).join("")}
-        </div>
+        <div class="nsc-hub-tabs" id="nsc-hub-tabs"></div>
         <div class="nsc-hub-subbar" id="nsc-hub-subbar"></div>
         <div class="nsc-hub-body" id="nsc-hub-body"></div>
       `;
       modal.querySelector("#nsc-hub-close").addEventListener("click", () => bd.classList.remove("is-open"));
-      modal.querySelectorAll("[data-htab]").forEach((btn) => {
-        btn.addEventListener("click", () => openUserHubModal(btn.dataset.htab));
-      });
       const persistentBody = modal.querySelector("#nsc-hub-body");
       let hubScrollRaf = 0;
       persistentBody.addEventListener("scroll", () => {
@@ -1116,9 +1118,33 @@
             else if (state.hubTab === "credit") loadHubCredit(false);
             else if (state.hubTab === "stardust") loadHubStardust(false);
             else if (state.hubTab === "attendance") loadHubAttendanceBoard(false);
+            else {
+              const regTab = (state.registry.hubTabs || []).find((t) => t.id === state.hubTab);
+              if (regTab && typeof regTab.onScrollEnd === "function") regTab.onScrollEnd(persistentBody);
+            }
           }
         });
       });
+    }
+
+    if (modal.dataset.nscTabSig !== tabSig) {
+      modal.dataset.nscTabSig = tabSig;
+      const tabsHost = modal.querySelector("#nsc-hub-tabs");
+      if (tabsHost) {
+        tabsHost.innerHTML = tabs
+          .map(
+            (t) => `
+            <button type="button" class="nsc-hub-tab" data-htab="${escHtml(t.id)}">
+              <span>${escHtml(t.label)}</span>
+              <span class="nsc-hub-tab-cnt" style="display:none;"></span>
+            </button>
+          `
+          )
+          .join("");
+        tabsHost.querySelectorAll("[data-htab]").forEach((btn) => {
+          btn.addEventListener("click", () => openUserHubModal(btn.dataset.htab));
+        });
+      }
     }
 
     const closeHub = () => bd.classList.remove("is-open");
@@ -1134,14 +1160,16 @@
     const uSubEl = modal.querySelector("#nsc-hub-usub");
     if (uSubEl) uSubEl.textContent = `UID: ${uid || "-"} · macOS 工作台个人空间`;
     const nativeLnk = modal.querySelector("#nsc-hub-native-link");
-    if (nativeLnk) nativeLnk.href = nativeHrefMap[state.hubTab] || "/notification";
+    const customHubTab = (state.registry.hubTabs || []).find((t) => t.id === state.hubTab);
+    if (nativeLnk) nativeLnk.href = (customHubTab && customHubTab.nativeHref) || nativeHrefMap[state.hubTab] || "/notification";
 
     modal.querySelectorAll("[data-htab]").forEach((btn) => {
       const tid = btn.dataset.htab;
+      const tSpec = tabs.find((t) => t.id === tid);
       btn.classList.toggle("is-active", state.hubTab === tid);
       const cntEl = btn.querySelector(".nsc-hub-tab-cnt");
       if (cntEl) {
-        const cntVal = tid === "notif" ? totalNotif : 0;
+        const cntVal = tid === "notif" ? totalNotif : (tSpec && typeof tSpec.badgeFn === "function" ? Number(tSpec.badgeFn()) || 0 : 0);
         if (cntVal > 0) {
           cntEl.textContent = cntVal > 99 ? "99+" : String(cntVal);
           cntEl.style.display = "inline-block";
@@ -1839,6 +1867,13 @@
           </div>
         ` : ""}
       `;
+      return;
+    }
+
+    if (customHubTab) {
+      if (typeof customHubTab.renderSubbar === "function") customHubTab.renderSubbar(subbar, body);
+      if (typeof customHubTab.renderBody === "function") customHubTab.renderBody(body, subbar);
+      restoreHubScroll();
     }
   }
 
@@ -1883,6 +1918,9 @@
       loadHubAttendanceBoard(true);
     } else if (tab === "progress") {
       loadHubProgress(false);
+    } else {
+      const customTab = (state.registry.hubTabs || []).find((t) => t.id === tab);
+      if (customTab && typeof customTab.onOpen === "function") customTab.onOpen();
     }
 
     renderUserHub();
