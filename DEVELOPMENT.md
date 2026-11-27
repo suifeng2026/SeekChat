@@ -46,6 +46,7 @@
 ```text
 ├── build.mjs                      # 零依赖打包脚本：按序合并 src/01..09 并执行 node --check
 ├── package.json                   # 版本号与 build / build:local / check 脚本入口
+├── LICENSE                        # MIT 开源许可证
 ├── README.md                      # 安装指南与功能概览
 ├── DEVELOPMENT.md                 # 本文档：架构规范、接口契约与开发路线图
 ├── MCP_AGENT_GUIDE.md             # 浏览器 MCP 制作、接入与 Agent 联调教程
@@ -110,15 +111,16 @@ node build.mjs --local
 
 ### 3.2 不可破坏的运行时不变量
 
-1. **气泡内容增强管线顺序**（`07-post-chat.js`、`06-channels-messages.js`）：
+1. **气泡内容增强管线顺序**（`05-shell-composer.js`、`06`、`07`，可在「基座 → 扩展与兼容」按需开关）：
    ```text
-   enhanceNsApps(el)              // 1. 解析 nsapp:// 与原生 .stardust-panel / .vote-panel
-     -> linkifyFloorReferences(el)// 2. 识别 #楼层文本（已排除 .nsc-sd-card / .nsc-vote-card）
-     -> enhanceMagicTabs(el)      // 3. 绑定测评帖直系标签切换（禁止外包父容器，防触发站点报错）
-     -> enhanceAnsiBlocks(el)     // 4. 解析 ANSI 256/16/真彩终端序列并提取纯文本
-     -> enhanceTables(el)         // 5. 包装 Markdown 表格容器以支持圆角边框与横向滚动
-     -> enhanceCodeBlocks(el)     // 6. 挂载代码块复制按钮（ANSI 块优先复制已剥离转义码的纯文本）
-     -> processBubbleImages(el)   // 7. 连续纯图聚合宫格与灯箱绑定（避开卡片头像、表格与标签页图片）
+   10: enhanceNsApps(el)              // 解析 nsapp:// 与原生 .stardust-panel / .vote-panel
+   20: linkifyFloorReferences(el)     // 识别 #楼层文本（排除 .nsc-sd-card / .nsc-vote-card）
+   30: enhanceMagicTabs(el)           // 绑定测评帖直系标签切换（禁止外包父容器）
+   35: enhanceAnsiBlocks(el)          // 解析 ANSI 256/16/真彩终端序列并提取纯文本
+   38: enhanceTables(el)              // 包装 Markdown 表格容器（圆角边框与横向滚动）
+   40: enhanceCodeBlocks(el)          // 挂载代码块复制按钮（ANSI 优先复制纯文本）
+   45: enhanceVideos(el)              // 16:9 宽屏自适应视频容器（B站/外链 iframe & video）
+   50: processBubbleImages(el)        // 连续纯图宫格画廊与灯箱绑定（避开卡片/表格/标签页）
    ```
 2. **Magic Tabs 原生 DOM 结构约束**（`05-shell-composer.js: enhanceMagicTabs`）：  
    `.nsk-magic-tabs` 的直接子元素仅允许为 `.nsk-magic-tab-title` 与 `.nsk-magic-tab-body`；严禁向其内部插入额外包裹节点（如 `.nsc-magic-tab-bar`），否则站内 CSS 校验规则会隐藏标题并渲染 `Only tab item is allowed in tabs` 异常提示。
@@ -215,8 +217,8 @@ node build.mjs --local
 | :--- | :--- | :--- | :--- |
 | `registerTheme(manifest)` | `03-styles.js`、`05` | `{ id, name, desc?, baseScheme: "light"\|"dark", order?, tokens, extraCss? }` | 已接入并运行于 `src/themes/mac-default.js` |
 | `PaneSkinManager` (`applyPaneSkinsToDom`) | `02`、`03`、`plugins/core-workbench-base.js` | `panes: { nav, list, chat, right } -> { url, opacity, blur, fit }` | 已接入四分区 `::before` 底层与统一调节面板 |
-| `registerHubTab(tabSpec)` | `08-profile-right.js` | `{ id, label, order, badgeFn?, nativeHref?, onOpen?, onScrollEnd?, renderSubbar, renderBody }` | 已接入 `workbench`（「基座」）插件标签页 |
-| `registerBubbleEnhancer(spec)` | `05`、`06`、`07` | `{ id, priority, run(el, ctx) }` | 已全量接管 `nsapp` / `floor-ref` / `magic-tabs` / `code-blocks` / `images` |
+| `registerHubTab(tabSpec)` | `08-profile-right.js` | `{ id, label, order, badgeFn?, nativeHref?, onOpen?, onScrollEnd?, renderSubbar, renderBody }` | 已接入个人中心扩展与账本子视图 |
+| `registerBubbleEnhancer(spec)` | `02`、`05`、`06`、`07` | `{ id, priority, run(el, ctx) }` | 已接管 8 项正文增强并支持独立开关 |
 | `registerUserAction(spec)` | `02`、`08` | `{ id, places: ["profile"], order?, labelFn, visibleFn?, onClick }` | 名片弹窗已接入，其余位置按需扩展 |
 | `registerNavItem(spec)` | `02`、`06` | `{ id, name, icon, path, group, order?, onClick? }` | 左侧栏与调序基座已接入 |
 
@@ -224,83 +226,61 @@ node build.mjs --local
 
 ## 6. 开发进度与演进路线图
 
-状态约定：`- [x]` 表示已合入主线并随基线构建验证；`- [ ]` 表示规划待实现需求，**开发前需先补全或确认其「实现方式」条目中的接口与交互细节**。
+状态约定：`- [x]` 已合入主线并随基线构建验证；`- [ ]` 规划待开发项（开工前先补齐实现方式）。
 
 ### 6.1 已完成能力清单（基线：`v7.22.38`）
 
-#### 工作台骨架、基座中心与外观主题
-- [x] macOS 四栏桌面布局与防闪屏启动守卫，支持「群聊模式 / 原版论坛」零残留切换，以及导航/帖子列表/右侧信息栏居中收缩扩展阅读区（`01`、`03`、`05`、`06`、`09`）
-- [x] `ThemeRegistry` 主题注册中心与默认 macOS 三态主题抽离（`03-styles.js`、`src/themes/mac-default.js`、`05`、`06`）
-- [x] `build.mjs` 目录自动发现（`src/themes/*.js`、`src/plugins/*.js`、`custom-*` 后置隔离与 `NSC_DISCOVERED_MODULES` 清单注入）
-- [x] 共享 `FeedEngine`（瀑布流分页 + `mutexGroup` 限频批处理 + `AbortController`）与五大扩展插槽（`02-utils-api.js`、`05`、`06`、`07`、`08`）
-- [x] 工作台独立「基座」配置中心（`src/plugins/core-workbench-base.js`，通过可自由拖动记忆位置的 macOS 悬浮球懒加载开启，个人中心顶栏亦保留快捷入口，默认不创建任何设置面板 DOM）：
-  - [x] 外观主题（自动识别内置与扩展主题）
-  - [x] 分区皮肤（导航区 / 帖子区 / 聊天底图 / 个人信息区独立图片 URL/本地图 + 共享透明度/模糊度滑块 + 推荐尺寸提示）
-  - [x] 导航与栏位（左侧导航排序/显隐 + 右侧栏 `热榜/好友/粉丝/黑名单` 排序/显隐）
-  - [x] 排版与交互（正文行距 / 消息间距 / 图片最大尺寸 / 外链跳转模式 / 名片管理记录开关与自定义表情分组管理器）
-  - [x] 原版扩展（内置「80hou预留」萌系封边预设、多段 CSS 备忘管理、一键复制与无闪屏自动跳转定位设置页「论坛扩展」引导）
-  - [x] 扩展与兼容（支持按需独立开关 8 项正文增强流水线，自动过滤站点内置脚本后以易读中文展示陪读蛙/花火/自定义样式兼容状态）
-- [x] 个人中心「鸡腿 100 页深度统计」与「星辰全量账本分析器」（`src/plugins/core-hub-analytics.js`，基于共享 `FeedEngine` 限频拉取、等高对齐排行、双向点赞/转账 Top 20 排行榜与「复制统计排行」导出、全列正反排序与瀑布流自动加载）
-- [x] 个人中心「粉丝 / 关注」列表单人最后发言查询（眼睛图标）、批量查询与按活跃排序（`08-profile-right.js`）
-- [x] 个人中心设置 / 幸运抽奖 / 邀请好友同源 iframe 换肤适配（`08-profile-right.js: mountHubThemedIframe`）
+#### 工作台骨架、独立基座与外观主题
+- [x] **四栏可收缩桌面**：macOS 风格布局、防闪屏守卫、群聊/原版零残留切换，导航/列表/右侧栏居中收缩扩展阅读区（`01`、`03`、`05`、`06`、`09`）
+- [x] **插槽化扩展底座**：`build.mjs` 自动扫描 `themes/` 与 `plugins/`（`custom-*` 后置隔离）、`ThemeRegistry` 三态主题、共享 `FeedEngine` 与五大扩展插槽（`02`、`03`、`05`、`08`）
+- [x] **独立惰性「基座」悬浮窗**：可拖动记忆位置悬浮球懒加载开启，含外观主题、四区皮肤、栏位调序、排版与交互、原版 CSS 备忘录及 8 项正文增强/扩展兼容开关（`core-workbench-base.js`）
+- [x] **同源界面换肤**：个人中心「设置 / 幸运抽奖 / 邀请好友」同源 iframe 套用 macOS 主题并自动定位扩展区（`08`）
 
-#### 频道浏览、帖子阅读与交互
-- [x] 全版块瀑布流加载、关键词搜索防抖与自动补页、未读/增量角标、版块内原地切换未读/已读视图与全站「已读足迹」返回导航（`02`、`06`）
-- [x] 帖子双向瀑布流（向上回溯 DOM 锚点保活，避免跨页楼中楼聚合造成视口反弹）、楼中楼树聚合与折叠（`jumpToFloor` 跨页预拉父楼层、防瀑布流抢跑与防重绘复折叠）、只看楼主/只看成员、楼层号直达（`05`、`07-post-chat.js`）
-- [x] `#temp-script` 元数据水合（点赞/鸡腿/踩/置顶状态）、0.5 秒悬停无边框操作条、底部反应徽章及己方蓝气泡（含楼中楼 `.is-self-thread`）全主题文字/链接/引用/楼层号对比度隔离（`02`、`03`、`07`）
-- [x] 无刷新发表新主题（自动复用官方 `.md-editor` 或对齐版 `内容/预览/对照` + 完整 54 个 AC娘 / 22 个洋葱头等全套贴图，48px 严格单行下拉滚动宽度自适应网格 + App/一键清空编辑器）、主贴/评论编辑弹窗（HTML 转 Markdown）、统一全路由看帖与私信编辑器（支持顶栏 `- / +` 五档高度步进与扁平实心图钉固定开关、居中合适尺寸全屏编辑、激活态防工具栏/图床误收起、未激活 36px 紧凑态、单行不折行三主题工具栏、跨沙箱 CodeMirror 模板插入、点击输入框/外部空白处自动收起表情面板、修复 CodeMirror 含图长行滚动跳动）、跨页稳定引用、帖子收藏同步与点击帖子标题一键复制链接（`01`、`02`、`03`、`04`、`05`、`06`、`07`）
-- [x] 零闪屏增量同步与第三方脚本兼容：无刷新发布评论增量追加楼层、切帖轻量过渡态与单次列表选中高亮、启动去延迟、`MutationObserver` 隔离与运行时外部特征探测（`02`、`06`、`07`、`09`、`core-workbench-base.js`）
-- [x] 晚高峰按需加载与轻量缓存优化：启动仅拉首页（支持 60s SWR 快照）、移除跨版块与收藏预拉（收藏点击时按需核实）、系统通知/黑名单按需同步、热榜 5 分钟本地缓存、`userCache` 12 小时 TTL、`IntersectionObserver` 视口懒加载等级徽章、10 篇帖子内存 LRU 缓存（保留滚动位置）及头像全量 `loading="lazy" decoding="async"` 异步解码（`01`、`02`、`05`、`06`、`07`、`08`）
+#### 频道浏览、阅读体验与编辑器
+- [x] **版块与足迹导航**：全版块瀑布流、关键词检索与自动补页、未读/增量角标、原地未读过滤与「已读足迹」（`02`、`06`）
+- [x] **楼层阅读与互动**：双向瀑布流（DOM 锚点防反弹）、居中楼中楼聚合与防复折叠、只看楼主/成员、楼层与 `commentId` 直达、`#temp-script` 水合、悬停操作条及蓝气泡全主题对比度隔离（`02`、`03`、`07`）
+- [x] **双路由编辑器体系**：帖子页借调复用官方 `.md-editor`（`MutationObserver` 同步增强工具栏），非帖子页兜底 `buildUnifiedComposer()`；支持三主题线性 SVG 工具栏、常用模板光标定位、48px 严格单行宽适应表情网格、`- / +` 五档高度步进、实心图钉固定、居中全屏编辑与跨页引用（`01`、`03`、`05`、`07`）
+- [x] **外链安全跳转**：拦截 `/jump?to=` 提供页内 macOS 二级确认弹窗，支持官方白名单直跳、就地勾选免提醒与基座三档配置（`02`、`03`、`05`）
+- [x] **零闪屏与抗卡顿**：评论增量追加、切帖轻量过渡、启动仅拉首页 SWR 快照、`userCache` 12h TTL、`IntersectionObserver` 懒加载徽章、10 篇帖子 LRU 缓存与第三方浮层隔离（`01`、`02`、`05`–`09`）
 
-#### 富媒体与协议卡片增强
-- [x] `nsapp://stardust-receive` 星辰收款卡片：星轨图标视觉升级、待付款/未付款/已打赏状态分化、流水聚合、个人付款态校验、弹窗付款与关闭后自动回刷；官方 `App` 弹出胶囊紧凑锚定适配（`01`、`03`、`05-shell-composer.js`）
-- [x] `nsapp://vote` 投票卡片：`x-dynamic-sign` 鉴权、单选/多选、内联二次确认、实时占比条形图（`02`、`05`）
-- [x] 测评帖 `.nsk-magic-tabs` 直系结构保留与自适应切换排版（`03`、`05-shell-composer.js: enhanceMagicTabs`）
-- [x] ANSI 终端代码块（`language-ansi` / `data-ansicode="27"`）彩色渲染、Markdown 表格边框/滚动包装及正文超链接绿色高亮（`03`、`05`）
-- [x] 代码块一键复制、16:9 宽屏自适应视频播放器（清除 B站/外链 `iframe` `onload="resizeIframe"` 锁死 300×169 限制并随侧边栏收缩自动扩宽至 1080px）、按图片长宽比自适应的多图无裁切宫格画廊（1/2/3 列 + `contain` 等比缩放）、多图灯箱真实像素缩放（左右翻页箭头随图片宽度自适应紧贴边缘、点击任意非交互空白区关闭）、编辑器统一线性 SVG 工具栏（含 `[!TIP]`/`[!NOTE]`/`[!WARNING]`/`:::details` 折叠/`:::: tabs` 标签模板/`bash` 终端块与图标化图床入口）与 NodeImage 授权直传（`04`、`05`）
+#### 富媒体与协议卡片
+- [x] **星辰与投票卡片**：`nsapp://stardust-receive` 状态校验与弹窗打赏回刷；`nsapp://vote` 动态签名鉴权与实时占比条（`01`–`03`、`05`）
+- [x] **富媒体排版增强**：测评 `.nsk-magic-tabs` 直系结构保留、ANSI 终端彩色块、表格圆角滚动包装、代码块复制、16:9 宽屏自适应视频播放器（解除 `300×169` 锁死并随侧边栏收缩扩宽至 `1080px`）、宫格画廊与灯箱真实像素缩放（`03`、`05`）
+- [x] **NodeImage 图床直传**：授权检测、拖拽/粘贴上传、最近 12 张分页图库、对角防误触删除/插入图标与批量插删（`04`）
 
-#### 消息中心、社交与个人中心
-- [x] `@我`、`回复我` 多页预拉取与 `markViewed` 探测同步、站内私信（含 Markdown 预览）、UID 5230 系统通知结构化标签（`06`）
-- [x] 右侧热榜（实时/日榜/周榜及站内降级回退）、关注/粉丝同步、服务器黑名单增删、单人及批量最后发言查询（`02`、`06`、`08`）
-- [x] 悬浮个人中心（通知/主题/评论/收藏/鸡腿/星辰/粉丝/等级额度）、名片预加载、名片内单人管理记录查询（`api.xxboxx.de/api/seek` 与 `nodeseek-rulings.898252.xyz` 双源适配器与限流无缝回退、UTC+8 北京时间换算、viewer 缓存回退、macOS 纯文字染色标签与悬停/展开详情及涉事帖楼层直达）、macOS 二级空间主页弹窗及固定/随机/每日首次访问自动签到（`02`、`03`、`05`、`08-profile-right.js`）
-- [x] 外链 `/jump?to=` 页内 macOS 二级跳转提醒（支持白名单直跳、就地勾选免提醒及「基座 -> 排版与回复」三档模式切换，`02`、`03`、`05`、`core-workbench-base.js`）
-- [x] 基于 `GM_info.script` 的单一权威源更新检测（1 小时节流、优先直连 `github.com/.../info/refs?service=git-upload-pack` 零缓存零限流获取最新 Commit SHA 再读取不可变文件，绕过 `api.github.com` 60 次/小时限流与 Fastly 300s 缓存）与 `--local` 防覆盖构建模式（`02`、`build.mjs`）
+#### 消息中心、社交、个人中心与更新
+- [x] **全通道消息中心**：`@我`、`回复我` 多页同步与 `markViewed` 探测、站内私信（含预览）及 UID 5230 系统通知结构化标签（`06`）
+- [x] **右栏与社交关系**：热榜（实时/日/周榜）、关注/粉丝、黑名单同步与单人/批量最后发言查询（`02`、`06`、`08`）
+- [x] **名片与空间系统**：名片预加载、双源管理记录查询（`api.xxboxx.de` + `nodeseek-rulings.898252.xyz` 限流回退、UTC+8 换算、关键字高亮与悬停/锁定浮层直达关联内容）、查最后发言自动定位与 macOS 二级空间弹窗（`02`、`03`、`08`）
+- [x] **个人资产与签到**：百页鸡腿统计与全量星辰账本分析（`core-hub-analytics.js`）、固定/随机/每日自动签到与信用账簿今日收益同步（`08`）
+- [x] **零缓存更新检测**：基于 `GM_info.script` 单一权威源，优先经 `github.com/.../info/refs` 零限流零缓存解析最新 Commit SHA 与不可变安装直链，支持 `--local` 防覆盖构建（`02`、`build.mjs`）
 
 ---
 
 ### 6.2 待开发路线图（Backlog）
 
-> **开发者与 Agent 协作提示**：本节用于承接后续功能迭代。在认领某项 `- [ ]` 任务并开始编码前，请确认其「实现方式（待补充）」已补齐具体接口或产品交互约束。
-
-- [x] 核心底座前置：插槽注册表、`themes/` 与 `plugins/` 自动扫描、四区皮肤/组件调序/排版表情共享基座与 `FeedEngine` 引擎已落地于 `v7.21.0`（后续具体业务插件按下方条目逐个接入）
-
-- [x] **UI 皮肤系统基础框架（已于 `v7.21.0` 完成基座，待按需微调预设）**：四分区底层 `::before` 隔离渲染、透明度/模糊度/填充方式共享滑块、推荐尺寸标识与本地图片导入已落地于 `src/plugins/core-workbench-base.js`；后续仅需按实际视觉反馈微调默认预设或导出/导入 JSON。
-
-- [x] **主题插件化基础框架（已于 `v7.21.0` 完成基座，后续可扩充更多主题包）**：默认 macOS 三套主题已抽离至 `src/themes/mac-default.js` 并接入 `ThemeRegistry`，在「基座 -> 主题中心」可直接切换任意自动扫描到的主题包。
-
-- [x] **星辰全量账本分析面板（已于 `v7.22.0` 落地 `src/plugins/core-hub-analytics.js`）**：挂载于个人中心「星辰 -> 全量分析」，基于 `FeedEngine` 游标全量拉取与 macOS 风格展示，支持分类筛选、搜索、昵称补全与 `:::: tabs` Markdown 导出。
-
-- [x] **近 100 页鸡腿细粒度统计分析看板（已于 `v7.22.0` 落地 `src/plugins/core-hub-analytics.js`）**：挂载于个人中心「鸡腿 -> 100页深度统计」，支持进度显示/中止、收支分类、签到手气分布条形图与投喂大佬排行榜。
-
-- [x] **管理处罚记录查询（已于 `v7.22.21`~`v7.22.37` 落地用户名片双源查询）**：
-  - **实现方式**：在用户名片弹窗接入 `api.xxboxx.de/api/seek` 与 `nodeseek-rulings.898252.xyz` 双源适配器（1 小时本地缓存 + 限流无缝回退 + `viewer` 身份缓存防误限流），统一换算为 UTC+8 北京时间并对原因/处理关键字语义高亮，支持悬停/点击锁定滚动浮层直达关联帖子与楼层（注：两套外部接口均按单个用户名查询，不提供全站 `/ruling` 列表流，故左侧「管理」外链保持直达原站 `/ruling`）。
+- [ ] **NodeSeek 邮箱联动（`https://seek.li/login`）**
+  - **目标范围**：在右侧个人信息区快捷图标栏最前方（`.nsc-right-user .user-card .user-head .menu > div`）插入 `✉` 邮箱图标，一键快速查看或跳转 NodeSeek 邮件。
+  - **实现方式（待补充）**：
+    - 接入路径：`<待补充：新标签页直达 / 页内浮窗嵌入 / seek.li 登录态与未读邮件拉取接口>`
+    - 挂载位置：`src/08-profile-right.js` 右侧个人信息卡片操作图标栏首位
 
 - [ ] **服务端关注/取关同步与快捷关注/屏蔽按钮**
-  - **现状与约束**：`02-utils-api.js: toggleFriend` 仅读写本地 `localStorage`（`LS.FRIENDS`），未同步 NodeSeek 服务端关注状态；屏蔽操作当前仅存在于名片弹窗与右侧「黑名单」面板。
-  - **目标范围**：打通服务端关注/取关接口使「好友」列表与站内 `/api/fans/follow` 双向同步，并在楼层消息头部/私信头部/右栏列表行内补充快捷「关注 / 屏蔽」按钮（屏蔽操作需防误触确认）。
+  - **现状与约束**：`02-utils-api.js: toggleFriend` 仅读写本地 `LS.FRIENDS`，未同步服务端 `/api/fans/follow`；屏蔽操作仅在名片与右栏「黑名单」提供。
+  - **目标范围**：打通关注/取关服务端双向同步，并在楼层头部、私信头部或右栏行内补充防误触快捷「关注 / 屏蔽」按钮。
   - **实现方式（待补充）**：
-    - 服务端关注/取关 API：`<待补充：具体接口路径、请求体参数与响应校验>`
-    - 快捷按钮挂载位置：`<待补充：气泡作者旁 / 悬停条 / 名片或右栏行内>`
+    - 服务端接口：`<待补充：关注/取关接口路径、载荷格式与响应校验>`
+    - 挂载位置：`<待补充：气泡作者旁 / 悬停条 / 右栏列表行内>`
 
 - [ ] **全路由星辰主动转账面板**
-  - **现状与约束**：在首页 `/` 等非帖子详情页，原站未挂载转账弹窗组件，导致名片内原生转账入口无响应。
-  - **目标范围**：在个人中心或用户名片弹窗内提供不依赖原站隐藏组件的星辰主动转账面板。
+  - **现状与约束**：非帖子页原站未挂载转账弹窗组件，导致名片内原生转账入口无响应。
+  - **目标范围**：在个人中心或用户名片内提供不依赖原站隐藏组件的星辰主动转账面板。
   - **实现方式（待补充）**：
-    - 转账执行路径：`<待补充：调用 /stardust/payment 弹窗或直连转账接口>`
+    - 转账路径：`<待补充：拉起 /stardust/payment 弹窗或直连转账接口>`
 
-- [ ] **工程可维护性演进（纯函数回归测试套件）**
-  - **目标范围**：在保持零外部测试依赖的前提下，基于 Node.js 内置 `node:test` 补充核心解析器与工具函数回归测试（覆盖 `nsapp://` 解析、系统通知格式化、楼中楼建树、星辰/鸡腿统计聚合与版本比较）。
-  - **实现方式（待补充）**：`<待核心与插件目录拆分落地后同步接入>`
+- [ ] **纯函数回归测试套件（`node:test`）**
+  - **目标范围**：基于 Node.js 内置 `node:test` 为核心纯函数补充零依赖回归测试（覆盖 `nsapp://` 解析、系统通知格式化、楼中楼建树、管理记录时间换算、统计聚合与版本比较）。
+  - **实现方式（待补充）**：`<待纯函数导出 seam 收敛后同步接入>`
 
 <!--
 新增待办模板（复制后填入 6.2 节）：
