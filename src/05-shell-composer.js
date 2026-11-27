@@ -1111,6 +1111,7 @@
     if (!containerEl) return;
     const gridImgs = [];
     for (const img of containerEl.querySelectorAll("img")) {
+      if (img.closest(".nsc-sd-card, .nsc-vote-card")) continue;
       const src = img.getAttribute("src") || "";
       if (
         src.includes("/emotion/") ||
@@ -1123,7 +1124,7 @@
       }
       img.classList.add("nsc-zoomable-img");
       img.title = "点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
-      if (!img.closest('blockquote, pre, code, table, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"]')) {
+      if (!img.closest('blockquote, pre, code, table, .nsc-table-wrap, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"]')) {
         gridImgs.push(img);
       }
     }
@@ -1149,7 +1150,7 @@
     // 仅合并「连续相邻的无文字纯图块」为朋友圈宫格，绝不跨文字段落抽图，完整保留图文混排原始顺序
     const isPureImgBlock = (el) => {
       if (!el || el.nodeType !== 1) return false;
-      if (el.matches('blockquote, pre, code, table, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"], .nsc-img-grid')) {
+      if (el.matches('blockquote, pre, code, table, .nsc-table-wrap, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"], .nsc-img-grid, .nsc-sd-card, .nsc-vote-card')) {
         return false;
       }
       if (el.tagName === "IMG") return el.classList.contains("nsc-zoomable-img");
@@ -1195,13 +1196,148 @@
     flushRun();
   }
 
+  function ansi256ToCssColor(n) {
+    const std16 = [
+      "#4b5563", "#ef4444", "#22c55e", "#eab308", "#3b82f6", "#d946ef", "#06b6d4", "#e5e7eb",
+      "#9ca3af", "#f87171", "#4ade80", "#facc15", "#60a5fa", "#e879f9", "#22d3ee", "#ffffff",
+    ];
+    if (n < 0 || n > 255) return "";
+    if (n < 16) return std16[n];
+    if (n >= 232) {
+      const g = 8 + (n - 232) * 10;
+      return `rgb(${g}, ${g}, ${g})`;
+    }
+    const idx = n - 16;
+    const r = Math.floor(idx / 36);
+    const g = Math.floor((idx % 36) / 6);
+    const b = idx % 6;
+    const ch = (v) => (v === 0 ? 0 : 55 + v * 40);
+    return `rgb(${ch(r)}, ${ch(g)}, ${ch(b)})`;
+  }
+
+  function renderAnsiToFragment(rawText) {
+    const frag = document.createDocumentFragment();
+    let plainOut = "";
+    let stateStyle = { fg: "", bg: "", bold: false, dim: false, italic: false, underline: false };
+    const fgStd = ["#4b5563", "#ef4444", "#22c55e", "#eab308", "#3b82f6", "#d946ef", "#06b6d4", "#e5e7eb"];
+    const fgBright = ["#9ca3af", "#f87171", "#4ade80", "#facc15", "#60a5fa", "#e879f9", "#22d3ee", "#ffffff"];
+    const bgStd = ["#111827", "#b91c1c", "#15803d", "#a16207", "#1d4ed8", "#a21caf", "#0e7490", "#d1d5db"];
+    const bgBright = ["#4b5563", "#ef4444", "#22c55e", "#eab308", "#3b82f6", "#d946ef", "#06b6d4", "#f9fafb"];
+
+    const pushSegment = (txt) => {
+      if (!txt) return;
+      plainOut += txt;
+      const hasStyle = stateStyle.fg || stateStyle.bg || stateStyle.bold || stateStyle.dim || stateStyle.italic || stateStyle.underline;
+      if (!hasStyle) {
+        frag.appendChild(document.createTextNode(txt));
+        return;
+      }
+      const sp = document.createElement("span");
+      if (stateStyle.fg) sp.style.color = stateStyle.fg;
+      if (stateStyle.bg) sp.style.backgroundColor = stateStyle.bg;
+      if (stateStyle.bold) sp.style.fontWeight = "700";
+      if (stateStyle.dim) sp.style.opacity = "0.7";
+      if (stateStyle.italic) sp.style.fontStyle = "italic";
+      if (stateStyle.underline) sp.style.textDecoration = "underline";
+      sp.textContent = txt;
+      frag.appendChild(sp);
+    };
+
+    const re = /\x1b\[([0-9;]*)m/g;
+    let lastIdx = 0;
+    let m;
+    while ((m = re.exec(rawText)) !== null) {
+      if (m.index > lastIdx) pushSegment(rawText.slice(lastIdx, m.index));
+      const codes = m[1] === "" ? [0] : m[1].split(";").map((x) => parseInt(x, 10));
+      for (let i = 0; i < codes.length; i++) {
+        const c = Number.isFinite(codes[i]) ? codes[i] : 0;
+        if (c === 0) {
+          stateStyle = { fg: "", bg: "", bold: false, dim: false, italic: false, underline: false };
+        } else if (c === 1) stateStyle.bold = true;
+        else if (c === 2) stateStyle.dim = true;
+        else if (c === 3) stateStyle.italic = true;
+        else if (c === 4) stateStyle.underline = true;
+        else if (c === 22) { stateStyle.bold = false; stateStyle.dim = false; }
+        else if (c === 23) stateStyle.italic = false;
+        else if (c === 24) stateStyle.underline = false;
+        else if (c === 39) stateStyle.fg = "";
+        else if (c === 49) stateStyle.bg = "";
+        else if (c >= 30 && c <= 37) stateStyle.fg = fgStd[c - 30];
+        else if (c >= 90 && c <= 97) stateStyle.fg = fgBright[c - 90];
+        else if (c >= 40 && c <= 47) stateStyle.bg = bgStd[c - 40];
+        else if (c >= 100 && c <= 107) stateStyle.bg = bgBright[c - 100];
+        else if (c === 38 || c === 48) {
+          const isBg = c === 48;
+          const mode = codes[i + 1];
+          if (mode === 5 && i + 2 < codes.length) {
+            const col = ansi256ToCssColor(codes[i + 2]);
+            if (isBg) stateStyle.bg = col;
+            else stateStyle.fg = col;
+            i += 2;
+          } else if (mode === 2 && i + 4 < codes.length) {
+            const r = Math.min(255, Math.max(0, codes[i + 2] || 0));
+            const g = Math.min(255, Math.max(0, codes[i + 3] || 0));
+            const b = Math.min(255, Math.max(0, codes[i + 4] || 0));
+            const col = `rgb(${r}, ${g}, ${b})`;
+            if (isBg) stateStyle.bg = col;
+            else stateStyle.fg = col;
+            i += 4;
+          }
+        }
+      }
+      lastIdx = re.lastIndex;
+    }
+    if (lastIdx < rawText.length) pushSegment(rawText.slice(lastIdx));
+    return { frag, plainText: plainOut };
+  }
+
+  function enhanceAnsiBlocks(containerEl) {
+    if (!containerEl) return;
+    for (const pre of containerEl.querySelectorAll("pre")) {
+      if (pre.dataset.nscAnsiInit === "1") continue;
+      const codeEl = pre.querySelector("code");
+      const target = codeEl || pre;
+      const hasMarker =
+        (codeEl && codeEl.classList.contains("language-ansi")) ||
+        Boolean(target.querySelector("[data-ansicode]")) ||
+        /\x1b\[[0-9;]*m/.test(target.textContent || "");
+      if (!hasMarker) continue;
+      pre.dataset.nscAnsiInit = "1";
+
+      const clone = target.cloneNode(true);
+      for (const sp of clone.querySelectorAll("[data-ansicode]")) {
+        const ch = Number(sp.getAttribute("data-ansicode"));
+        sp.replaceWith(document.createTextNode(Number.isFinite(ch) ? String.fromCharCode(ch) : ""));
+      }
+      const rawText = clone.textContent || "";
+      if (!/\x1b\[[0-9;]*m/.test(rawText)) continue;
+
+      const { frag, plainText } = renderAnsiToFragment(rawText);
+      pre.dataset.nscPlainText = plainText;
+      target.innerHTML = "";
+      target.appendChild(frag);
+      pre.classList.add("nsc-ansi-pre");
+    }
+  }
+
+  function enhanceTables(containerEl) {
+    if (!containerEl) return;
+    for (const tbl of Array.from(containerEl.querySelectorAll("table"))) {
+      if (tbl.closest(".nsc-table-wrap, pre, code")) continue;
+      const wrap = document.createElement("div");
+      wrap.className = "nsc-table-wrap";
+      tbl.parentNode.insertBefore(wrap, tbl);
+      wrap.appendChild(tbl);
+    }
+  }
+
   function enhanceCodeBlocks(containerEl) {
     if (!containerEl) return;
     for (const pre of containerEl.querySelectorAll("pre")) {
       if (pre.dataset.nscCopyInit === "1") continue;
       pre.dataset.nscCopyInit = "1";
       const codeEl = pre.querySelector("code");
-      const rawText = ((codeEl ? codeEl.textContent : pre.textContent) || "").replace(/\n+$/, "");
+      const rawText = (pre.dataset.nscPlainText || (codeEl ? codeEl.textContent : pre.textContent) || "").replace(/\n+$/, "");
       if (!rawText.trim()) continue;
       pre.classList.add("has-copy-btn");
       const btn = document.createElement("button");
@@ -1833,6 +1969,8 @@
 
   registerBubbleEnhancer({ id: "nsapp", priority: 10, run: enhanceNsApps });
   registerBubbleEnhancer({ id: "magic-tabs", priority: 30, run: enhanceMagicTabs });
+  registerBubbleEnhancer({ id: "ansi-blocks", priority: 35, run: enhanceAnsiBlocks });
+  registerBubbleEnhancer({ id: "tables", priority: 38, run: enhanceTables });
   registerBubbleEnhancer({ id: "code-blocks", priority: 40, run: enhanceCodeBlocks });
   registerBubbleEnhancer({ id: "images", priority: 50, run: processBubbleImages });
 

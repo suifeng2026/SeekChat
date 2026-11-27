@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.21.0
+// @version      7.21.1
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -284,7 +284,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.21.0",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.21.1",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -1439,7 +1439,6 @@
         background: rgba(30, 32, 38, 0.88) !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
       }
-      body.nsc-app-active.dark-layout .nsc-bubble a { color: #64b5ff; }
       body.nsc-app-active.dark-layout .nsc-bubble code:not(pre code) {
         background: rgba(255, 255, 255, 0.10); color: #e5e7eb; padding: 1px 5px; border-radius: 5px;
       }
@@ -1513,7 +1512,6 @@
       body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(184, 98, 28, 0.14); color: #a85513; }
       body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg { color: #c2497a; }
       body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg.is-active { background: linear-gradient(135deg, #d66793, #bf4777); }
-      body.nsc-app-active.nsc-theme-dusk .nsc-bubble a { color: #355c96; }
       body.nsc-app-active.nsc-theme-dusk .nsc-lv-pill { background: rgba(68, 104, 158, 0.12); color: #3d6094; }
 
       #nsc-mode-switch-btn {
@@ -1901,7 +1899,48 @@
         border-radius: 14px 14px 4px 14px; border-color: transparent;
         box-shadow: 0 2px 8px rgba(0, 122, 255, 0.22);
       }
-      .nsc-msg.is-self .nsc-bubble a { color: #e0f2fe; }
+
+      /* 帖子/评论正文超链接绿色高亮（排除楼层引用、卡片与图片链接） */
+      .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
+      .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
+        color: #059669;
+        background: rgba(16, 185, 129, 0.10);
+        padding: 0 4px;
+        border-radius: 5px;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        text-decoration-color: rgba(5, 150, 105, 0.45);
+        font-weight: 500;
+        transition: background 0.12s ease, color 0.12s ease;
+      }
+      .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover,
+      .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover {
+        color: #047857;
+        background: rgba(16, 185, 129, 0.18);
+      }
+      body.nsc-app-active.dark-layout .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
+      body.nsc-app-active.dark-layout .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
+        color: #34d399;
+        background: rgba(52, 211, 153, 0.14);
+        text-decoration-color: rgba(52, 211, 153, 0.45);
+      }
+      body.nsc-app-active.dark-layout .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover,
+      body.nsc-app-active.dark-layout .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover {
+        color: #6ee7b7;
+        background: rgba(52, 211, 153, 0.24);
+      }
+      .nsc-msg.is-self .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
+      .nsc-thread-item.is-self-thread .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
+        color: #a7f3d0;
+        background: rgba(6, 78, 59, 0.28);
+        text-decoration-color: rgba(167, 243, 208, 0.70);
+      }
+      .nsc-bubble a:has(> img),
+      .nsc-thread-content a:has(> img) {
+        background: transparent !important;
+        padding: 0 !important;
+        text-decoration: none !important;
+      }
 
       .nsc-bubble img,
       .nsc-bubble img.nsc-zoomable-img,
@@ -2014,6 +2053,91 @@
       }
       body.dark-layout .nsc-thread-content pre { background: rgba(0,0,0,0.34); }
       .nsc-thread-content pre.has-copy-btn { padding-top: 26px; }
+
+      /* ANSI 终端代码块渲染样式 */
+      .nsc-bubble pre.nsc-ansi-pre,
+      .nsc-thread-content pre.nsc-ansi-pre {
+        background: #181b22 !important;
+        color: #e5e7eb !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 12.5px;
+        line-height: 1.48;
+        white-space: pre;
+        overflow-x: auto;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+      .nsc-bubble pre.nsc-ansi-pre code,
+      .nsc-thread-content pre.nsc-ansi-pre code {
+        background: transparent !important;
+        color: inherit;
+        padding: 0;
+        white-space: pre;
+        font-family: inherit;
+      }
+      .nsc-ansi-pre .nsc-copy-code-btn {
+        background: rgba(42, 46, 56, 0.92);
+        border-color: rgba(255, 255, 255, 0.16);
+        color: #cbd5e1;
+      }
+      .nsc-ansi-pre .nsc-copy-code-btn:hover {
+        color: #60a5fa;
+        border-color: #60a5fa;
+      }
+
+      /* Markdown 表格边框、间距与横向滚动包装器 */
+      .nsc-table-wrap {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 8px 0;
+        border: 1px solid var(--nsc-border);
+        border-radius: 10px;
+        background: var(--nsc-bg-card);
+        color: var(--nsc-text);
+      }
+      .nsc-table-wrap table,
+      .nsc-bubble table,
+      .nsc-thread-content table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+        line-height: 1.48;
+        color: var(--nsc-text);
+        margin: 0;
+      }
+      .nsc-bubble th,
+      .nsc-bubble td,
+      .nsc-thread-content th,
+      .nsc-thread-content td {
+        padding: 7px 11px;
+        border-bottom: 1px solid var(--nsc-border);
+        border-right: 1px solid var(--nsc-border);
+        text-align: left;
+        vertical-align: top;
+      }
+      .nsc-bubble tr th:last-child,
+      .nsc-bubble tr td:last-child,
+      .nsc-thread-content tr th:last-child,
+      .nsc-thread-content tr td:last-child {
+        border-right: none;
+      }
+      .nsc-bubble tbody tr:last-child td,
+      .nsc-thread-content tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .nsc-bubble thead th,
+      .nsc-thread-content thead th {
+        background: var(--nsc-hover);
+        font-weight: 700;
+        color: var(--nsc-text);
+        white-space: nowrap;
+      }
+      .nsc-bubble tbody tr:nth-child(even) td,
+      .nsc-thread-content tbody tr:nth-child(even) td {
+        background: rgba(128, 128, 128, 0.035);
+      }
       .nsc-bubble blockquote {
         margin: 0 0 8px; padding: 6px 10px; border-left: 3px solid var(--nsc-accent);
         background: var(--nsc-quote-bg); border-radius: 6px; font-size: 12px; color: var(--nsc-muted);
@@ -4566,6 +4690,7 @@
     if (!containerEl) return;
     const gridImgs = [];
     for (const img of containerEl.querySelectorAll("img")) {
+      if (img.closest(".nsc-sd-card, .nsc-vote-card")) continue;
       const src = img.getAttribute("src") || "";
       if (
         src.includes("/emotion/") ||
@@ -4578,7 +4703,7 @@
       }
       img.classList.add("nsc-zoomable-img");
       img.title = "点击打开画廊（支持 ←/→ 切换与滚轮缩放）";
-      if (!img.closest('blockquote, pre, code, table, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"]')) {
+      if (!img.closest('blockquote, pre, code, table, .nsc-table-wrap, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"]')) {
         gridImgs.push(img);
       }
     }
@@ -4604,7 +4729,7 @@
     // 仅合并「连续相邻的无文字纯图块」为朋友圈宫格，绝不跨文字段落抽图，完整保留图文混排原始顺序
     const isPureImgBlock = (el) => {
       if (!el || el.nodeType !== 1) return false;
-      if (el.matches('blockquote, pre, code, table, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"], .nsc-img-grid')) {
+      if (el.matches('blockquote, pre, code, table, .nsc-table-wrap, details, .nsk-magic-tabs, .nsk-magic-tab-body, [class*="magic-tab"], [class*="tab-content"], [class*="tab-body"], [class*="tab-pane"], [role="tabpanel"], .nsc-img-grid, .nsc-sd-card, .nsc-vote-card')) {
         return false;
       }
       if (el.tagName === "IMG") return el.classList.contains("nsc-zoomable-img");
@@ -4650,13 +4775,148 @@
     flushRun();
   }
 
+  function ansi256ToCssColor(n) {
+    const std16 = [
+      "#4b5563", "#ef4444", "#22c55e", "#eab308", "#3b82f6", "#d946ef", "#06b6d4", "#e5e7eb",
+      "#9ca3af", "#f87171", "#4ade80", "#facc15", "#60a5fa", "#e879f9", "#22d3ee", "#ffffff",
+    ];
+    if (n < 0 || n > 255) return "";
+    if (n < 16) return std16[n];
+    if (n >= 232) {
+      const g = 8 + (n - 232) * 10;
+      return `rgb(${g}, ${g}, ${g})`;
+    }
+    const idx = n - 16;
+    const r = Math.floor(idx / 36);
+    const g = Math.floor((idx % 36) / 6);
+    const b = idx % 6;
+    const ch = (v) => (v === 0 ? 0 : 55 + v * 40);
+    return `rgb(${ch(r)}, ${ch(g)}, ${ch(b)})`;
+  }
+
+  function renderAnsiToFragment(rawText) {
+    const frag = document.createDocumentFragment();
+    let plainOut = "";
+    let stateStyle = { fg: "", bg: "", bold: false, dim: false, italic: false, underline: false };
+    const fgStd = ["#4b5563", "#ef4444", "#22c55e", "#eab308", "#3b82f6", "#d946ef", "#06b6d4", "#e5e7eb"];
+    const fgBright = ["#9ca3af", "#f87171", "#4ade80", "#facc15", "#60a5fa", "#e879f9", "#22d3ee", "#ffffff"];
+    const bgStd = ["#111827", "#b91c1c", "#15803d", "#a16207", "#1d4ed8", "#a21caf", "#0e7490", "#d1d5db"];
+    const bgBright = ["#4b5563", "#ef4444", "#22c55e", "#eab308", "#3b82f6", "#d946ef", "#06b6d4", "#f9fafb"];
+
+    const pushSegment = (txt) => {
+      if (!txt) return;
+      plainOut += txt;
+      const hasStyle = stateStyle.fg || stateStyle.bg || stateStyle.bold || stateStyle.dim || stateStyle.italic || stateStyle.underline;
+      if (!hasStyle) {
+        frag.appendChild(document.createTextNode(txt));
+        return;
+      }
+      const sp = document.createElement("span");
+      if (stateStyle.fg) sp.style.color = stateStyle.fg;
+      if (stateStyle.bg) sp.style.backgroundColor = stateStyle.bg;
+      if (stateStyle.bold) sp.style.fontWeight = "700";
+      if (stateStyle.dim) sp.style.opacity = "0.7";
+      if (stateStyle.italic) sp.style.fontStyle = "italic";
+      if (stateStyle.underline) sp.style.textDecoration = "underline";
+      sp.textContent = txt;
+      frag.appendChild(sp);
+    };
+
+    const re = /\x1b\[([0-9;]*)m/g;
+    let lastIdx = 0;
+    let m;
+    while ((m = re.exec(rawText)) !== null) {
+      if (m.index > lastIdx) pushSegment(rawText.slice(lastIdx, m.index));
+      const codes = m[1] === "" ? [0] : m[1].split(";").map((x) => parseInt(x, 10));
+      for (let i = 0; i < codes.length; i++) {
+        const c = Number.isFinite(codes[i]) ? codes[i] : 0;
+        if (c === 0) {
+          stateStyle = { fg: "", bg: "", bold: false, dim: false, italic: false, underline: false };
+        } else if (c === 1) stateStyle.bold = true;
+        else if (c === 2) stateStyle.dim = true;
+        else if (c === 3) stateStyle.italic = true;
+        else if (c === 4) stateStyle.underline = true;
+        else if (c === 22) { stateStyle.bold = false; stateStyle.dim = false; }
+        else if (c === 23) stateStyle.italic = false;
+        else if (c === 24) stateStyle.underline = false;
+        else if (c === 39) stateStyle.fg = "";
+        else if (c === 49) stateStyle.bg = "";
+        else if (c >= 30 && c <= 37) stateStyle.fg = fgStd[c - 30];
+        else if (c >= 90 && c <= 97) stateStyle.fg = fgBright[c - 90];
+        else if (c >= 40 && c <= 47) stateStyle.bg = bgStd[c - 40];
+        else if (c >= 100 && c <= 107) stateStyle.bg = bgBright[c - 100];
+        else if (c === 38 || c === 48) {
+          const isBg = c === 48;
+          const mode = codes[i + 1];
+          if (mode === 5 && i + 2 < codes.length) {
+            const col = ansi256ToCssColor(codes[i + 2]);
+            if (isBg) stateStyle.bg = col;
+            else stateStyle.fg = col;
+            i += 2;
+          } else if (mode === 2 && i + 4 < codes.length) {
+            const r = Math.min(255, Math.max(0, codes[i + 2] || 0));
+            const g = Math.min(255, Math.max(0, codes[i + 3] || 0));
+            const b = Math.min(255, Math.max(0, codes[i + 4] || 0));
+            const col = `rgb(${r}, ${g}, ${b})`;
+            if (isBg) stateStyle.bg = col;
+            else stateStyle.fg = col;
+            i += 4;
+          }
+        }
+      }
+      lastIdx = re.lastIndex;
+    }
+    if (lastIdx < rawText.length) pushSegment(rawText.slice(lastIdx));
+    return { frag, plainText: plainOut };
+  }
+
+  function enhanceAnsiBlocks(containerEl) {
+    if (!containerEl) return;
+    for (const pre of containerEl.querySelectorAll("pre")) {
+      if (pre.dataset.nscAnsiInit === "1") continue;
+      const codeEl = pre.querySelector("code");
+      const target = codeEl || pre;
+      const hasMarker =
+        (codeEl && codeEl.classList.contains("language-ansi")) ||
+        Boolean(target.querySelector("[data-ansicode]")) ||
+        /\x1b\[[0-9;]*m/.test(target.textContent || "");
+      if (!hasMarker) continue;
+      pre.dataset.nscAnsiInit = "1";
+
+      const clone = target.cloneNode(true);
+      for (const sp of clone.querySelectorAll("[data-ansicode]")) {
+        const ch = Number(sp.getAttribute("data-ansicode"));
+        sp.replaceWith(document.createTextNode(Number.isFinite(ch) ? String.fromCharCode(ch) : ""));
+      }
+      const rawText = clone.textContent || "";
+      if (!/\x1b\[[0-9;]*m/.test(rawText)) continue;
+
+      const { frag, plainText } = renderAnsiToFragment(rawText);
+      pre.dataset.nscPlainText = plainText;
+      target.innerHTML = "";
+      target.appendChild(frag);
+      pre.classList.add("nsc-ansi-pre");
+    }
+  }
+
+  function enhanceTables(containerEl) {
+    if (!containerEl) return;
+    for (const tbl of Array.from(containerEl.querySelectorAll("table"))) {
+      if (tbl.closest(".nsc-table-wrap, pre, code")) continue;
+      const wrap = document.createElement("div");
+      wrap.className = "nsc-table-wrap";
+      tbl.parentNode.insertBefore(wrap, tbl);
+      wrap.appendChild(tbl);
+    }
+  }
+
   function enhanceCodeBlocks(containerEl) {
     if (!containerEl) return;
     for (const pre of containerEl.querySelectorAll("pre")) {
       if (pre.dataset.nscCopyInit === "1") continue;
       pre.dataset.nscCopyInit = "1";
       const codeEl = pre.querySelector("code");
-      const rawText = ((codeEl ? codeEl.textContent : pre.textContent) || "").replace(/\n+$/, "");
+      const rawText = (pre.dataset.nscPlainText || (codeEl ? codeEl.textContent : pre.textContent) || "").replace(/\n+$/, "");
       if (!rawText.trim()) continue;
       pre.classList.add("has-copy-btn");
       const btn = document.createElement("button");
@@ -5288,6 +5548,8 @@
 
   registerBubbleEnhancer({ id: "nsapp", priority: 10, run: enhanceNsApps });
   registerBubbleEnhancer({ id: "magic-tabs", priority: 30, run: enhanceMagicTabs });
+  registerBubbleEnhancer({ id: "ansi-blocks", priority: 35, run: enhanceAnsiBlocks });
+  registerBubbleEnhancer({ id: "tables", priority: 38, run: enhanceTables });
   registerBubbleEnhancer({ id: "code-blocks", priority: 40, run: enhanceCodeBlocks });
   registerBubbleEnhancer({ id: "images", priority: 50, run: processBubbleImages });
 

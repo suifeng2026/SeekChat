@@ -58,7 +58,6 @@
         background: rgba(30, 32, 38, 0.88) !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
       }
-      body.nsc-app-active.dark-layout .nsc-bubble a { color: #64b5ff; }
       body.nsc-app-active.dark-layout .nsc-bubble code:not(pre code) {
         background: rgba(255, 255, 255, 0.10); color: #e5e7eb; padding: 1px 5px; border-radius: 5px;
       }
@@ -132,7 +131,6 @@
       body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-browse .nsc-nav-badge { background: rgba(184, 98, 28, 0.14); color: #a85513; }
       body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg { color: #c2497a; }
       body.nsc-app-active.nsc-theme-dusk .nsc-nav-item.group-msg.is-active { background: linear-gradient(135deg, #d66793, #bf4777); }
-      body.nsc-app-active.nsc-theme-dusk .nsc-bubble a { color: #355c96; }
       body.nsc-app-active.nsc-theme-dusk .nsc-lv-pill { background: rgba(68, 104, 158, 0.12); color: #3d6094; }
 
       #nsc-mode-switch-btn {
@@ -520,7 +518,48 @@
         border-radius: 14px 14px 4px 14px; border-color: transparent;
         box-shadow: 0 2px 8px rgba(0, 122, 255, 0.22);
       }
-      .nsc-msg.is-self .nsc-bubble a { color: #e0f2fe; }
+
+      /* 帖子/评论正文超链接绿色高亮（排除楼层引用、卡片与图片链接） */
+      .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
+      .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
+        color: #059669;
+        background: rgba(16, 185, 129, 0.10);
+        padding: 0 4px;
+        border-radius: 5px;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        text-decoration-color: rgba(5, 150, 105, 0.45);
+        font-weight: 500;
+        transition: background 0.12s ease, color 0.12s ease;
+      }
+      .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover,
+      .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover {
+        color: #047857;
+        background: rgba(16, 185, 129, 0.18);
+      }
+      body.nsc-app-active.dark-layout .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
+      body.nsc-app-active.dark-layout .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
+        color: #34d399;
+        background: rgba(52, 211, 153, 0.14);
+        text-decoration-color: rgba(52, 211, 153, 0.45);
+      }
+      body.nsc-app-active.dark-layout .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover,
+      body.nsc-app-active.dark-layout .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover {
+        color: #6ee7b7;
+        background: rgba(52, 211, 153, 0.24);
+      }
+      .nsc-msg.is-self .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
+      .nsc-thread-item.is-self-thread .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
+        color: #a7f3d0;
+        background: rgba(6, 78, 59, 0.28);
+        text-decoration-color: rgba(167, 243, 208, 0.70);
+      }
+      .nsc-bubble a:has(> img),
+      .nsc-thread-content a:has(> img) {
+        background: transparent !important;
+        padding: 0 !important;
+        text-decoration: none !important;
+      }
 
       .nsc-bubble img,
       .nsc-bubble img.nsc-zoomable-img,
@@ -633,6 +672,91 @@
       }
       body.dark-layout .nsc-thread-content pre { background: rgba(0,0,0,0.34); }
       .nsc-thread-content pre.has-copy-btn { padding-top: 26px; }
+
+      /* ANSI 终端代码块渲染样式 */
+      .nsc-bubble pre.nsc-ansi-pre,
+      .nsc-thread-content pre.nsc-ansi-pre {
+        background: #181b22 !important;
+        color: #e5e7eb !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 12.5px;
+        line-height: 1.48;
+        white-space: pre;
+        overflow-x: auto;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+      .nsc-bubble pre.nsc-ansi-pre code,
+      .nsc-thread-content pre.nsc-ansi-pre code {
+        background: transparent !important;
+        color: inherit;
+        padding: 0;
+        white-space: pre;
+        font-family: inherit;
+      }
+      .nsc-ansi-pre .nsc-copy-code-btn {
+        background: rgba(42, 46, 56, 0.92);
+        border-color: rgba(255, 255, 255, 0.16);
+        color: #cbd5e1;
+      }
+      .nsc-ansi-pre .nsc-copy-code-btn:hover {
+        color: #60a5fa;
+        border-color: #60a5fa;
+      }
+
+      /* Markdown 表格边框、间距与横向滚动包装器 */
+      .nsc-table-wrap {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 8px 0;
+        border: 1px solid var(--nsc-border);
+        border-radius: 10px;
+        background: var(--nsc-bg-card);
+        color: var(--nsc-text);
+      }
+      .nsc-table-wrap table,
+      .nsc-bubble table,
+      .nsc-thread-content table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+        line-height: 1.48;
+        color: var(--nsc-text);
+        margin: 0;
+      }
+      .nsc-bubble th,
+      .nsc-bubble td,
+      .nsc-thread-content th,
+      .nsc-thread-content td {
+        padding: 7px 11px;
+        border-bottom: 1px solid var(--nsc-border);
+        border-right: 1px solid var(--nsc-border);
+        text-align: left;
+        vertical-align: top;
+      }
+      .nsc-bubble tr th:last-child,
+      .nsc-bubble tr td:last-child,
+      .nsc-thread-content tr th:last-child,
+      .nsc-thread-content tr td:last-child {
+        border-right: none;
+      }
+      .nsc-bubble tbody tr:last-child td,
+      .nsc-thread-content tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .nsc-bubble thead th,
+      .nsc-thread-content thead th {
+        background: var(--nsc-hover);
+        font-weight: 700;
+        color: var(--nsc-text);
+        white-space: nowrap;
+      }
+      .nsc-bubble tbody tr:nth-child(even) td,
+      .nsc-thread-content tbody tr:nth-child(even) td {
+        background: rgba(128, 128, 128, 0.035);
+      }
       .nsc-bubble blockquote {
         margin: 0 0 8px; padding: 6px 10px; border-left: 3px solid var(--nsc-accent);
         background: var(--nsc-quote-bg); border-radius: 6px; font-size: 12px; color: var(--nsc-muted);

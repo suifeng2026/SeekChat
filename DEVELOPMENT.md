@@ -1,6 +1,6 @@
 # SeekChat 二次开发与架构规范
 
-- **当前基线**：`v7.21.0`（分支策略：`main` 存放正式发布版与基线 Tag；`dev` 分支用于日常测试与实验迭代，验证通过后合并至 `main`）
+- **当前基线**：`v7.21.1`（分支策略：`main` 存放正式发布版与基线 Tag；`dev` 分支用于日常测试与实验迭代，验证通过后合并至 `main`）
 - **目标平台**：NodeSeek（`https://www.nodeseek.com/*`、`https://nodeseek.com/*`）Tampermonkey / Violentmonkey
 - **构建产物**：`dist/nodeseek-chat-ui.user.js`、`dist/nodeseek-chat-ui.meta.js`
 - **工程定位**：零运行时依赖、词法模块化、插槽式可扩展、高性能并发安全、macOS 风格美化
@@ -114,8 +114,10 @@ node build.mjs --local
    enhanceNsApps(el)              // 1. 解析 nsapp:// 与原生 .stardust-panel / .vote-panel
      -> linkifyFloorReferences(el)// 2. 识别 #楼层文本（已排除 .nsc-sd-card / .nsc-vote-card）
      -> enhanceMagicTabs(el)      // 3. 绑定测评帖直系标签切换（禁止外包父容器，防触发站点报错）
-     -> enhanceCodeBlocks(el)     // 4. 挂载代码块复制按钮
-     -> processBubbleImages(el)   // 5. 连续纯图聚合宫格与灯箱绑定（避开卡片头像与标签页图片）
+     -> enhanceAnsiBlocks(el)     // 4. 解析 ANSI 256/16/真彩终端序列并提取纯文本
+     -> enhanceTables(el)         // 5. 包装 Markdown 表格容器以支持圆角边框与横向滚动
+     -> enhanceCodeBlocks(el)     // 6. 挂载代码块复制按钮（ANSI 块优先复制已剥离转义码的纯文本）
+     -> processBubbleImages(el)   // 7. 连续纯图聚合宫格与灯箱绑定（避开卡片头像、表格与标签页图片）
    ```
 2. **Magic Tabs 原生 DOM 结构约束**（`05-shell-composer.js: enhanceMagicTabs`）：  
    `.nsk-magic-tabs` 的直接子元素仅允许为 `.nsk-magic-tab-title` 与 `.nsk-magic-tab-body`；严禁向其内部插入额外包裹节点（如 `.nsc-magic-tab-bar`），否则站内 CSS 校验规则会隐藏标题并渲染 `Only tab item is allowed in tabs` 异常提示。
@@ -223,7 +225,7 @@ node build.mjs --local
 
 状态约定：`- [x]` 表示已合入主线并随基线构建验证；`- [ ]` 表示规划待实现需求，**开发前需先补全或确认其「实现方式」条目中的接口与交互细节**。
 
-### 6.1 已完成能力清单（基线：`v7.21.0`）
+### 6.1 已完成能力清单（基线：`v7.21.1`）
 
 #### 工作台骨架、基座中心与外观主题
 - [x] macOS 四栏桌面布局与防闪屏启动守卫，支持「群聊模式 / 原版论坛」零残留切换（`01`、`03`、`05`、`06`、`09`）
@@ -248,6 +250,7 @@ node build.mjs --local
 - [x] `nsapp://stardust-receive` 星辰收款卡片：流水聚合、个人付款态校验、弹窗付款与关闭后自动回刷（`05-shell-composer.js`）
 - [x] `nsapp://vote` 投票卡片：`x-dynamic-sign` 鉴权、单选/多选、内联二次确认、实时占比条形图（`02`、`05`）
 - [x] 测评帖 `.nsk-magic-tabs` 直系结构保留与自适应切换排版（`03`、`05-shell-composer.js: enhanceMagicTabs`）
+- [x] ANSI 终端代码块（`language-ansi` / `data-ansicode="27"`）彩色渲染、Markdown 表格边框/滚动包装及正文超链接绿色高亮（`03`、`05`）
 - [x] 代码块一键复制、连续纯图朋友圈宫格、多图灯箱缩放画廊、NodeImage 授权与粘贴/拖拽传图（`04`、`05`）
 
 #### 消息中心、社交与个人中心
