@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.16
+// @version      7.22.17
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -312,7 +312,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.16",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.17",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -4953,11 +4953,12 @@
       renderStickers(activeId);
       pop.classList.toggle("is-open");
     });
-    document.addEventListener("click", (e) => {
+    document.addEventListener("pointerdown", (e) => {
+      if (!pop.classList.contains("is-open")) return;
       if (!pop.contains(e.target) && e.target !== btnEl && !btnEl.contains(e.target)) {
         pop.classList.remove("is-open");
       }
-    });
+    }, true);
     hostEl.appendChild(pop);
   }
 
@@ -5444,9 +5445,14 @@
       }
     });
 
-    document.addEventListener("click", (e) => {
-      if (!box.contains(e.target)) closePopovers();
-    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!activeStickerGroup) return;
+      const t = e.target;
+      if (t && t.closest && (t.closest(".nsc-u-exp-tabs") || t.closest(".exp-container") || t.closest(".nsc-u-app-pop"))) {
+        if (box.contains(t)) return;
+      }
+      closePopovers();
+    }, true);
 
     box.querySelector('[data-role="ni-btn"]').addEventListener("click", () => {
       openNodeImageModal(prefix === "nsc-np" ? "newpost" : (state.activePmPeer ? "pm" : "chat"));
@@ -5611,6 +5617,25 @@
         }
       });
       appObs.observe(expContainer, { attributes: true, attributeFilter: ["class"] });
+
+      document.addEventListener("pointerdown", (e) => {
+        if (!editor.isConnected || editor.style.display === "none") return;
+        const m = (expContainer.className || "").match(/\bcur-sticker-group-([a-z0-9_-]+)/i);
+        const grp = m ? m[1] : "";
+        if (!grp || grp === "null") return;
+        const t = e.target;
+        if (t && t.closest && (
+          t.closest(".expression") ||
+          t.closest(".exp-container") ||
+          t.closest(".vote-panel, .stardust-panel")
+        )) {
+          return;
+        }
+        const activeTab =
+          editor.querySelector(`.expression .exp-item.sticker-group-${grp}`) ||
+          editor.querySelector(".expression .exp-item.active");
+        if (activeTab) activeTab.click();
+      }, true);
     }
     const appTabBtn = editor.querySelector(".expression .sticker-group-app");
     if (appTabBtn) {

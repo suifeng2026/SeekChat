@@ -878,11 +878,12 @@
       renderStickers(activeId);
       pop.classList.toggle("is-open");
     });
-    document.addEventListener("click", (e) => {
+    document.addEventListener("pointerdown", (e) => {
+      if (!pop.classList.contains("is-open")) return;
       if (!pop.contains(e.target) && e.target !== btnEl && !btnEl.contains(e.target)) {
         pop.classList.remove("is-open");
       }
-    });
+    }, true);
     hostEl.appendChild(pop);
   }
 
@@ -1369,9 +1370,14 @@
       }
     });
 
-    document.addEventListener("click", (e) => {
-      if (!box.contains(e.target)) closePopovers();
-    });
+    document.addEventListener("pointerdown", (e) => {
+      if (!activeStickerGroup) return;
+      const t = e.target;
+      if (t && t.closest && (t.closest(".nsc-u-exp-tabs") || t.closest(".exp-container") || t.closest(".nsc-u-app-pop"))) {
+        if (box.contains(t)) return;
+      }
+      closePopovers();
+    }, true);
 
     box.querySelector('[data-role="ni-btn"]').addEventListener("click", () => {
       openNodeImageModal(prefix === "nsc-np" ? "newpost" : (state.activePmPeer ? "pm" : "chat"));
@@ -1536,6 +1542,25 @@
         }
       });
       appObs.observe(expContainer, { attributes: true, attributeFilter: ["class"] });
+
+      document.addEventListener("pointerdown", (e) => {
+        if (!editor.isConnected || editor.style.display === "none") return;
+        const m = (expContainer.className || "").match(/\bcur-sticker-group-([a-z0-9_-]+)/i);
+        const grp = m ? m[1] : "";
+        if (!grp || grp === "null") return;
+        const t = e.target;
+        if (t && t.closest && (
+          t.closest(".expression") ||
+          t.closest(".exp-container") ||
+          t.closest(".vote-panel, .stardust-panel")
+        )) {
+          return;
+        }
+        const activeTab =
+          editor.querySelector(`.expression .exp-item.sticker-group-${grp}`) ||
+          editor.querySelector(".expression .exp-item.active");
+        if (activeTab) activeTab.click();
+      }, true);
     }
     const appTabBtn = editor.querySelector(".expression .sticker-group-app");
     if (appTabBtn) {
