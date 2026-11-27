@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.26
+// @version      7.22.27
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -319,7 +319,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.26",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.27",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -2783,11 +2783,22 @@
         color: #6ee7b7;
         background: rgba(52, 211, 153, 0.24);
       }
-      .nsc-msg.is-self .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
-      .nsc-thread-item.is-self-thread .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
-        color: #a7f3d0;
-        background: rgba(6, 78, 59, 0.28);
-        text-decoration-color: rgba(167, 243, 208, 0.70);
+      body.nsc-app-active .nsc-msg.is-self .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link),
+      body.nsc-app-active .nsc-thread-item.is-self-thread .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link) {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.18);
+        text-decoration-color: rgba(255, 255, 255, 0.72);
+      }
+      body.nsc-app-active .nsc-msg.is-self .nsc-bubble a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover,
+      body.nsc-app-active .nsc-thread-item.is-self-thread .nsc-thread-content a[href]:not(.nsc-floor-ref):not(.nsc-sn-post):not(.nsc-sd-link):hover {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.28);
+      }
+      body.nsc-app-active .nsc-msg.is-self .nsc-bubble .nsc-table-wrap a[href],
+      body.nsc-app-active .nsc-thread-item.is-self-thread .nsc-thread-content .nsc-table-wrap a[href] {
+        color: var(--nsc-accent);
+        background: var(--nsc-accent-soft);
+        text-decoration-color: currentColor;
       }
       .nsc-bubble a:has(> img),
       .nsc-thread-content a:has(> img) {
@@ -3016,18 +3027,48 @@
       .nsc-thread-content tbody tr:nth-child(even) td {
         background: rgba(128, 128, 128, 0.035);
       }
-      .nsc-bubble blockquote {
+      .nsc-bubble blockquote,
+      .nsc-thread-content blockquote {
         margin: 0 0 8px; padding: 6px 10px; border-left: 3px solid var(--nsc-accent);
         background: var(--nsc-quote-bg); border-radius: 6px; font-size: 12px; color: var(--nsc-muted);
         max-height: 68px; overflow: hidden; cursor: pointer;
       }
-      .nsc-bubble blockquote.is-expanded { max-height: none; }
+      .nsc-bubble blockquote.is-expanded,
+      .nsc-thread-content blockquote.is-expanded { max-height: none; }
+      .nsc-msg.is-self .nsc-bubble blockquote,
+      .nsc-thread-item.is-self-thread .nsc-thread-content blockquote {
+        color: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 255, 255, 0.14);
+        border-left-color: rgba(255, 255, 255, 0.72);
+      }
+      .nsc-msg.is-self .nsc-bubble code:not(pre code),
+      .nsc-thread-item.is-self-thread .nsc-thread-content code:not(pre code) {
+        background: rgba(255, 255, 255, 0.20) !important;
+        color: #ffffff !important;
+        padding: 1px 5px;
+        border-radius: 5px;
+      }
+      .nsc-msg.is-self .nsc-bubble pre:not(.nsc-ansi-pre),
+      .nsc-thread-item.is-self-thread .nsc-thread-content pre:not(.nsc-ansi-pre) {
+        background: rgba(15, 23, 42, 0.36);
+        color: #f8fafc;
+        border-color: rgba(255, 255, 255, 0.20);
+      }
+      .nsc-msg.is-self .nsc-bubble ::selection,
+      .nsc-thread-item.is-self-thread .nsc-thread-content ::selection {
+        background: rgba(255, 255, 255, 0.32);
+        color: #ffffff;
+      }
       a.nsc-floor-ref {
         display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 5px;
         background: var(--nsc-accent-soft); color: var(--nsc-accent) !important;
         font-weight: 600; font-size: 12px; text-decoration: none !important; cursor: pointer;
       }
-      .nsc-msg.is-self a.nsc-floor-ref { background: rgba(255,255,255,0.22); color: #fff !important; }
+      .nsc-msg.is-self a.nsc-floor-ref,
+      .nsc-thread-item.is-self-thread a.nsc-floor-ref {
+        background: rgba(255, 255, 255, 0.22);
+        color: #ffffff !important;
+      }
       a.nsc-floor-ref:hover { text-decoration: underline !important; }
 
       /* TG / macOS 风格：赞/鸡腿/踩/评论有数据时直接显示轻质紧凑徽章 */
@@ -3111,7 +3152,7 @@
         background: linear-gradient(180deg, #1686ff 0%, #007aff 100%);
         color: #fff; border-color: transparent;
       }
-      .nsc-thread-item.is-self-thread .nsc-thread-content a { color: #e0f2fe; }
+      .nsc-thread-item.is-self-thread .nsc-thread-content a { color: #ffffff; }
       .nsc-thread-content p { margin: 3px 0; }
       .nsc-thread-content > p:first-child { margin-top: 0; }
       .nsc-thread-content > p:last-child { margin-bottom: 0; }
