@@ -262,6 +262,12 @@
   }
 
   function switchChannel(channelId, forceRefresh = false) {
+    if (channelId !== "history") {
+      state.lastBrowseChannel = channelId;
+    }
+    if (state.activeChannel !== channelId) {
+      state.readFilterMode = "all";
+    }
     state.activeChannel = channelId;
     localStorage.setItem(LS.ACTIVE_CHANNEL, channelId);
     renderLeftNav();
@@ -1093,9 +1099,19 @@
     bar.innerHTML = "";
 
     if (state.activeChannel === "history") {
+      const backChId = state.lastBrowseChannel && state.lastBrowseChannel !== "history" ? state.lastBrowseChannel : "home";
+      const backCh = CHANNELS.find((c) => c.id === backChId) || CHANNELS[0];
+      const backBtn = document.createElement("button");
+      backBtn.type = "button";
+      backBtn.className = "nsc-mini-btn";
+      backBtn.title = `返回 ${backCh.name}`;
+      backBtn.textContent = `← 返回${backCh.name}`;
+      backBtn.addEventListener("click", () => switchChannel(backCh.id, false));
+
       const tip = document.createElement("span");
       tip.style.cssText = "font-size:11px;color:var(--nsc-muted);";
-      tip.textContent = "按最近阅读倒序";
+      tip.textContent = "全站按最近阅读倒序";
+
       const clr = document.createElement("button");
       clr.type = "button";
       clr.className = "nsc-mini-btn";
@@ -1106,6 +1122,7 @@
         renderLeftNav();
         renderTopicList();
       });
+      bar.appendChild(backBtn);
       bar.appendChild(tip);
       bar.appendChild(clr);
       return;
@@ -1191,7 +1208,7 @@
       b.addEventListener("click", () => {
         state.sortMode = opt.id;
         localStorage.setItem(LS.SORT, opt.id);
-        state.prioritizeUnread = false;
+        state.readFilterMode = "all";
         renderListToolbar();
         fetchChannelData(state.activeChannel, 1, true, false);
       });
@@ -1203,21 +1220,30 @@
 
     const btnUnread = document.createElement("button");
     btnUnread.type = "button";
-    btnUnread.className = "nsc-mini-btn" + (state.prioritizeUnread ? " is-active" : "");
-    btnUnread.title = "刷新列表并把未读/有新回复帖子排在最前面";
+    btnUnread.className = "nsc-mini-btn" + (state.readFilterMode === "unread" ? " is-active" : "");
+    btnUnread.title = "刷新当前版块并将未读/有新回复帖子排在最前（再次点击取消）";
     btnUnread.textContent = "未读";
     btnUnread.addEventListener("click", () => {
-      state.prioritizeUnread = true;
+      if (state.readFilterMode === "unread") {
+        state.readFilterMode = "all";
+        renderListToolbar();
+        renderTopicList();
+        return;
+      }
+      state.readFilterMode = "unread";
+      renderListToolbar();
       fetchChannelData(state.activeChannel, 1, true, false);
     });
 
     const btnReadHistory = document.createElement("button");
     btnReadHistory.type = "button";
-    btnReadHistory.className = "nsc-mini-btn";
-    btnReadHistory.title = "查看已读历史足迹";
+    btnReadHistory.className = "nsc-mini-btn" + (state.readFilterMode === "read" ? " is-active" : "");
+    btnReadHistory.title = "仅看当前版块已读帖子足迹（不离开当前版块，再次点击返回）";
     btnReadHistory.textContent = "已读";
     btnReadHistory.addEventListener("click", () => {
-      switchChannel("history");
+      state.readFilterMode = state.readFilterMode === "read" ? "all" : "read";
+      renderListToolbar();
+      renderTopicList();
     });
 
     rightBtns.appendChild(btnUnread);
@@ -1356,6 +1382,7 @@
   }
 
   function tryAutoLoadNextTopicPage() {
+    if (state.readFilterMode === "read") return;
     const chId = state.activeChannel;
     const ch = CHANNELS.find((c) => c.id === chId);
     if (!ch || ch.path.startsWith("__")) return;
@@ -1662,9 +1689,30 @@
     let isLoading = false;
     let error = null;
     let page = 1;
+    const isHistoryChannel = state.activeChannel === "history";
+    const isBoardReadView = !isHistoryChannel && state.readFilterMode === "read";
 
-    if (state.activeChannel === "history") {
+    if (isHistoryChannel) {
       items = Object.values(state.readMap).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    } else if (isBoardReadView) {
+      const curCh = CHANNELS.find((c) => c.id === state.activeChannel);
+      const data = state.channelData[state.activeChannel];
+      const byPid = new Map();
+      if (data && Array.isArray(data.items)) {
+        for (const it of data.items) {
+          const rec = state.readMap[it.postId];
+          if (rec) {
+            byPid.set(it.postId, { ...it, ts: rec.ts || 0 });
+          }
+        }
+      }
+      for (const rec of Object.values(state.readMap)) {
+        if (!rec || !rec.postId || byPid.has(rec.postId)) continue;
+        if (state.activeChannel === "home" || state.activeChannel === "award" || (curCh && rec.category === curCh.name)) {
+          byPid.set(rec.postId, rec);
+        }
+      }
+      items = Array.from(byPid.values()).sort((a, b) => (b.ts || 0) - (a.ts || 0));
     } else {
       const data = state.channelData[state.activeChannel];
       if (!data) {
@@ -1692,7 +1740,7 @@
       return (it.title || "").toLowerCase().includes(kw) || (it.author || "").toLowerCase().includes(kw);
     });
 
-    if (state.prioritizeUnread && state.activeChannel !== "history") {
+    if (state.readFilterMode === "unread" && !isHistoryChannel) {
       items.sort((a, b) => {
         const ra = getReadStatus(a.postId, a.replies).status === "read" ? 1 : 0;
         const rb = getReadStatus(b.postId, b.replies).status === "read" ? 1 : 0;
@@ -1703,17 +1751,23 @@
     if (subEl) subEl.textContent = `${items.length} 条`;
 
     if (items.length === 0) {
-      scrollEl.innerHTML = `<div class="nsc-empty-state">${state.activeChannel === "history" ? "暂无已读足迹，点击打开任意帖子后会记录在这里" : "暂无匹配帖子"}</div>`;
+      scrollEl.innerHTML = `<div class="nsc-empty-state">${
+        isHistoryChannel
+          ? "暂无已读足迹，点击打开任意帖子后会记录在这里"
+          : isBoardReadView
+            ? "当前版块暂无已读记录，点击「已读」或打开任意帖子后可在此回溯"
+            : "暂无匹配帖子"
+      }</div>`;
       return;
     }
 
     scrollEl.innerHTML = "";
     items.forEach((it) => {
-      const rs = state.activeChannel === "history" ? { status: "read", delta: 0 } : getReadStatus(it.postId, it.replies);
+      const rs = (isHistoryChannel || isBoardReadView) ? { status: "read", delta: 0 } : getReadStatus(it.postId, it.replies);
       const row = document.createElement("div");
       row.className =
         "nsc-topic-item" +
-        (rs.status === "read" && state.activeChannel !== "history" ? " is-read" : "") +
+        (rs.status === "read" && !isHistoryChannel && !isBoardReadView ? " is-read" : "") +
         (state.currentPostId === it.postId ? " is-selected" : "");
 
       const avatarHtml = it.avatar
@@ -1721,7 +1775,7 @@
         : `<div class="nsc-topic-avatar-fb">${(it.author || "S").slice(0, 1).toUpperCase()}</div>`;
 
       let badgeHtml = "";
-      if (state.activeChannel === "history") {
+      if (isHistoryChannel || isBoardReadView) {
         badgeHtml = `<span class="nsc-badge-read">${formatRelativeFromMs(it.ts)}</span>`;
       } else if (rs.status === "unread") {
         badgeHtml = `<span class="nsc-badge-dot" title="未读"></span>`;
@@ -1752,7 +1806,7 @@
       scrollEl.appendChild(row);
     });
 
-    if (state.activeChannel !== "history") {
+    if (!isHistoryChannel && !isBoardReadView) {
       const chData = state.channelData[state.activeChannel];
       const wf = document.createElement("div");
       wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:8px 4px;";
