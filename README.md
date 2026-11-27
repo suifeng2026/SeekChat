@@ -71,4 +71,4 @@ node build.mjs --local  # 本地魔改防覆盖构建
 
 ## 📄 开源许可证
 
-本项目基于 **MIT** 协议开源。
+本项目基于 [MIT License](https://github.com/suifeng2026/SeekChat/blob/main/LICENSE) 协议开源。
