@@ -13,6 +13,90 @@
     } catch (_) {}
   }
 
+  const _saveJsonTimers = new Map();
+  function scheduleSaveJson(key, val, delayMs = 600) {
+    if (_saveJsonTimers.has(key)) clearTimeout(_saveJsonTimers.get(key));
+    _saveJsonTimers.set(key, setTimeout(() => {
+      _saveJsonTimers.delete(key);
+      saveJson(key, val);
+    }, delayMs));
+  }
+
+  function pruneTimedCache(mapObj, maxKeys = 400, keepKeys = 300) {
+    if (!mapObj || typeof mapObj !== "object") return;
+    const keys = Object.keys(mapObj);
+    if (keys.length <= maxKeys) return;
+    keys
+      .sort((a, b) => ((mapObj[a] && mapObj[a].ts) || 0) - ((mapObj[b] && mapObj[b].ts) || 0))
+      .slice(0, keys.length - keepKeys)
+      .forEach((k) => delete mapObj[k]);
+  }
+
+  function escHtml(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function withHiddenIframe(url, { pollMs = 220, timeoutMs = 6000, onPoll } = {}) {
+    return new Promise((resolve) => {
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:900px;height:600px;opacity:0;pointer-events:none;border:0;";
+      iframe.src = url;
+      let done = false;
+      let poll = null;
+      let timer = null;
+      const finish = (res) => {
+        if (done) return;
+        done = true;
+        if (poll) { clearInterval(poll); poll = null; }
+        if (timer) { clearTimeout(timer); timer = null; }
+        try { iframe.remove(); } catch (_) {}
+        resolve(res);
+      };
+      timer = setTimeout(() => finish(null), timeoutMs);
+      iframe.addEventListener("load", () => {
+        let attempts = 0;
+        poll = setInterval(() => {
+          attempts++;
+          try {
+            const idoc = iframe.contentDocument;
+            if (!idoc) return;
+            if (typeof onPoll === "function") {
+              onPoll(idoc, attempts, finish);
+            }
+          } catch (_) {}
+        }, pollMs);
+      });
+      document.body.appendChild(iframe);
+    });
+  }
+
+  async function apiGetJson(url) {
+    const resp = await fetch(url, {
+      headers: { Accept: "application/json, text/plain, */*" },
+      credentials: "include",
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
+  async function apiPostJson(url, bodyObj) {
+    const resp = await fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: getNodeSeekPostHeaders(),
+      body: JSON.stringify(bodyObj || {}),
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok || json.success === false) {
+      throw new Error(json.message || `HTTP ${resp.status}`);
+    }
+    return json;
+  }
+
   function genCsrfToken(len = 16) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let out = "";
@@ -162,8 +246,13 @@
     return state.followData.items.some((f) => f.name === name) && !state.removedFriends.has(name);
   }
 
+  function rebuildBlacklistSet() {
+    state.blacklistNameSet = new Set((state.blacklist || []).map((b) => b.name).filter(Boolean));
+  }
+  rebuildBlacklistSet();
+
   function isBlacklisted(name) {
-    return Boolean(name && state.blacklist.some((b) => b.name === name));
+    return Boolean(name && state.blacklistNameSet.has(name));
   }
 
   function isMemberHidden(name) {
@@ -183,6 +272,7 @@
         state.friends.unshift({ uid: member.uid || "", name: member.name, avatar: member.avatar || "" });
       }
       state.blacklist = state.blacklist.filter((b) => b.name !== member.name);
+      rebuildBlacklistSet();
       saveJson(LS.BLACKLIST, state.blacklist);
     }
     saveJson(LS.FRIENDS, state.friends);
@@ -224,6 +314,7 @@
       state.blockListState.items = mapped;
       state.blockListState.loaded = true;
       state.blacklist = mapped;
+      rebuildBlacklistSet();
       saveJson(LS.BLACKLIST, state.blacklist);
       renderTopicList();
       applyMessageFilters();
@@ -269,6 +360,7 @@
         }
       }
       state.blacklist = state.blacklist.filter((b) => b.name !== name && (!targetUid || String(b.uid) !== String(targetUid)));
+      rebuildBlacklistSet();
       state.removedFans.delete(name);
       saveJson(LS.BLACKLIST, state.blacklist);
       renderRightBody();
@@ -297,6 +389,7 @@
     saveJson(LS.FRIENDS, state.friends);
     if (!state.blacklist.some((b) => b.name === name)) {
       state.blacklist.unshift({ uid: member.uid || "", name, avatar: member.avatar || (member.uid ? `/avatar/${member.uid}.png` : "") });
+      rebuildBlacklistSet();
       saveJson(LS.BLACKLIST, state.blacklist);
     }
     await fetchServerBlockList(true);

@@ -1,3 +1,39 @@
+  function buildMarkdownToolbarHtml({ id = "", expBtnId = "", niTarget = "", includeList = false } = {}) {
+    return `
+      <div class="nsc-mde-toolbar"${id ? ` id="${id}"` : ""}>
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+        ${includeList ? `<button type="button" class="nsc-mde-btn" data-prefix="- " title="列表">•</button>` : ""}
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+        ${expBtnId ? `<button type="button" class="nsc-mde-btn" id="${expBtnId}" title="插入贴图表情">${ICONS.smile}</button>` : ""}
+        ${niTarget ? `<button type="button" class="nsc-nodeimage-btn" data-ni-btn="${niTarget}" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>` : ""}
+      </div>
+    `;
+  }
+
+  function bindMarkdownToolbar(toolbarEl, textareaEl) {
+    if (!toolbarEl || !textareaEl) return;
+    toolbarEl.querySelectorAll(".nsc-mde-btn[data-wrap], .nsc-mde-btn[data-prefix], .nsc-mde-btn[data-tpl]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const s = textareaEl.selectionStart || 0;
+        const e = textareaEl.selectionEnd || 0;
+        const sel = textareaEl.value.slice(s, e);
+        let ins = "";
+        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
+        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
+        else if (b.dataset.tpl) ins = b.dataset.tpl;
+        textareaEl.setRangeText(ins, s, e, "end");
+        textareaEl.dispatchEvent(new Event("input", { bubbles: true }));
+        textareaEl.focus({ preventScroll: true });
+      });
+    });
+  }
+
   function ensureHeaderSwitch() {
     const head = document.getElementById("nsk-head");
     if (!head || document.getElementById("nsc-mode-switch-btn")) return;
@@ -201,7 +237,7 @@
       const zBtn = document.getElementById("nsc-lb-zoom");
       if (zBtn) zBtn.textContent = `${Math.round(_lbScale * 100)}%`;
     };
-    window.__nscApplyLbTransform = applyLbTransform;
+    _applyLbTransform = applyLbTransform;
 
     lightbox.addEventListener("click", (e) => {
       if (e.target === lightbox || e.target === lbStage || e.target.id === "nsc-lightbox-close") {
@@ -349,18 +385,7 @@
             <input type="text" class="nsc-newpost-title" id="nsc-np-title" placeholder="请输入帖子标题..." />
           </div>
           <div class="nsc-newpost-editor">
-            <div class="nsc-mde-toolbar" id="nsc-np-toolbar">
-              <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-              <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-              <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
-              <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
-              <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
-              <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
-              <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-              <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
-              <button type="button" class="nsc-mde-btn" id="nsc-np-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
-              <button type="button" class="nsc-nodeimage-btn" data-ni-btn="newpost" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>
-            </div>
+            ${buildMarkdownToolbarHtml({ id: "nsc-np-toolbar", expBtnId: "nsc-np-exp-btn", niTarget: "newpost" })}
             <textarea class="nsc-newpost-ta" id="nsc-np-content" placeholder="支持 Markdown 语法，Ctrl + Enter 快捷发布..."></textarea>
           </div>
         </div>
@@ -393,19 +418,7 @@
       npNativeLink.href = `/new-discussion?category=${encodeURIComponent(npCat.value)}`;
     });
 
-    npBackdrop.querySelectorAll("#nsc-np-toolbar .nsc-mde-btn").forEach((b) => {
-      b.addEventListener("click", () => {
-        const s = npContent.selectionStart || 0;
-        const e = npContent.selectionEnd || 0;
-        const sel = npContent.value.slice(s, e);
-        let ins = "";
-        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
-        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
-        else if (b.dataset.tpl) ins = b.dataset.tpl;
-        npContent.setRangeText(ins, s, e, "end");
-        npContent.focus();
-      });
-    });
+    bindMarkdownToolbar(npBackdrop.querySelector("#nsc-np-toolbar"), npContent);
 
     const submitNewPost = async () => {
       const category = npCat.value || "daily";
@@ -507,9 +520,14 @@
       attachStickerPicker(npBackdrop.querySelector("#nsc-np-exp-btn"), npContent, npEditorEl);
     }
 
+    let searchTimer = null;
     shell.querySelector("#nsc-feed-search").addEventListener("input", (e) => {
-      state.searchKeyword = e.target.value.trim().toLowerCase();
-      renderTopicList();
+      const val = e.target.value.trim().toLowerCase();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.searchKeyword = val;
+        renderTopicList();
+      }, 140);
     });
 
     shell.querySelectorAll(".nsc-right-tab").forEach((b) => {
@@ -532,22 +550,35 @@
     });
 
     const topicScroll = shell.querySelector("#nsc-topic-scroll");
+    let topicScrollRaf = 0;
     topicScroll.addEventListener("scroll", () => {
-      if (topicScroll.scrollHeight - topicScroll.scrollTop - topicScroll.clientHeight < 240) {
-        tryAutoLoadNextTopicPage();
-      }
+      if (topicScrollRaf) return;
+      topicScrollRaf = requestAnimationFrame(() => {
+        topicScrollRaf = 0;
+        if (topicScroll.scrollHeight - topicScroll.scrollTop - topicScroll.clientHeight < 240) {
+          tryAutoLoadNextTopicPage();
+        }
+      });
     });
 
     const msgsEl = shell.querySelector("#nsc-chat-messages");
+    let chatScrollRaf = 0;
     msgsEl.addEventListener("scroll", () => {
-      if (msgsEl.scrollTop < 120) {
-        tryAutoLoadPrevPage();
-      }
-      if (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 220) {
-        tryAutoLoadNextPage();
-      }
+      if (state.activePmPeer || !state.currentRoom) return;
+      if (chatScrollRaf) return;
+      chatScrollRaf = requestAnimationFrame(() => {
+        chatScrollRaf = 0;
+        if (state.activePmPeer || !state.currentRoom) return;
+        if (msgsEl.scrollTop < 120) {
+          tryAutoLoadPrevPage();
+        }
+        if (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 220) {
+          tryAutoLoadNextPage();
+        }
+      });
     });
     msgsEl.addEventListener("wheel", (e) => {
+      if (state.activePmPeer || !state.currentRoom) return;
       if (e.deltaY < 0 && msgsEl.scrollTop <= 2) {
         tryAutoLoadPrevPage();
       }
@@ -627,16 +658,7 @@
     box.id = "nsc-fallback-composer";
     box.style.position = "relative";
     box.innerHTML = `
-      <div class="nsc-mde-toolbar" style="border-radius:10px 10px 0 0;background:var(--nsc-hover);">
-        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="代码">&lt;/&gt;</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
-        <button type="button" class="nsc-mde-btn" id="nsc-fb-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
-      </div>
+      ${buildMarkdownToolbarHtml({ id: "nsc-fb-toolbar", expBtnId: "nsc-fb-exp-btn" })}
       <textarea class="nsc-fallback-textarea" id="nsc-fallback-ta" placeholder="输入评论内容，支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布"></textarea>
       <div class="nsc-composer-footer">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -650,58 +672,27 @@
     NodeImage.syncDots();
     const ta = box.querySelector("#nsc-fallback-ta");
     attachStickerPicker(box.querySelector("#nsc-fb-exp-btn"), ta, box);
-    box.querySelectorAll(".nsc-mde-btn").forEach((b) => {
-      b.addEventListener("click", () => {
-        const s = ta.selectionStart || 0;
-        const e = ta.selectionEnd || 0;
-        const sel = ta.value.slice(s, e);
-        let ins = "";
-        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
-        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
-        else if (b.dataset.tpl) ins = b.dataset.tpl;
-        ta.setRangeText(ins, s, e, "end");
-        ta.focus();
-      });
-    });
+    bindMarkdownToolbar(box.querySelector("#nsc-fb-toolbar"), ta);
 
     const submitComment = async () => {
       const content = ta.value.trim();
       const pid = state.currentPostId;
-      if (!content || !pid) return;
+      if (!content || !pid || state.activePmPeer) return;
       const btn = box.querySelector("#nsc-fallback-send");
       const status = box.querySelector("#nsc-composer-status");
       btn.disabled = true;
       btn.textContent = "发送中...";
       try {
-        const resp = await fetch("/api/content/new-comment", {
-          method: "POST",
-          credentials: "include",
-          headers: getNodeSeekPostHeaders(),
-          body: JSON.stringify({ content, mode: "new-comment", postId: Number(pid) }),
-        });
-        const resJson = await resp.json().catch(() => ({}));
-        if (!resp.ok || resJson.success === false) {
-          throw new Error(resJson.message || `HTTP ${resp.status}`);
-        }
+        await apiPostJson("/api/content/new-comment", { content, mode: "new-comment", postId: Number(pid) });
         ta.value = "";
         status.textContent = "评论已发布，正在同步最新楼层...";
-        if (state.currentRoom) {
-          const lastPage = state.currentRoom.pages.length || 1;
-          const targetUrl = `/post-${pid}-${lastPage}`;
-          const pResp = await fetch(targetUrl, { credentials: "include" });
-          if (pResp.ok) {
-            const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
-            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
-            const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
-            for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
-              const obj = extractCommentObject(el, false, lastPage, tempMetaMap);
-              if (obj.floorId && !seen.has(obj.floorId)) {
-                seen.add(obj.floorId);
-                if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
-                state.currentRoom.flatComments.push(obj);
-              }
-            }
-            renderChatRoom(state.currentRoom, true);
+        const room = state.currentRoom;
+        if (!state.activePmPeer && room && room.pid === pid && state.currentPostId === pid) {
+          const lastPage = room.pages.length || 1;
+          const pDoc = await fetchPostPageDoc(`/post-${pid}-${lastPage}`);
+          if (!state.activePmPeer && state.currentRoom === room && state.currentPostId === pid) {
+            mergePostPageComments(room, pDoc, lastPage);
+            renderChatRoom(room, true);
             const msgsEl = document.getElementById("nsc-chat-messages");
             if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
           }
@@ -746,17 +737,7 @@
       <div class="nsc-pm-emoji-pop" id="nsc-pm-emoji-pop">
         ${emojis.map((em) => `<button type="button" class="nsc-pm-emoji-item">${em}</button>`).join("")}
       </div>
-      <div class="nsc-mde-toolbar" id="nsc-pm-toolbar">
-        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="- " title="列表">•</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片链接">🖼</button>
-      </div>
+      ${buildMarkdownToolbarHtml({ id: "nsc-pm-toolbar", includeList: true })}
       <textarea class="nsc-fallback-textarea" id="nsc-pm-ta" placeholder="支持完整 Markdown · 截图 Ctrl+V 直接上传图床 · Ctrl+Enter 发送"></textarea>
       <div class="nsc-pm-preview-pane" id="nsc-pm-preview-pane"></div>
       <div class="nsc-composer-footer">
@@ -811,19 +792,7 @@
       if (!e.target.closest("#nsc-pm-composer")) emojiPop.classList.remove("is-open");
     });
 
-    box.querySelectorAll("#nsc-pm-toolbar .nsc-mde-btn").forEach((b) => {
-      b.addEventListener("click", () => {
-        const s = ta.selectionStart || 0;
-        const e = ta.selectionEnd || 0;
-        const sel = ta.value.slice(s, e);
-        let ins = "";
-        if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
-        else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
-        else if (b.dataset.tpl) ins = b.dataset.tpl;
-        ta.setRangeText(ins, s, e, "end");
-        ta.focus();
-      });
-    });
+    bindMarkdownToolbar(toolbar, ta);
 
     const doSend = () => {
       box.querySelector('[data-pmmode="write"]').click();
@@ -930,28 +899,18 @@
     const submitBtn = editor.querySelector("button.submit.btn");
     if (submitBtn) {
       submitBtn.addEventListener("click", () => {
-        if (!state.currentRoom || state.currentPostId !== state.nativePostId) return;
+        if (state.activePmPeer || !state.currentRoom || state.currentPostId !== state.nativePostId) return;
         const pid = state.currentPostId;
+        const room = state.currentRoom;
         const syncAfterSubmit = async () => {
-          const lastPage = Math.max(1, (state.currentRoom && state.currentRoom.pages.length) || 1);
+          if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== pid) return;
+          const lastPage = Math.max(1, (room && room.pages.length) || 1);
           try {
-            const resp = await fetch(`/post-${pid}-${lastPage}`, { credentials: "include" });
-            if (!resp.ok || !state.currentRoom || state.currentPostId !== pid) return;
-            const pDoc = new DOMParser().parseFromString(await resp.text(), "text/html");
-            const tempMetaMap = extractPostMetaFromTempScript(pDoc);
-            const seen = new Set(state.currentRoom.flatComments.map((c) => c.floorId));
-            let added = 0;
-            for (const el of pDoc.querySelectorAll("ul.comments li.content-item")) {
-              const obj = extractCommentObject(el, false, lastPage, tempMetaMap);
-              if (obj.floorId && !seen.has(obj.floorId)) {
-                seen.add(obj.floorId);
-                if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
-                state.currentRoom.flatComments.push(obj);
-                added++;
-              }
-            }
+            const pDoc = await fetchPostPageDoc(`/post-${pid}-${lastPage}`);
+            if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== pid) return;
+            const added = mergePostPageComments(room, pDoc, lastPage);
             if (added > 0) {
-              renderChatRoom(state.currentRoom, true);
+              renderChatRoom(room, true);
               const msgsEl = document.getElementById("nsc-chat-messages");
               if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
             }
@@ -980,6 +939,7 @@
   let _lbMoved = false;
   let _lbStartX = 0;
   let _lbStartY = 0;
+  let _applyLbTransform = null;
 
   function showLightboxAt(idx) {
     const lb = document.getElementById("nsc-lightbox");
@@ -997,7 +957,7 @@
     _lbScale = 1;
     _lbTx = 0;
     _lbTy = 0;
-    if (typeof window.__nscApplyLbTransform === "function") window.__nscApplyLbTransform();
+    if (typeof _applyLbTransform === "function") _applyLbTransform();
     img.src = src;
     raw.href = src;
     const multi = _lbGallery.length > 1;

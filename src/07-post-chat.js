@@ -1,7 +1,46 @@
+  async function fetchPostPageDoc(url) {
+    const resp = await fetch(url, { credentials: "include" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return new DOMParser().parseFromString(await resp.text(), "text/html");
+  }
+
+  function mergePostPageComments(room, doc, pageNum) {
+    if (!room || !doc) return 0;
+    const tempMetaMap = extractPostMetaFromTempScript(doc);
+    if (pageNum === 1 && !room.opObj) {
+      const opNode = doc.querySelector(".nsk-post .content-item");
+      if (opNode) {
+        room.opObj = extractCommentObject(opNode, true, 1, tempMetaMap);
+        state.opAuthor = room.opObj.author;
+      }
+    }
+    const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
+    let added = 0;
+    for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
+      const obj = extractCommentObject(el, false, pageNum, tempMetaMap);
+      if (obj.floorId && seenFloors.has(obj.floorId)) continue;
+      if (obj.floorId) seenFloors.add(obj.floorId);
+      if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
+      room.flatComments.push(obj);
+      added++;
+    }
+    state.loadedPages.add(pageNum);
+    for (const np of parsePagesFromDoc(doc, room.pid)) {
+      if (!room.pages.some((p) => p.num === np.num)) room.pages.push(np);
+    }
+    room.pages.sort((a, b) => a.num - b.num);
+    return added;
+  }
+
   async function openPostInChat(itemMeta) {
+    const reqSeq = ++state.chatViewSeq;
     state.activePmPeer = null;
     const url = itemMeta.url || `/post-${itemMeta.postId}-1`;
     const pid = itemMeta.postId || getPostIdFromPath(url);
+    state.currentRoom = null;
+    state.loadedPages.clear();
+    state.loadingNextPage = false;
+    state.loadingPrevPage = false;
     state.currentPostId = pid;
     state.currentPostUrl = url;
     state.onlyOp = false;
@@ -22,15 +61,18 @@
     if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">正在载入帖子群聊内容...</div>`;
 
     try {
-      const resp = await fetch(url, { credentials: "include" });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+      const doc = await fetchPostPageDoc(url);
+      if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
       if (itemMeta.targetFloor) {
-        setTimeout(() => jumpToFloor(itemMeta.targetFloor), 80);
+        setTimeout(() => {
+          if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
+          jumpToFloor(itemMeta.targetFloor);
+        }, 80);
       }
     } catch (err) {
-      if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">加载失败：${err.message}</div>`;
+      if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
+      if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">加载失败：${escHtml(err.message)}</div>`;
     }
   }
 
@@ -173,6 +215,8 @@
   }
 
   function renderPostDocument(doc, url, isNativePage, itemHint = null) {
+    ++state.chatViewSeq;
+    state.activePmPeer = null;
     const pid = getPostIdFromPath(url);
     const pageNum = parsePageNumFromUrl(url);
     state.currentPostId = pid;
@@ -232,7 +276,7 @@
 
   async function tryAutoLoadNextPage() {
     const room = state.currentRoom;
-    if (!room || state.loadingNextPage || !room.pages || room.pages.length <= 1) return;
+    if (state.activePmPeer || !room || state.currentPostId !== room.pid || state.loadingNextPage || !room.pages || room.pages.length <= 1) return;
 
     const maxLoaded = Math.max(...Array.from(state.loadedPages));
     const nextPageObj = room.pages.find((p) => p.num === maxLoaded + 1);
@@ -243,25 +287,9 @@
     if (footerTip) footerTip.textContent = `正在瀑布流预加载第 ${nextPageObj.num} 页...`;
 
     try {
-      const resp = await fetch(nextPageObj.href, { credentials: "include" });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
-      const tempMetaMap = extractPostMetaFromTempScript(doc);
-      const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
-      let added = 0;
-      for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-        const obj = extractCommentObject(el, false, nextPageObj.num, tempMetaMap);
-        if (obj.floorId && seenFloors.has(obj.floorId)) continue;
-        if (obj.floorId) seenFloors.add(obj.floorId);
-        if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
-        room.flatComments.push(obj);
-        added++;
-      }
-      state.loadedPages.add(nextPageObj.num);
-      for (const np of parsePagesFromDoc(doc, room.pid)) {
-        if (!room.pages.some((p) => p.num === np.num)) room.pages.push(np);
-      }
-      room.pages.sort((a, b) => a.num - b.num);
+      const doc = await fetchPostPageDoc(nextPageObj.href);
+      if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+      const added = mergePostPageComments(room, doc, nextPageObj.num);
       if (added > 0) {
         const msgsEl = document.getElementById("nsc-chat-messages");
         const prevScroll = msgsEl ? msgsEl.scrollTop : 0;
@@ -271,7 +299,7 @@
         footerTip.textContent = `已加载第 ${Array.from(state.loadedPages).join("/")} 页`;
       }
     } catch (_) {
-      if (footerTip) footerTip.textContent = "加载下一页失败";
+      if (!state.activePmPeer && state.currentRoom === room && footerTip) footerTip.textContent = "加载下一页失败";
     } finally {
       state.loadingNextPage = false;
     }
@@ -279,7 +307,7 @@
 
   async function tryAutoLoadPrevPage() {
     const room = state.currentRoom;
-    if (!room || state.loadingPrevPage || !room.pages || room.pages.length <= 1) return;
+    if (state.activePmPeer || !room || state.currentPostId !== room.pid || state.loadingPrevPage || !room.pages || room.pages.length <= 1) return;
 
     const minLoaded = Math.min(...Array.from(state.loadedPages));
     if (minLoaded <= 1) return;
@@ -293,34 +321,12 @@
     if (prevTip) prevTip.textContent = `正在瀑布流加载第 ${prevPageObj.num} 页...`;
 
     try {
-      const resp = await fetch(prevPageObj.href, { credentials: "include" });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
-      const tempMetaMap = extractPostMetaFromTempScript(doc);
-      if (prevPageObj.num === 1 && !room.opObj) {
-        const opNode = doc.querySelector(".nsk-post .content-item");
-        if (opNode) {
-          room.opObj = extractCommentObject(opNode, true, 1, tempMetaMap);
-          state.opAuthor = room.opObj.author;
-        }
-      }
-      const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
-      let added = 0;
-      for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-        const obj = extractCommentObject(el, false, prevPageObj.num, tempMetaMap);
-        if (obj.floorId && seenFloors.has(obj.floorId)) continue;
-        if (obj.floorId) seenFloors.add(obj.floorId);
-        if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
-        room.flatComments.push(obj);
-        added++;
-      }
+      const doc = await fetchPostPageDoc(prevPageObj.href);
+      if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+      const hadOp = Boolean(room.opObj);
+      const added = mergePostPageComments(room, doc, prevPageObj.num);
       room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
-      state.loadedPages.add(prevPageObj.num);
-      for (const np of parsePagesFromDoc(doc, room.pid)) {
-        if (!room.pages.some((p) => p.num === np.num)) room.pages.push(np);
-      }
-      room.pages.sort((a, b) => a.num - b.num);
-      if (added > 0 || (prevPageObj.num === 1 && room.opObj)) {
+      if (added > 0 || (prevPageObj.num === 1 && !hadOp && room.opObj)) {
         const msgsEl = document.getElementById("nsc-chat-messages");
         const prevH = msgsEl ? msgsEl.scrollHeight : 0;
         const prevTop = msgsEl ? msgsEl.scrollTop : 0;
@@ -333,7 +339,7 @@
         prevTip.textContent = `已加载至第 ${prevPageObj.num} 页`;
       }
     } catch (_) {
-      if (prevTip) prevTip.textContent = "加载上一页失败，点击重试";
+      if (!state.activePmPeer && state.currentRoom === room && prevTip) prevTip.textContent = "加载上一页失败，点击重试";
     } finally {
       state.loadingPrevPage = false;
     }
@@ -341,7 +347,7 @@
 
   async function jumpToFloor(floorNumStr) {
     const targetId = String(floorNumStr || "").replace(/[^\d]/g, "");
-    if (!targetId) return;
+    if (!targetId || state.activePmPeer) return;
 
     const msgsEl = document.getElementById("nsc-chat-messages");
     let target =
@@ -351,24 +357,15 @@
     if (!target && state.currentRoom && state.currentRoom.pages.length > 1) {
       const room = state.currentRoom;
       for (const p of room.pages) {
+        if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
         if (state.loadedPages.has(p.num)) continue;
         try {
-          const resp = await fetch(p.href, { credentials: "include" });
-          if (!resp.ok) continue;
-          const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
-          const tempMetaMap = extractPostMetaFromTempScript(doc);
-          const seenFloors = new Set(room.flatComments.map((c) => c.floorId));
-          for (const el of doc.querySelectorAll("ul.comments li.content-item")) {
-            const obj = extractCommentObject(el, false, p.num, tempMetaMap);
-            if (obj.floorId && !seenFloors.has(obj.floorId)) {
-              seenFloors.add(obj.floorId);
-              if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
-              room.flatComments.push(obj);
-            }
-          }
-          state.loadedPages.add(p.num);
+          const doc = await fetchPostPageDoc(p.href);
+          if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+          mergePostPageComments(room, doc, p.num);
         } catch (_) {}
       }
+      if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
       room.flatComments.sort((a, b) => Number(a.floorId) - Number(b.floorId));
       renderChatRoom(room, true);
       target =
@@ -475,7 +472,20 @@
     return roots;
   }
 
+  let _nativeFloorMap = null;
+  function buildNativeFloorIndex() {
+    const map = new Map();
+    for (const el of document.querySelectorAll("#nsk-frame ul.comments li.content-item[id]")) {
+      map.set(String(el.id), el);
+    }
+    const opEl = document.querySelector("#nsk-frame .nsk-post .content-item");
+    if (opEl) map.set("0", opEl);
+    return map;
+  }
+
   function renderChatRoom(room, preserveScroll = false) {
+    if (!room || state.activePmPeer) return;
+    _nativeFloorMap = room.isNativePage ? buildNativeFloorIndex() : null;
     const titleEl = document.getElementById("nsc-chat-title");
     const subEl = document.getElementById("nsc-chat-subtitle");
     const actionsEl = document.getElementById("nsc-chat-actions");
@@ -485,8 +495,8 @@
     titleEl.textContent = room.title;
     const totalPages = room.pages.length || 1;
     subEl.innerHTML = `
-      ${room.catName ? `<span>版块: ${room.catName}</span>` : ""}
-      <span>楼主: ${state.opAuthor || "查看首楼"}</span>
+      ${room.catName ? `<span>版块: ${escHtml(room.catName)}</span>` : ""}
+      <span>楼主: ${escHtml(state.opAuthor || "查看首楼")}</span>
       <span>已加载 ${room.flatComments.length} 条回复 (${state.loadedPages.size}/${totalPages} 页)</span>
     `;
 
@@ -518,8 +528,8 @@
         b.disabled = true;
         b.textContent = "加载中...";
         try {
-          const resp = await fetch(room.pages[0].href, { credentials: "include" });
-          const doc = new DOMParser().parseFromString(await resp.text(), "text/html");
+          const doc = await fetchPostPageDoc(room.pages[0].href);
+          if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
           const tempMetaMap = extractPostMetaFromTempScript(doc);
           const opNode = doc.querySelector(".nsk-post .content-item");
           if (opNode) {
@@ -655,13 +665,16 @@
   }
 
   async function enrichVisibleMemberBadges() {
+    const room = state.currentRoom;
     const uids = Array.from(new Set(state.members.map((m) => m.uid).filter(Boolean))).slice(0, 15);
     for (const uid of uids) {
+      if (state.activePmPeer || state.currentRoom !== room) break;
       if (state.userCache[uid] && Date.now() - state.userCache[uid].ts < 3600000) {
         syncUserBadgeToChatDom(uid, state.userCache[uid]);
         continue;
       }
       const info = await fetchUserProfile(uid, "");
+      if (state.activePmPeer || state.currentRoom !== room) break;
       if (info) syncUserBadgeToChatDom(uid, info);
     }
   }
@@ -877,18 +890,7 @@
               <input type="text" class="nsc-newpost-title" id="nsc-edit-title" placeholder="请输入帖子标题..." />
             </div>
             <div class="nsc-newpost-editor" style="position:relative;">
-              <div class="nsc-mde-toolbar" id="nsc-edit-toolbar">
-                <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-                <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-                <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
-                <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
-                <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
-                <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
-                <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-                <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
-                <button type="button" class="nsc-mde-btn" id="nsc-edit-exp-btn" title="插入贴图表情">${ICONS.smile}</button>
-                <button type="button" class="nsc-nodeimage-btn" id="nsc-edit-ni-btn" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>
-              </div>
+              ${buildMarkdownToolbarHtml({ id: "nsc-edit-toolbar", expBtnId: "nsc-edit-exp-btn", niTarget: "edit" })}
               <textarea class="nsc-newpost-ta" id="nsc-edit-content" placeholder="支持 Markdown 语法，Ctrl+V 可直接粘贴传图，Ctrl+Enter 保存..."></textarea>
             </div>
           </div>
@@ -913,22 +915,10 @@
       const edStatus = bd.querySelector("#nsc-edit-status");
       const edSubmit = bd.querySelector("#nsc-edit-submit");
 
-      bd.querySelectorAll("#nsc-edit-toolbar .nsc-mde-btn[data-wrap], #nsc-edit-toolbar .nsc-mde-btn[data-prefix], #nsc-edit-toolbar .nsc-mde-btn[data-tpl]").forEach((b) => {
-        b.addEventListener("click", () => {
-          const s = edContent.selectionStart || 0;
-          const e = edContent.selectionEnd || 0;
-          const sel = edContent.value.slice(s, e);
-          let ins = "";
-          if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
-          else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
-          else if (b.dataset.tpl) ins = b.dataset.tpl;
-          edContent.setRangeText(ins, s, e, "end");
-          edContent.focus();
-        });
-      });
+      bindMarkdownToolbar(bd.querySelector("#nsc-edit-toolbar"), edContent);
 
       attachStickerPicker(bd.querySelector("#nsc-edit-exp-btn"), edContent, bd.querySelector(".nsc-newpost-editor"));
-      bd.querySelector("#nsc-edit-ni-btn").addEventListener("click", () => openNodeImageModal("edit"));
+      initNodeImageUi(bd);
       NodeImage.bindPasteAndDrop(edContent, "edit", "#nsc-edit-status");
 
       const doSaveEdit = async () => {
@@ -970,9 +960,8 @@
           }
           edStatus.textContent = "修改成功，正在刷新内容...";
           const targetPage = curIsTopic ? 1 : curObj.pageNum || 1;
-          const pResp = await fetch(`/post-${curPid}-${targetPage}`, { credentials: "include" });
-          if (pResp.ok && state.currentRoom && state.currentRoom.pid === curPid) {
-            const pDoc = new DOMParser().parseFromString(await pResp.text(), "text/html");
+          const pDoc = await fetchPostPageDoc(`/post-${curPid}-${targetPage}`);
+          if (!state.activePmPeer && state.currentRoom && state.currentRoom.pid === curPid && state.currentPostId === curPid) {
             const tempMetaMap = extractPostMetaFromTempScript(pDoc);
             if (curIsTopic) {
               state.currentRoom.title = newTitle;
@@ -1066,42 +1055,21 @@
   }
 
   function triggerPinViaHiddenIframe(postId, pageNum, floorId) {
-    return new Promise((resolve) => {
-      const iframe = document.createElement("iframe");
-      iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:900px;height:600px;opacity:0;pointer-events:none;border:0;";
-      iframe.src = `/post-${postId}-${pageNum || 1}`;
-      let done = false;
-      const finish = (ok, nextPinned) => {
-        if (done) return;
-        done = true;
-        try { iframe.remove(); } catch (_) {}
-        resolve({ ok, nextPinned });
-      };
-      const timer = setTimeout(() => finish(false, null), 7000);
-      iframe.addEventListener("load", () => {
-        let attempts = 0;
-        const poll = setInterval(() => {
-          attempts++;
-          try {
-            const idoc = iframe.contentDocument;
-            const li = idoc && idoc.querySelector(`[id="${floorId}"].content-item`);
-            const pinItem = findNativePinMenuItem(li);
-            if (pinItem) {
-              clearInterval(poll);
-              clearTimeout(timer);
-              const wasPinned = (pinItem.textContent || "").trim() === "取消置顶";
-              pinItem.click();
-              setTimeout(() => finish(true, !wasPinned), 750);
-            } else if (attempts > 16) {
-              clearInterval(poll);
-              clearTimeout(timer);
-              finish(false, null);
-            }
-          } catch (_) {}
-        }, 220);
-      });
-      document.body.appendChild(iframe);
-    });
+    return withHiddenIframe(`/post-${postId}-${pageNum || 1}`, {
+      pollMs: 220,
+      timeoutMs: 7000,
+      onPoll(idoc, attempts, finish) {
+        const li = idoc.querySelector(`[id="${floorId}"].content-item`);
+        const pinItem = findNativePinMenuItem(li);
+        if (pinItem) {
+          const wasPinned = (pinItem.textContent || "").trim() === "取消置顶";
+          pinItem.click();
+          setTimeout(() => finish({ ok: true, nextPinned: !wasPinned }), 750);
+        } else if (attempts > 16) {
+          finish({ ok: false, nextPinned: null });
+        }
+      },
+    }).then((res) => res || { ok: false, nextPinned: null });
   }
 
   async function togglePinComment(obj, isNativePage, pinBtn) {
@@ -1173,7 +1141,7 @@
     const isMyPost = Boolean(state.currentUser && state.opAuthor && state.currentUser === state.opAuthor && !isOpCard && obj.floorId !== "0");
     let hasNativePin = false;
     if (isNativePage && !isOpCard && obj.floorId !== "0") {
-      const nativeLi = document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
+      const nativeLi = (_nativeFloorMap && _nativeFloorMap.get(String(obj.floorId))) || document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
       hasNativePin = Boolean(findNativePinMenuItem(nativeLi));
     }
 
@@ -1381,8 +1349,10 @@
   }
 
   function refreshNativeFloorCountsIfNeeded() {
-    if (!state.currentRoom || state.currentPostId !== state.nativePostId) return;
+    if (state.activePmPeer || !state.currentRoom || !state.currentPostId || state.currentPostId !== state.nativePostId) return;
     const room = state.currentRoom;
+    const floorIdx = buildNativeFloorIndex();
+    _nativeFloorMap = floorIdx;
     const syncObjFromEl = (obj, el) => {
       if (!obj || !el) return;
       const menu = el.querySelector(":scope > .comment-menu, .comment-menu");
@@ -1424,10 +1394,23 @@
         syncPinBadgeInDom(obj.floorId, obj.pinned);
       }
     };
-    if (room.opObj) syncObjFromEl(room.opObj, document.querySelector("#nsk-frame .nsk-post .content-item"));
+    if (room.opObj) syncObjFromEl(room.opObj, floorIdx.get("0") || document.querySelector("#nsk-frame .nsk-post .content-item"));
     for (const c of room.flatComments) {
-      syncObjFromEl(c, document.querySelector(`#nsk-frame ul.comments li.content-item[id="${c.floorId}"]`));
+      syncObjFromEl(c, floorIdx.get(String(c.floorId)) || document.querySelector(`#nsk-frame ul.comments li.content-item[id="${c.floorId}"]`));
     }
+  }
+
+  const _origScrollIntoView = Element.prototype.scrollIntoView;
+  let _suppressComposerScrollUntil = 0;
+  if (typeof _origScrollIntoView === "function" && !Element.prototype._nscScrollGuardInstalled) {
+    Element.prototype._nscScrollGuardInstalled = true;
+    Element.prototype.scrollIntoView = function () {
+      if (Date.now() < _suppressComposerScrollUntil) {
+        const dockEl = document.getElementById("nsc-composer-dock");
+        if (dockEl && dockEl.contains(this)) return;
+      }
+      return _origScrollIntoView.apply(this, arguments);
+    };
   }
 
   async function triggerReplyOrVote(obj, actionTitle, isNativePage, reactionsEl, hoverBar) {
@@ -1436,7 +1419,7 @@
     };
 
     if (isNativePage) {
-      const nativeLi = document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
+      const nativeLi = (_nativeFloorMap && _nativeFloorMap.get(String(obj.floorId))) || document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
       if (nativeLi) {
         const menuItems = Array.from(nativeLi.querySelectorAll(".comment-menu .menu-item"));
         const target = menuItems.find(
@@ -1446,18 +1429,10 @@
           const isQuoteOrReply = actionTitle === "引用" || actionTitle === "回复";
           const msgsEl = document.getElementById("nsc-chat-messages");
           const savedMsgScroll = msgsEl ? msgsEl.scrollTop : 0;
-          const dockEl = document.getElementById("nsc-composer-dock");
-          const origScrollIntoView = dockEl ? Element.prototype.scrollIntoView : null;
-          if (isQuoteOrReply && origScrollIntoView) {
-            Element.prototype.scrollIntoView = function () {
-              if (dockEl && dockEl.contains(this)) return;
-              return origScrollIntoView.apply(this, arguments);
-            };
+          if (isQuoteOrReply) {
+            _suppressComposerScrollUntil = Date.now() + 180;
           }
           target.click();
-          if (isQuoteOrReply && origScrollIntoView) {
-            setTimeout(() => { Element.prototype.scrollIntoView = origScrollIntoView; }, 160);
-          }
           if (actionTitle === "点赞" || actionTitle === "加鸡腿" || actionTitle === "反对") {
             setTimeout(() => {
               const likeMenu = nativeLi.querySelector('.comment-menu .menu-item[title="点赞"]');

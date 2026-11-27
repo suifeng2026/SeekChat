@@ -43,7 +43,8 @@
             info.days = `${days}天`;
           }
           state.userCache[uid] = info;
-          saveJson(LS.USER_CACHE, state.userCache);
+          pruneTimedCache(state.userCache, 400, 300);
+          scheduleSaveJson(LS.USER_CACHE, state.userCache);
           return info;
         }
       }
@@ -110,44 +111,14 @@
   }
 
   function fetchFansViaHiddenIframe(url) {
-    return new Promise((resolve) => {
-      const iframe = document.createElement("iframe");
-      iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:900px;height:600px;opacity:0;pointer-events:none;border:0;";
-      iframe.src = url;
-      let done = false;
-      const finish = (res) => {
-        if (done) return;
-        done = true;
-        try { iframe.remove(); } catch (_) {}
-        resolve(res);
-      };
-      const timer = setTimeout(() => {
-        try {
-          const idoc = iframe.contentDocument;
-          finish(idoc ? extractUsersFromDom(idoc) : []);
-        } catch (_) {
-          finish([]);
-        }
-      }, 4500);
-
-      iframe.addEventListener("load", () => {
-        const poll = setInterval(() => {
-          try {
-            const idoc = iframe.contentDocument;
-            if (!idoc) return;
-            const found = extractUsersFromDom(idoc);
-            if (found.length > 0) {
-              clearInterval(poll);
-              clearTimeout(timer);
-              finish(found);
-            }
-          } catch (_) {}
-        }, 250);
-        setTimeout(() => clearInterval(poll), 4200);
-      });
-
-      document.body.appendChild(iframe);
-    });
+    return withHiddenIframe(url, {
+      pollMs: 250,
+      timeoutMs: 4500,
+      onPoll(idoc, attempts, finish) {
+        const found = extractUsersFromDom(idoc);
+        if (found.length > 0 || attempts > 16) finish(found);
+      },
+    }).then((res) => res || []);
   }
 
   async function fetchFansOrFollow(type) {
@@ -230,7 +201,8 @@
       if (!data || !data.success || !Array.isArray(data.comments) || data.comments.length === 0) {
         const emptyObj = { timeStr: "暂无发言", timestampMs: 0, title: "", link: "", postId: "", ts: Date.now() };
         state.lastSpeakCache[uid] = emptyObj;
-        saveJson(LS.LAST_SPEAK_CACHE, state.lastSpeakCache);
+        pruneTimedCache(state.lastSpeakCache, 500, 350);
+        scheduleSaveJson(LS.LAST_SPEAK_CACHE, state.lastSpeakCache);
         return emptyObj;
       }
 
@@ -279,7 +251,8 @@
         ts: Date.now(),
       };
       state.lastSpeakCache[uid] = result;
-      saveJson(LS.LAST_SPEAK_CACHE, state.lastSpeakCache);
+      pruneTimedCache(state.lastSpeakCache, 500, 350);
+      scheduleSaveJson(LS.LAST_SPEAK_CACHE, state.lastSpeakCache);
       return result;
     } catch (_) {
       return { timeStr: "查询失败", timestampMs: 0, title: "", link: "", postId: "", ts: 0 };
@@ -424,7 +397,9 @@
       if (state.batchQuery.stopRequested) break;
       await fetchUserLastSpeak(u.uid);
       state.batchQuery.done += 1;
-      renderRightBody();
+      if (state.batchQuery.done % 4 === 0 || state.batchQuery.done === state.batchQuery.total) {
+        renderRightBody();
+      }
       if (!state.batchQuery.stopRequested && state.batchQuery.done < state.batchQuery.total) {
         await new Promise((r) => setTimeout(r, 260));
       }
@@ -766,92 +741,69 @@
     if (bd && bd.classList.contains("is-open")) renderUserHub();
   }
 
-  async function loadHubPosts(reset = false) {
+  async function loadPaginatedHubStore(st, buildUrl, extractRows, onRows, reset = false, needUid = false) {
     detectCurrentUser();
     const uid = state.currentUserId;
-    const st = state.hubData.posts;
-    if (!uid || st.loading) return;
+    if ((needUid && !uid) || st.loading) return;
     if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
     if (st.noMore) return;
     st.loading = true;
     renderUserHubIfOpen();
     try {
       const nextPage = st.page + 1;
-      const resp = await fetch(`/api/content/list-discussions?uid=${uid}&page=${nextPage}`, {
-        headers: { Accept: "application/json, text/plain, */*" },
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      const rows = (json && (json.discussions || json.data || json.list)) || [];
-      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
-      else {
+      const json = await apiGetJson(buildUrl(uid, nextPage));
+      const rows = extractRows(json);
+      if (rows === null) {
+        st.noMore = true;
+      } else if (!Array.isArray(rows) || rows.length === 0) {
+        st.noMore = true;
+      } else {
+        onRows(rows, st);
+        st.page = nextPage;
+        if (rows.length < 15) st.noMore = true;
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  function loadHubPosts(reset = false) {
+    return loadPaginatedHubStore(
+      state.hubData.posts,
+      (uid, p) => `/api/content/list-discussions?uid=${uid}&page=${p}`,
+      (json) => (json && (json.discussions || json.data || json.list)) || [],
+      (rows, st) => {
         const seen = new Set(st.items.map((x) => String(x.post_id || x.id)));
         for (const r of rows) {
           const pid = String(r.post_id || r.id || "");
           if (pid && !seen.has(pid)) { st.items.push(r); seen.add(pid); }
         }
-        st.page = nextPage;
-        if (rows.length < 15) st.noMore = true;
-      }
-    } catch (err) {
-      st.error = err.message;
-    } finally {
-      st.loading = false;
-      renderUserHubIfOpen();
-    }
+      },
+      reset,
+      true
+    );
   }
 
-  async function loadHubComments(reset = false) {
-    detectCurrentUser();
-    const uid = state.currentUserId;
-    const st = state.hubData.comments;
-    if (!uid || st.loading) return;
-    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
-    if (st.noMore) return;
-    st.loading = true;
-    renderUserHubIfOpen();
-    try {
-      const nextPage = st.page + 1;
-      const resp = await fetch(`/api/content/list-comments?uid=${uid}&page=${nextPage}`, {
-        headers: { Accept: "application/json, text/plain, */*" },
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      const rows = (json && (json.comments || json.data || json.list)) || [];
-      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
-      else {
-        st.items.push(...rows);
-        st.page = nextPage;
-        if (rows.length < 15) st.noMore = true;
-      }
-    } catch (err) {
-      st.error = err.message;
-    } finally {
-      st.loading = false;
-      renderUserHubIfOpen();
-    }
+  function loadHubComments(reset = false) {
+    return loadPaginatedHubStore(
+      state.hubData.comments,
+      (uid, p) => `/api/content/list-comments?uid=${uid}&page=${p}`,
+      (json) => (json && (json.comments || json.data || json.list)) || [],
+      (rows, st) => { st.items.push(...rows); },
+      reset,
+      true
+    );
   }
 
-  async function loadHubCollections(reset = false) {
-    const st = state.hubData.collections;
-    if (st.loading) return;
-    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
-    if (st.noMore) return;
-    st.loading = true;
-    renderUserHubIfOpen();
-    try {
-      const nextPage = st.page + 1;
-      const resp = await fetch(`/api/statistics/list-collection?page=${nextPage}`, {
-        headers: { Accept: "application/json, text/plain, */*" },
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      const rows = (json && (json.collections || json.data || json.list)) || [];
-      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
-      else {
+  function loadHubCollections(reset = false) {
+    return loadPaginatedHubStore(
+      state.hubData.collections,
+      (_, p) => `/api/statistics/list-collection?page=${p}`,
+      (json) => (json && (json.collections || json.data || json.list)) || [],
+      (rows, st) => {
         const seen = new Set(st.items.map((x) => String(x.post_id || x.postId || x.id)));
         for (const r of rows) {
           const pid = String(r.post_id || r.postId || r.id || "");
@@ -860,49 +812,24 @@
             if (!seen.has(pid)) { st.items.push(r); seen.add(pid); }
           }
         }
-        st.page = nextPage;
-        if (rows.length < 15) st.noMore = true;
-      }
-    } catch (err) {
-      st.error = err.message;
-    } finally {
-      st.loading = false;
-      renderUserHubIfOpen();
-    }
+      },
+      reset,
+      false
+    );
   }
 
-  async function loadHubCredit(reset = false) {
-    const st = state.hubData.credit;
-    if (st.loading) return;
-    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
-    if (st.noMore) return;
-    st.loading = true;
-    renderUserHubIfOpen();
-    try {
-      const nextPage = st.page + 1;
-      const resp = await fetch(`/api/account/credit/page-${nextPage}`, {
-        headers: { Accept: "application/json, text/plain, */*" },
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      if (json && json.success === false && /max page/i.test(json.message || "")) {
-        st.noMore = true;
-      } else {
-        const rows = (json && (Array.isArray(json.data) ? json.data : json.data?.list || json.data?.records)) || [];
-        if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
-        else {
-          st.items.push(...rows);
-          st.page = nextPage;
-          if (rows.length < 15) st.noMore = true;
-        }
-      }
-    } catch (err) {
-      st.error = err.message;
-    } finally {
-      st.loading = false;
-      renderUserHubIfOpen();
-    }
+  function loadHubCredit(reset = false) {
+    return loadPaginatedHubStore(
+      state.hubData.credit,
+      (_, p) => `/api/account/credit/page-${p}`,
+      (json) => {
+        if (json && json.success === false && /max page/i.test(json.message || "")) return null;
+        return (json && (Array.isArray(json.data) ? json.data : json.data?.list || json.data?.records)) || [];
+      },
+      (rows, st) => { st.items.push(...rows); },
+      reset,
+      false
+    );
   }
 
   async function loadHubStardust(reset = false, modeOverride = null) {
@@ -965,34 +892,15 @@
     }
   }
 
-  async function loadHubAttendanceBoard(reset = false) {
-    const st = state.hubData.board;
-    if (st.loading) return;
-    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
-    if (st.noMore) return;
-    st.loading = true;
-    renderUserHubIfOpen();
-    try {
-      const nextPage = st.page + 1;
-      const resp = await fetch(`/api/attendance/board?page=${nextPage}`, {
-        headers: { Accept: "application/json, text/plain, */*" },
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      const rows = (json && (json.list || json.data || json.records)) || [];
-      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
-      else {
-        st.items.push(...rows);
-        st.page = nextPage;
-        if (rows.length < 15) st.noMore = true;
-      }
-    } catch (err) {
-      st.error = err.message;
-    } finally {
-      st.loading = false;
-      renderUserHubIfOpen();
-    }
+  function loadHubAttendanceBoard(reset = false) {
+    return loadPaginatedHubStore(
+      state.hubData.board,
+      (_, p) => `/api/attendance/board?page=${p}`,
+      (json) => (json && (json.list || json.data || json.records)) || [],
+      (rows, st) => { st.items.push(...rows); },
+      reset,
+      false
+    );
   }
 
   async function performAttendance(randomMode = false) {
@@ -1038,7 +946,7 @@
     iframe.addEventListener("load", () => {
       try {
         const idoc = iframe.contentDocument;
-        if (!idoc) return;
+        if (!idoc || idoc.getElementById("nsc-hub-iframe-style")) return;
         const isDark = document.body.classList.contains("dark-layout");
         const isDusk = document.body.classList.contains("nsc-theme-dusk");
         if (isDark) {
@@ -1049,6 +957,7 @@
           idoc.body.classList.add("light-layout");
         }
         const st = idoc.createElement("style");
+        st.id = "nsc-hub-iframe-style";
         st.textContent = `
           header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
           body {
@@ -1137,43 +1046,94 @@
     ];
 
     const uInfo = uid && state.userCache[String(uid)];
-    modal.innerHTML = `
-      <div class="nsc-hub-head">
-        <div class="nsc-hub-user">
-          <img src="${avatarUrl}" alt="" />
-          <div style="min-width:0;">
-            <div style="font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:6px;">
-              <span>${escHtml(state.currentUser || "个人中心")}</span>
-              ${uInfo && uInfo.level ? `<span class="nsc-lv-pill">${escHtml(uInfo.level)}</span>` : ""}
+    if (!modal.dataset.nscShellInit) {
+      modal.dataset.nscShellInit = "1";
+      modal.innerHTML = `
+        <div class="nsc-hub-head">
+          <div class="nsc-hub-user">
+            <img id="nsc-hub-avatar" src="${avatarUrl}" alt="" />
+            <div style="min-width:0;">
+              <div style="font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:6px;">
+                <span id="nsc-hub-uname"></span>
+                <span class="nsc-lv-pill" id="nsc-hub-ulv" style="display:none;"></span>
+              </div>
+              <div id="nsc-hub-usub" style="font-size:11px;color:var(--nsc-muted);"></div>
             </div>
-            <div style="font-size:11px;color:var(--nsc-muted);">UID: ${uid || "-"} · macOS 工作台个人空间</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <a class="nsc-mini-btn" id="nsc-hub-native-link" href="/notification" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">原版页面 ↗</a>
+            <button type="button" class="nsc-mini-btn" id="nsc-hub-close" style="padding:3px 9px;">✕</button>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <a class="nsc-mini-btn" href="${nativeHrefMap[state.hubTab] || "/notification"}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">原版页面 ↗</a>
-          <button type="button" class="nsc-mini-btn" id="nsc-hub-close" style="padding:3px 9px;">✕</button>
+        <div class="nsc-hub-tabs" id="nsc-hub-tabs">
+          ${tabs.map((t) => `
+            <button type="button" class="nsc-hub-tab" data-htab="${t.id}">
+              <span>${t.label}</span>
+              <span class="nsc-hub-tab-cnt" style="display:none;"></span>
+            </button>
+          `).join("")}
         </div>
-      </div>
-      <div class="nsc-hub-tabs">
-        ${tabs.map((t) => `
-          <button type="button" class="nsc-hub-tab ${state.hubTab === t.id ? "is-active" : ""}" data-htab="${t.id}">
-            <span>${t.label}</span>
-            ${t.cnt > 0 ? `<span class="nsc-hub-tab-cnt">${t.cnt > 99 ? "99+" : t.cnt}</span>` : ""}
-          </button>
-        `).join("")}
-      </div>
-      <div class="nsc-hub-subbar" id="nsc-hub-subbar"></div>
-      <div class="nsc-hub-body" id="nsc-hub-body"></div>
-    `;
+        <div class="nsc-hub-subbar" id="nsc-hub-subbar"></div>
+        <div class="nsc-hub-body" id="nsc-hub-body"></div>
+      `;
+      modal.querySelector("#nsc-hub-close").addEventListener("click", () => bd.classList.remove("is-open"));
+      modal.querySelectorAll("[data-htab]").forEach((btn) => {
+        btn.addEventListener("click", () => openUserHubModal(btn.dataset.htab));
+      });
+      const persistentBody = modal.querySelector("#nsc-hub-body");
+      let hubScrollRaf = 0;
+      persistentBody.addEventListener("scroll", () => {
+        if (hubScrollRaf) return;
+        hubScrollRaf = requestAnimationFrame(() => {
+          hubScrollRaf = 0;
+          if (persistentBody.scrollHeight - persistentBody.scrollTop - persistentBody.clientHeight < 180) {
+            if (state.hubTab === "posts") loadHubPosts(false);
+            else if (state.hubTab === "comments") loadHubComments(false);
+            else if (state.hubTab === "collections") loadHubCollections(false);
+            else if (state.hubTab === "credit") loadHubCredit(false);
+            else if (state.hubTab === "stardust") loadHubStardust(false);
+            else if (state.hubTab === "attendance") loadHubAttendanceBoard(false);
+          }
+        });
+      });
+    }
 
     const closeHub = () => bd.classList.remove("is-open");
-    modal.querySelector("#nsc-hub-close").addEventListener("click", closeHub);
+    const avImg = modal.querySelector("#nsc-hub-avatar");
+    if (avImg) avImg.src = avatarUrl;
+    const uNameEl = modal.querySelector("#nsc-hub-uname");
+    if (uNameEl) uNameEl.textContent = state.currentUser || "个人中心";
+    const uLvEl = modal.querySelector("#nsc-hub-ulv");
+    if (uLvEl) {
+      if (uInfo && uInfo.level) { uLvEl.textContent = uInfo.level; uLvEl.style.display = "inline-block"; }
+      else uLvEl.style.display = "none";
+    }
+    const uSubEl = modal.querySelector("#nsc-hub-usub");
+    if (uSubEl) uSubEl.textContent = `UID: ${uid || "-"} · macOS 工作台个人空间`;
+    const nativeLnk = modal.querySelector("#nsc-hub-native-link");
+    if (nativeLnk) nativeLnk.href = nativeHrefMap[state.hubTab] || "/notification";
+
     modal.querySelectorAll("[data-htab]").forEach((btn) => {
-      btn.addEventListener("click", () => openUserHubModal(btn.dataset.htab));
+      const tid = btn.dataset.htab;
+      btn.classList.toggle("is-active", state.hubTab === tid);
+      const cntEl = btn.querySelector(".nsc-hub-tab-cnt");
+      if (cntEl) {
+        const cntVal = tid === "notif" ? totalNotif : 0;
+        if (cntVal > 0) {
+          cntEl.textContent = cntVal > 99 ? "99+" : String(cntVal);
+          cntEl.style.display = "inline-block";
+        } else {
+          cntEl.style.display = "none";
+        }
+      }
     });
 
     const subbar = modal.querySelector("#nsc-hub-subbar");
     const body = modal.querySelector("#nsc-hub-body");
+    subbar.innerHTML = "";
+    body.innerHTML = "";
+    body.style.padding = "";
+    body.style.overflow = "";
 
     const restoreHubScroll = () => {
       if (prevScrollTop > 0) body.scrollTop = prevScrollTop;
@@ -1186,16 +1146,6 @@
       else wf.textContent = `下滑自动加载更多${label}`;
       body.appendChild(wf);
     };
-    body.addEventListener("scroll", () => {
-      if (body.scrollHeight - body.scrollTop - body.clientHeight < 180) {
-        if (state.hubTab === "posts") loadHubPosts(false);
-        else if (state.hubTab === "comments") loadHubComments(false);
-        else if (state.hubTab === "collections") loadHubCollections(false);
-        else if (state.hubTab === "credit") loadHubCredit(false);
-        else if (state.hubTab === "stardust") loadHubStardust(false);
-        else if (state.hubTab === "attendance") loadHubAttendanceBoard(false);
-      }
-    });
 
     if (state.hubTab === "notif") {
       const subTabs = [

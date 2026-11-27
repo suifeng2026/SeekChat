@@ -620,15 +620,28 @@
     }
   }
 
+  function clearPostRoomState() {
+    state.currentRoom = null;
+    state.loadedPages.clear();
+    state.loadingNextPage = false;
+    state.loadingPrevPage = false;
+    state.currentPostId = null;
+    state.currentPostUrl = null;
+    state.opAuthor = "";
+    state.members = [];
+  }
+
   async function openPmConversation(peer) {
     if (!peer || !peer.uid) return;
     detectCurrentUser();
+    const reqSeq = ++state.chatViewSeq;
+    const peerUid = String(peer.uid);
+    clearPostRoomState();
     state.activePmPeer = {
-      uid: String(peer.uid),
-      name: peer.name || peer.author || `用户 ${peer.uid}`,
-      avatar: peer.avatar || `/avatar/${peer.uid}.png`,
+      uid: peerUid,
+      name: peer.name || peer.author || `用户 ${peerUid}`,
+      avatar: peer.avatar || `/avatar/${peerUid}.png`,
     };
-    state.currentPostId = null;
     renderTopicList();
     syncComposerMode("pm");
 
@@ -637,31 +650,31 @@
     const actionsEl = document.getElementById("nsc-chat-actions");
     const msgsEl = document.getElementById("nsc-chat-messages");
     if (titleEl) titleEl.textContent = `私信：${state.activePmPeer.name}`;
-    if (subEl) subEl.innerHTML = `<span>UID: ${state.activePmPeer.uid}</span><span>与 ${state.activePmPeer.name} 的站内对话</span>`;
+    if (subEl) subEl.innerHTML = `<span>UID: ${escHtml(state.activePmPeer.uid)}</span><span>与 ${escHtml(state.activePmPeer.name)} 的站内对话</span>`;
     if (actionsEl) {
       actionsEl.innerHTML = "";
       const refBtn = document.createElement("button");
       refBtn.type = "button";
       refBtn.className = "nsc-pill-btn";
       refBtn.textContent = "刷新记录";
-      refBtn.addEventListener("click", () => openPmConversation(state.activePmPeer));
+      refBtn.addEventListener("click", () => {
+        if (state.activePmPeer) openPmConversation(state.activePmPeer);
+      });
       const profBtn = document.createElement("button");
       profBtn.type = "button";
       profBtn.className = "nsc-pill-btn";
       profBtn.textContent = "TA的名片";
-      profBtn.addEventListener("click", () => openUserProfileModal(state.activePmPeer));
+      profBtn.addEventListener("click", () => {
+        if (state.activePmPeer) openUserProfileModal(state.activePmPeer);
+      });
       actionsEl.appendChild(refBtn);
       actionsEl.appendChild(profBtn);
     }
     if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">正在读取私信聊天记录...</div>`;
 
     try {
-      const resp = await fetch(`/api/notification/message/with/${peer.uid}`, {
-        headers: { Accept: "application/json, text/plain, */*" },
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
+      const json = await apiGetJson(`/api/notification/message/with/${peerUid}`);
+      if (reqSeq !== state.chatViewSeq || !state.activePmPeer || state.activePmPeer.uid !== peerUid) return;
       if (json.talkTo && json.talkTo.member_name) {
         state.activePmPeer.name = json.talkTo.member_name;
         if (titleEl) titleEl.textContent = `私信：${state.activePmPeer.name}`;
@@ -682,14 +695,15 @@
           headers: getNodeSeekPostHeaders(),
           body: JSON.stringify({ messages: unreadIds }),
         }).then(() => {
-          const hit = state.pmList.items.find((x) => x.uid === String(peer.uid));
+          const hit = state.pmList.items.find((x) => x.uid === peerUid);
           if (hit) hit.unread = false;
           fetchUnreadCounts();
           if (state.activeChannel === "pm") renderTopicList();
         }).catch(() => {});
       }
     } catch (err) {
-      if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">读取私信失败：${err.message}</div>`;
+      if (reqSeq !== state.chatViewSeq || !state.activePmPeer || state.activePmPeer.uid !== peerUid) return;
+      if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">读取私信失败：${escHtml(err.message)}</div>`;
     }
   }
 
@@ -747,23 +761,17 @@
     const content = ta.value.trim();
     if (!content) return;
 
+    const seq = state.chatViewSeq;
     btn.disabled = true;
     btn.textContent = "发送中...";
     if (status) status.textContent = "正在发送私信...";
     try {
-      const resp = await fetch("/api/notification/message/send", {
-        method: "POST",
-        credentials: "include",
-        headers: getNodeSeekPostHeaders(),
-        body: JSON.stringify({ receiverUid: Number(peer.uid), content, markdown: true }),
-      });
-      const resJson = await resp.json().catch(() => ({}));
-      if (!resp.ok || resJson.success === false) {
-        throw new Error(resJson.message || `HTTP ${resp.status}`);
-      }
+      await apiPostJson("/api/notification/message/send", { receiverUid: Number(peer.uid), content, markdown: true });
       ta.value = "";
       if (status) status.textContent = "发送成功";
-      await openPmConversation(peer);
+      if (seq === state.chatViewSeq && state.activePmPeer && state.activePmPeer.uid === peer.uid) {
+        await openPmConversation(peer);
+      }
       fetchPmList();
     } catch (err) {
       if (status) status.textContent = "发送失败: " + err.message;
@@ -787,14 +795,6 @@
       if (hit) return hit.title;
     }
     return "";
-  }
-
-  function escHtml(str) {
-    return String(str || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
   }
 
   function formatSysNoticeHtml(rawContent) {
@@ -932,6 +932,7 @@
     _snTitleQueueRunning = true;
     try {
       const seenPids = new Set();
+      let resolvedBatch = 0;
       for (const it of targets) {
         if (state.activeChannel !== "sys-notice") break;
         const pid = it.firstPost.postId;
@@ -945,7 +946,6 @@
             const title = (h1 ? h1.textContent.trim() : (doc.title || "").replace(/\s*-\s*NodeSeek.*$/i, "").trim());
             if (title) {
               state.postTitleCache[pid] = title;
-              saveJson(LS.POST_TITLE_CACHE, state.postTitleCache);
               for (const item of state.sysNoticeList.items) {
                 if (item.firstPost && item.firstPost.postId === pid) {
                   const reParsed = formatSysNoticeHtml(item.content);
@@ -954,11 +954,22 @@
                   item.tag = reParsed.tag;
                 }
               }
-              if (state.activeChannel === "sys-notice") renderTopicList();
+              resolvedBatch++;
+              if (resolvedBatch % 5 === 0 && state.activeChannel === "sys-notice") {
+                renderTopicList();
+              }
             }
           }
         } catch (_) {}
         await new Promise((r) => setTimeout(r, 260));
+      }
+      if (resolvedBatch > 0) {
+        const ptKeys = Object.keys(state.postTitleCache);
+        if (ptKeys.length > 500) {
+          ptKeys.slice(0, ptKeys.length - 350).forEach((k) => delete state.postTitleCache[k]);
+        }
+        scheduleSaveJson(LS.POST_TITLE_CACHE, state.postTitleCache);
+        if (state.activeChannel === "sys-notice") renderTopicList();
       }
     } finally {
       _snTitleQueueRunning = false;
@@ -1577,18 +1588,24 @@
           if (it.firstPost) {
             openPostInChat(it.firstPost);
           } else {
+            ++state.chatViewSeq;
+            state.activePmPeer = null;
+            clearPostRoomState();
+            syncComposerMode(false);
             renderTopicList();
             const titleEl = document.getElementById("nsc-chat-title");
             const subChat = document.getElementById("nsc-chat-subtitle");
+            const actionsEl = document.getElementById("nsc-chat-actions");
             const msgsEl = document.getElementById("nsc-chat-messages");
             if (titleEl) titleEl.textContent = `系统通知 · ${it.tag.label}`;
             if (subChat) subChat.textContent = it.timeText || "UID 5230";
+            if (actionsEl) actionsEl.innerHTML = "";
             if (msgsEl) {
               msgsEl.innerHTML = `
                 <div class="nsc-msg">
                   <div class="nsc-avatar-col"><button type="button" class="nsc-avatar-btn"><img src="/avatar/5230.png" alt="系统通知" /></button></div>
                   <div class="nsc-msg-main">
-                    <div class="nsc-msg-meta"><span class="nsc-msg-author">系统通知</span><span class="${it.tag.cls}">${it.tag.label}</span><span>${it.timeText || ""}</span></div>
+                    <div class="nsc-msg-meta"><span class="nsc-msg-author">系统通知</span><span class="${it.tag.cls}">${it.tag.label}</span><span>${escHtml(it.timeText || "")}</span></div>
                     <div class="nsc-bubble-row"><div class="nsc-bubble">${it.html}</div></div>
                   </div>
                 </div>
@@ -1709,8 +1726,8 @@
       }
       scrollEl.appendChild(wf);
 
-      // 搜索过滤结果较少时自动向下瀑布流预拉最多至第 4 页
-      if (kw && items.length < 8 && chData && !chData.loading && !chData.noMore && page < 4) {
+      // 搜索过滤结果较少时自动向下瀑布流预拉最多至第 4 页（仅在无错误时）
+      if (kw && items.length < 8 && chData && !chData.loading && !chData.noMore && !chData.error && page < 4) {
         setTimeout(() => tryAutoLoadNextTopicPage(), 80);
       }
     }

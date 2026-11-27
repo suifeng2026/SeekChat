@@ -751,12 +751,12 @@
       }
 
       .nsc-nodeimage-btn {
-        display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 6px;
-        border: none; background: transparent;
-        color: var(--nsc-accent) !important; font-size: 11.5px; font-weight: 600; text-decoration: none !important;
-        cursor: pointer; margin-left: auto;
+        display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card);
+        color: var(--nsc-text) !important; font-size: 11px; font-weight: 600; text-decoration: none !important;
+        cursor: pointer; margin-left: 0;
       }
-      .nsc-nodeimage-btn:hover { background: var(--nsc-accent-soft); }
+      .nsc-nodeimage-btn:hover { border-color: var(--nsc-accent); color: var(--nsc-accent) !important; background: var(--nsc-accent-soft); }
 
       .nsc-mde-toolbar,
       .nsc-composer-dock .mde-toolbar {
@@ -1184,13 +1184,6 @@
 
       .nsc-ni-dot { width: 6px; height: 6px; border-radius: 50%; background: #ff3b30; display: inline-block; }
       .nsc-ni-dot.is-ok { background: #34c759; }
-      .nsc-nodeimage-btn {
-        display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px;
-        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card);
-        color: var(--nsc-text) !important; font-size: 11px; font-weight: 600; text-decoration: none !important;
-        cursor: pointer; margin-left: 0;
-      }
-      .nsc-nodeimage-btn:hover { border-color: var(--nsc-accent); color: var(--nsc-accent) !important; background: var(--nsc-accent-soft); }
 
       #nsc-ni-backdrop {
         position: fixed; inset: 0; z-index: 9600;
