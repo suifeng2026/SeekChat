@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.30
+// @version      7.22.31
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -341,7 +341,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.30",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.31",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -3282,9 +3282,20 @@
       .nsc-composer-dock .mde-toolbar,
       #nsc-np-editor-host .mde-toolbar {
         display: flex !important; align-items: center !important; flex-wrap: nowrap !important; gap: 2px !important;
-        padding: 2px 6px !important; height: auto !important; min-height: 24px !important; background: transparent !important;
+        padding: 3px 6px !important; height: auto !important; min-height: 26px !important;
+        background: rgba(0, 122, 255, 0.035) !important;
         overflow-x: auto !important; scrollbar-width: none !important;
         border-bottom: 1px solid var(--nsc-border) !important;
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-mde-toolbar,
+      body.nsc-app-active.nsc-theme-dusk .nsc-composer-dock .mde-toolbar,
+      body.nsc-app-active.nsc-theme-dusk #nsc-np-editor-host .mde-toolbar {
+        background: rgba(184, 98, 28, 0.055) !important;
+      }
+      body.nsc-app-active.dark-layout .nsc-mde-toolbar,
+      body.nsc-app-active.dark-layout .nsc-composer-dock .mde-toolbar,
+      body.nsc-app-active.dark-layout #nsc-np-editor-host .mde-toolbar {
+        background: rgba(255, 255, 255, 0.035) !important;
       }
       .nsc-mde-btn,
       .nsc-composer-dock .mde-toolbar .toolbar-item,
@@ -3293,13 +3304,45 @@
         width: 24px !important; height: 22px !important; padding: 0 !important; border-radius: 6px !important;
         flex: 0 0 auto !important; position: relative;
         border: none; background: transparent;
-        color: var(--nsc-muted) !important; transition: background 0.12s ease, color 0.12s ease !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
+        color: rgba(0, 110, 230, 0.88) !important; transition: background 0.12s ease, color 0.12s ease !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
+      }
+      body.nsc-app-active.nsc-theme-dusk .nsc-mde-btn,
+      body.nsc-app-active.nsc-theme-dusk .nsc-composer-dock .mde-toolbar .toolbar-item,
+      body.nsc-app-active.nsc-theme-dusk #nsc-np-editor-host .mde-toolbar .toolbar-item {
+        color: #a85513 !important;
+      }
+      body.nsc-app-active.dark-layout .nsc-mde-btn,
+      body.nsc-app-active.dark-layout .nsc-composer-dock .mde-toolbar .toolbar-item,
+      body.nsc-app-active.dark-layout #nsc-np-editor-host .mde-toolbar .toolbar-item {
+        color: #60a5fa !important;
       }
       .nsc-mde-btn:hover,
       .nsc-composer-dock .mde-toolbar .toolbar-item:hover,
       #nsc-np-editor-host .mde-toolbar .toolbar-item:hover {
-        background: var(--nsc-accent-soft) !important; color: var(--nsc-accent) !important;
+        background: rgba(0, 122, 255, 0.12) !important; color: #0055cc !important;
       }
+      body.nsc-app-active.nsc-theme-dusk .nsc-mde-btn:hover,
+      body.nsc-app-active.nsc-theme-dusk .nsc-composer-dock .mde-toolbar .toolbar-item:hover,
+      body.nsc-app-active.nsc-theme-dusk #nsc-np-editor-host .mde-toolbar .toolbar-item:hover {
+        background: rgba(184, 98, 28, 0.15) !important; color: #84400c !important;
+      }
+      body.nsc-app-active.dark-layout .nsc-mde-btn:hover,
+      body.nsc-app-active.dark-layout .nsc-composer-dock .mde-toolbar .toolbar-item:hover,
+      body.nsc-app-active.dark-layout #nsc-np-editor-host .mde-toolbar .toolbar-item:hover {
+        background: rgba(56, 139, 253, 0.20) !important; color: #93c5fd !important;
+      }
+      .nsc-mde-btn[data-snip="tip"],
+      .toolbar-item[data-snip="tip"] { color: #16a34a !important; }
+      .nsc-mde-btn[data-snip="note"],
+      .toolbar-item[data-snip="note"] { color: #0284c7 !important; }
+      .nsc-mde-btn[data-snip="warn"],
+      .toolbar-item[data-snip="warn"] { color: #ea580c !important; }
+      body.nsc-app-active.dark-layout .nsc-mde-btn[data-snip="tip"],
+      body.nsc-app-active.dark-layout .toolbar-item[data-snip="tip"] { color: #4ade80 !important; }
+      body.nsc-app-active.dark-layout .nsc-mde-btn[data-snip="note"],
+      body.nsc-app-active.dark-layout .toolbar-item[data-snip="note"] { color: #38bdf8 !important; }
+      body.nsc-app-active.dark-layout .nsc-mde-btn[data-snip="warn"],
+      body.nsc-app-active.dark-layout .toolbar-item[data-snip="warn"] { color: #fb923c !important; }
       .nsc-composer-dock .mde-toolbar .toolbar-item svg,
       #nsc-np-editor-host .mde-toolbar .toolbar-item svg,
       .nsc-mde-btn svg { width: 14px !important; height: 14px !important; }
@@ -3334,7 +3377,7 @@
         padding: 7px 10px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板：恢复全部贴图，放大至 40px，单行可视 + 下拉滚动 + 按容器宽度自适应铺满 */
+      /* 表情面板：48px 大表情，严格单行高度（68px，row-gap 14px 杜绝第二行露头），自适应铺满宽度并下拉滚动 */
       .nsc-composer-dock .exp-container.cur-sticker-group-null,
       .nsc-composer-dock .exp-container:empty,
       #nsc-np-editor-host .exp-container.cur-sticker-group-null,
@@ -3344,11 +3387,11 @@
       .nsc-composer-dock .exp-container,
       #nsc-np-editor-host .exp-container {
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
-        z-index: 260 !important;
-        display: grid !important; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)) !important;
-        gap: 4px !important; justify-items: center !important; align-items: center !important;
+        z-index: 260 !important; box-sizing: border-box !important;
+        display: grid !important; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)) !important;
+        column-gap: 6px !important; row-gap: 14px !important; justify-items: center !important; align-items: center !important;
         padding: 6px 8px !important;
-        height: 60px !important; min-height: 60px !important; max-height: 60px !important;
+        height: 68px !important; min-height: 68px !important; max-height: 68px !important;
         overflow-y: auto !important; overflow-x: hidden !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
@@ -3375,13 +3418,13 @@
       .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) video,
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) img,
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) video {
-        width: 40px !important; height: 40px !important; max-width: 40px !important; max-height: 40px !important;
+        width: 48px !important; height: 48px !important; max-width: 48px !important; max-height: 48px !important;
         object-fit: contain !important; display: block !important;
       }
       .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) > *,
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > * {
-        width: 46px !important; height: 46px !important; box-sizing: border-box !important;
-        padding: 3px !important; margin: 0 !important; border-radius: 7px !important; cursor: pointer !important;
+        width: 54px !important; height: 54px !important; box-sizing: border-box !important;
+        padding: 3px !important; margin: 0 !important; border-radius: 8px !important; cursor: pointer !important;
       }
       .nsc-composer-dock .exp-container:not(.cur-sticker-group-app) > *:hover,
       #nsc-np-editor-host .exp-container:not(.cur-sticker-group-app) > *:hover {
@@ -3482,17 +3525,18 @@
       }
       .nsc-fb-exp-tab.is-active { color: var(--nsc-accent); background: var(--nsc-bg-card); }
       .nsc-fb-exp-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
-        gap: 4px; justify-items: center; align-items: center;
-        padding: 6px 8px; height: 60px; min-height: 60px; max-height: 60px;
+        box-sizing: border-box;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+        column-gap: 6px; row-gap: 14px; justify-items: center; align-items: center;
+        padding: 6px 8px; height: 66px; min-height: 66px; max-height: 66px;
         overflow-y: auto; overflow-x: hidden;
       }
       .nsc-fb-exp-item {
-        width: 46px; height: 46px; padding: 3px; border: none; border-radius: 7px;
+        width: 54px; height: 54px; padding: 3px; border: none; border-radius: 8px; box-sizing: border-box;
         background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center;
       }
       .nsc-fb-exp-item:hover { background: var(--nsc-accent-soft); }
-      .nsc-fb-exp-item img { width: 40px; height: 40px; object-fit: contain; display: block; }
+      .nsc-fb-exp-item img { width: 48px; height: 48px; object-fit: contain; display: block; }
       .nsc-composer-footer,
       .nsc-composer-dock .topic-select,
       #nsc-np-editor-host .topic-select {
@@ -5504,7 +5548,7 @@
 
   function buildMarkdownToolbarHtml({ id = "", expBtnId = "", niTarget = "", includeList = false } = {}) {
     const extraBtns = EDITOR_EXTRA_SNIPPETS.map(
-      (it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`
+      (it) => `<button type="button" class="nsc-mde-btn" data-snip="${escHtml(it.id)}" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`
     ).join("");
     return `
       <div class="nsc-mde-toolbar"${id ? ` id="${id}"` : ""}>
@@ -6879,7 +6923,7 @@
         <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| @@CURSOR@@ | 内容 |\n" title="表格">${ICONS.table}</button>
         <button type="button" class="nsc-mde-btn" data-tpl="\n---\n@@CURSOR@@" title="分割线">${ICONS.hr}</button>
         <span class="nsc-mde-sep"></span>
-        ${EDITOR_EXTRA_SNIPPETS.map((it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`).join("")}
+        ${EDITOR_EXTRA_SNIPPETS.map((it) => `<button type="button" class="nsc-mde-btn" data-snip="${escHtml(it.id)}" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`).join("")}
         <span class="nsc-mde-sep"></span>
         <button type="button" class="nsc-mde-btn" data-role="undo" title="撤销">${ICONS.undo}</button>
         <button type="button" class="nsc-mde-btn" data-role="redo" title="重做">${ICONS.redo}</button>
@@ -7218,8 +7262,9 @@
     if (nativeEditor) {
       if (!composerBody.contains(nativeEditor)) {
         composerBody.appendChild(nativeEditor);
-        enhanceNativeEditor(nativeEditor);
       }
+      enhanceNativeEditor(nativeEditor);
+      ensureNativeToolbarEnhanced(nativeEditor);
       nativeEditor.style.display = "block";
       if (unified) unified.style.display = "none";
       syncNativeEditorContextUi(nativeEditor);
@@ -7276,51 +7321,8 @@
     });
   }
 
-  function enhanceNativeEditor(editor) {
-    if (!editor || editor.dataset.nscEnhanced === "1") return;
-    editor.dataset.nscEnhanced = "1";
-
-    const header = editor.querySelector(".tab-select.window_header");
-    const expr = editor.querySelector("#editor-body > .expression, .expression");
-    if (header && expr && !header.contains(expr)) {
-      const firstTopBtn = header.querySelector(".editor-top-button");
-      if (firstTopBtn) header.insertBefore(expr, firstTopBtn);
-      else header.appendChild(expr);
-    }
-
-    const expContainer = editor.querySelector(".exp-container");
-    if (expContainer) {
-      const appObs = new MutationObserver(() => {
-        if (expContainer.classList.contains("cur-sticker-group-app")) {
-          positionAppPopover(editor);
-        }
-      });
-      appObs.observe(expContainer, { attributes: true, attributeFilter: ["class"] });
-
-      document.addEventListener("pointerdown", (e) => {
-        if (!editor.isConnected || editor.style.display === "none") return;
-        const m = (expContainer.className || "").match(/\bcur-sticker-group-([a-z0-9_-]+)/i);
-        const grp = m ? m[1] : "";
-        if (!grp || grp === "null") return;
-        const t = e.target;
-        if (t && t.closest && (
-          t.closest(".expression") ||
-          t.closest(".exp-container") ||
-          t.closest(".vote-panel, .stardust-panel")
-        )) {
-          return;
-        }
-        const activeTab =
-          editor.querySelector(`.expression .exp-item.sticker-group-${grp}`) ||
-          editor.querySelector(".expression .exp-item.active");
-        if (activeTab) activeTab.click();
-      }, true);
-    }
-    const appTabBtn = editor.querySelector(".expression .sticker-group-app");
-    if (appTabBtn) {
-      appTabBtn.addEventListener("click", () => positionAppPopover(editor));
-    }
-
+  function ensureNativeToolbarEnhanced(editor) {
+    if (!editor) return;
     const mdeToolbar = editor.querySelector(".mde-toolbar");
     if (mdeToolbar && !mdeToolbar.querySelector(".nsc-mde-extra-sep")) {
       const sep1 = document.createElement("div");
@@ -7329,6 +7331,7 @@
       for (const snip of EDITOR_EXTRA_SNIPPETS) {
         const b = document.createElement("span");
         b.className = "toolbar-item nsc-mde-extra-btn";
+        b.dataset.snip = snip.id;
         b.title = snip.title;
         b.innerHTML = snip.icon();
         b.addEventListener("click", (e) => {
@@ -7383,6 +7386,67 @@
         hint.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
         leftSlot.appendChild(hint);
       }
+    }
+  }
+
+  function enhanceNativeEditor(editor) {
+    if (!editor) return;
+    ensureNativeToolbarEnhanced(editor);
+    if (editor.dataset.nscEnhanced === "1") return;
+    editor.dataset.nscEnhanced = "1";
+
+    if (editor.dataset.nscTbObs !== "1") {
+      editor.dataset.nscTbObs = "1";
+      let tbRaf = 0;
+      const tbObs = new MutationObserver(() => {
+        if (tbRaf) return;
+        tbRaf = requestAnimationFrame(() => {
+          tbRaf = 0;
+          ensureNativeToolbarEnhanced(editor);
+        });
+      });
+      tbObs.observe(editor, { childList: true, subtree: true });
+    }
+
+    const header = editor.querySelector(".tab-select.window_header");
+    const expr = editor.querySelector("#editor-body > .expression, .expression");
+    if (header && expr && !header.contains(expr)) {
+      const firstTopBtn = header.querySelector(".editor-top-button");
+      if (firstTopBtn) header.insertBefore(expr, firstTopBtn);
+      else header.appendChild(expr);
+    }
+
+    const expContainer = editor.querySelector(".exp-container");
+    if (expContainer) {
+      const appObs = new MutationObserver(() => {
+        if (expContainer.classList.contains("cur-sticker-group-app")) {
+          positionAppPopover(editor);
+        }
+      });
+      appObs.observe(expContainer, { attributes: true, attributeFilter: ["class"] });
+
+      document.addEventListener("pointerdown", (e) => {
+        if (!editor.isConnected || editor.style.display === "none") return;
+        const m = (expContainer.className || "").match(/\bcur-sticker-group-([a-z0-9_-]+)/i);
+        const grp = m ? m[1] : "";
+        if (!grp || grp === "null") return;
+        const t = e.target;
+        if (t && t.closest && (
+          t.closest(".expression") ||
+          t.closest(".exp-container") ||
+          t.closest(".vote-panel, .stardust-panel")
+        )) {
+          return;
+        }
+        const activeTab =
+          editor.querySelector(`.expression .exp-item.sticker-group-${grp}`) ||
+          editor.querySelector(".expression .exp-item.active");
+        if (activeTab) activeTab.click();
+      }, true);
+    }
+    const appTabBtn = editor.querySelector(".expression .sticker-group-app");
+    if (appTabBtn) {
+      appTabBtn.addEventListener("click", () => positionAppPopover(editor));
     }
 
     editor.addEventListener("keydown", (e) => {

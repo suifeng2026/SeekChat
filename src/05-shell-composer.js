@@ -83,7 +83,7 @@
 
   function buildMarkdownToolbarHtml({ id = "", expBtnId = "", niTarget = "", includeList = false } = {}) {
     const extraBtns = EDITOR_EXTRA_SNIPPETS.map(
-      (it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`
+      (it) => `<button type="button" class="nsc-mde-btn" data-snip="${escHtml(it.id)}" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`
     ).join("");
     return `
       <div class="nsc-mde-toolbar"${id ? ` id="${id}"` : ""}>
@@ -1458,7 +1458,7 @@
         <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| @@CURSOR@@ | 内容 |\n" title="表格">${ICONS.table}</button>
         <button type="button" class="nsc-mde-btn" data-tpl="\n---\n@@CURSOR@@" title="分割线">${ICONS.hr}</button>
         <span class="nsc-mde-sep"></span>
-        ${EDITOR_EXTRA_SNIPPETS.map((it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`).join("")}
+        ${EDITOR_EXTRA_SNIPPETS.map((it) => `<button type="button" class="nsc-mde-btn" data-snip="${escHtml(it.id)}" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`).join("")}
         <span class="nsc-mde-sep"></span>
         <button type="button" class="nsc-mde-btn" data-role="undo" title="撤销">${ICONS.undo}</button>
         <button type="button" class="nsc-mde-btn" data-role="redo" title="重做">${ICONS.redo}</button>
@@ -1797,8 +1797,9 @@
     if (nativeEditor) {
       if (!composerBody.contains(nativeEditor)) {
         composerBody.appendChild(nativeEditor);
-        enhanceNativeEditor(nativeEditor);
       }
+      enhanceNativeEditor(nativeEditor);
+      ensureNativeToolbarEnhanced(nativeEditor);
       nativeEditor.style.display = "block";
       if (unified) unified.style.display = "none";
       syncNativeEditorContextUi(nativeEditor);
@@ -1855,51 +1856,8 @@
     });
   }
 
-  function enhanceNativeEditor(editor) {
-    if (!editor || editor.dataset.nscEnhanced === "1") return;
-    editor.dataset.nscEnhanced = "1";
-
-    const header = editor.querySelector(".tab-select.window_header");
-    const expr = editor.querySelector("#editor-body > .expression, .expression");
-    if (header && expr && !header.contains(expr)) {
-      const firstTopBtn = header.querySelector(".editor-top-button");
-      if (firstTopBtn) header.insertBefore(expr, firstTopBtn);
-      else header.appendChild(expr);
-    }
-
-    const expContainer = editor.querySelector(".exp-container");
-    if (expContainer) {
-      const appObs = new MutationObserver(() => {
-        if (expContainer.classList.contains("cur-sticker-group-app")) {
-          positionAppPopover(editor);
-        }
-      });
-      appObs.observe(expContainer, { attributes: true, attributeFilter: ["class"] });
-
-      document.addEventListener("pointerdown", (e) => {
-        if (!editor.isConnected || editor.style.display === "none") return;
-        const m = (expContainer.className || "").match(/\bcur-sticker-group-([a-z0-9_-]+)/i);
-        const grp = m ? m[1] : "";
-        if (!grp || grp === "null") return;
-        const t = e.target;
-        if (t && t.closest && (
-          t.closest(".expression") ||
-          t.closest(".exp-container") ||
-          t.closest(".vote-panel, .stardust-panel")
-        )) {
-          return;
-        }
-        const activeTab =
-          editor.querySelector(`.expression .exp-item.sticker-group-${grp}`) ||
-          editor.querySelector(".expression .exp-item.active");
-        if (activeTab) activeTab.click();
-      }, true);
-    }
-    const appTabBtn = editor.querySelector(".expression .sticker-group-app");
-    if (appTabBtn) {
-      appTabBtn.addEventListener("click", () => positionAppPopover(editor));
-    }
-
+  function ensureNativeToolbarEnhanced(editor) {
+    if (!editor) return;
     const mdeToolbar = editor.querySelector(".mde-toolbar");
     if (mdeToolbar && !mdeToolbar.querySelector(".nsc-mde-extra-sep")) {
       const sep1 = document.createElement("div");
@@ -1908,6 +1866,7 @@
       for (const snip of EDITOR_EXTRA_SNIPPETS) {
         const b = document.createElement("span");
         b.className = "toolbar-item nsc-mde-extra-btn";
+        b.dataset.snip = snip.id;
         b.title = snip.title;
         b.innerHTML = snip.icon();
         b.addEventListener("click", (e) => {
@@ -1962,6 +1921,67 @@
         hint.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
         leftSlot.appendChild(hint);
       }
+    }
+  }
+
+  function enhanceNativeEditor(editor) {
+    if (!editor) return;
+    ensureNativeToolbarEnhanced(editor);
+    if (editor.dataset.nscEnhanced === "1") return;
+    editor.dataset.nscEnhanced = "1";
+
+    if (editor.dataset.nscTbObs !== "1") {
+      editor.dataset.nscTbObs = "1";
+      let tbRaf = 0;
+      const tbObs = new MutationObserver(() => {
+        if (tbRaf) return;
+        tbRaf = requestAnimationFrame(() => {
+          tbRaf = 0;
+          ensureNativeToolbarEnhanced(editor);
+        });
+      });
+      tbObs.observe(editor, { childList: true, subtree: true });
+    }
+
+    const header = editor.querySelector(".tab-select.window_header");
+    const expr = editor.querySelector("#editor-body > .expression, .expression");
+    if (header && expr && !header.contains(expr)) {
+      const firstTopBtn = header.querySelector(".editor-top-button");
+      if (firstTopBtn) header.insertBefore(expr, firstTopBtn);
+      else header.appendChild(expr);
+    }
+
+    const expContainer = editor.querySelector(".exp-container");
+    if (expContainer) {
+      const appObs = new MutationObserver(() => {
+        if (expContainer.classList.contains("cur-sticker-group-app")) {
+          positionAppPopover(editor);
+        }
+      });
+      appObs.observe(expContainer, { attributes: true, attributeFilter: ["class"] });
+
+      document.addEventListener("pointerdown", (e) => {
+        if (!editor.isConnected || editor.style.display === "none") return;
+        const m = (expContainer.className || "").match(/\bcur-sticker-group-([a-z0-9_-]+)/i);
+        const grp = m ? m[1] : "";
+        if (!grp || grp === "null") return;
+        const t = e.target;
+        if (t && t.closest && (
+          t.closest(".expression") ||
+          t.closest(".exp-container") ||
+          t.closest(".vote-panel, .stardust-panel")
+        )) {
+          return;
+        }
+        const activeTab =
+          editor.querySelector(`.expression .exp-item.sticker-group-${grp}`) ||
+          editor.querySelector(".expression .exp-item.active");
+        if (activeTab) activeTab.click();
+      }, true);
+    }
+    const appTabBtn = editor.querySelector(".expression .sticker-group-app");
+    if (appTabBtn) {
+      appTabBtn.addEventListener("click", () => positionAppPopover(editor));
     }
 
     editor.addEventListener("keydown", (e) => {
