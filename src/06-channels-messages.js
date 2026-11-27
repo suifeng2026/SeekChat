@@ -300,11 +300,15 @@
     const mapItems = (raw) =>
       raw.map((it) => {
         const uid = String(it.commenter_id || it.member_id || it.uid || "");
-        const postId = String(it.post_id || "");
-        const floorId = Number(it.floor_id) || 0;
+        const postId = String(it.post_id || it.postId || "");
+        const floorId = Number(it.floor_id ?? it.floorId ?? 0) || 0;
         const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
+        const rawId = Number(
+          it.id || it.notification_id || it.notify_id || it.nid || it.msg_id || it.reply_id || it.comment_id || it.commentId || 0
+        ) || 0;
         return {
-          id: Number(it.id || it.notification_id || it.notify_id || it.msg_id || it.comment_id || it.commentId) || 0,
+          id: rawId,
+          commentId: Number(it.comment_id || it.commentId || 0) || 0,
           postId,
           floorId,
           url: `/post-${postId}-${pageIndex}`,
@@ -357,18 +361,39 @@
     }
   }
 
-  async function markNotificationViewed(kind, id, all = false) {
+  async function readServerUnreadCountFor(countKey) {
+    try {
+      const resp = await fetch("/api/notification/unread-count", {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json().catch(() => null);
+      if (data && data.unreadCount) {
+        return Number(data.unreadCount[countKey]) || 0;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function markNotificationViewed(kind, itemOrId, all = false) {
     const api = kind === "at-me" ? "/api/notification/at-me/markViewed" : "/api/notification/reply-to-me/markViewed";
     const countKey = kind === "at-me" ? "atMe" : "reply";
     const store = state.notifData[kind];
-    const numId = Number(id) || 0;
+    const item = typeof itemOrId === "object" && itemOrId !== null ? itemOrId : null;
+    const numId = item ? (Number(item.id) || 0) : (Number(itemOrId) || 0);
+    const postIdNum = item ? (Number(item.postId) || 0) : 0;
+    const floorIdNum = item ? (Number(item.floorId) || 0) : 0;
+    const commentIdNum = item ? (Number(item.commentId) || 0) : 0;
+
+    const beforeServerCount = Number(state.unreadCounts[countKey]) || 0;
 
     if (store) {
       if (all) {
         store.items.forEach((x) => { x.viewed = true; });
         state.unreadCounts[countKey] = 0;
       } else {
-        const hit = numId > 0 ? store.items.find((x) => x.id === numId) : null;
+        const hit = item || (numId > 0 ? store.items.find((x) => x.id === numId) : null);
         if (hit && !hit.viewed) {
           hit.viewed = true;
           state.unreadCounts[countKey] = Math.max(0, (Number(state.unreadCounts[countKey]) || 0) - 1);
@@ -381,7 +406,6 @@
     }
 
     try {
-      if (!all && !numId) return;
       let ok = false;
       if (all) {
         const attempts = [
@@ -398,30 +422,86 @@
           }
         }
       } else {
-        const payloads = kind === "at-me"
-          ? [{ atMe: [numId] }, { idList: [numId] }, { ids: [numId] }, { id: numId }]
-          : [{ replyToMe: [numId] }, { reply: [numId] }, { idList: [numId] }, { ids: [numId] }, { id: numId }];
-        for (const body of payloads) {
-          const resp = await fetch(api, {
-            method: "POST",
-            credentials: "include",
-            headers: getNodeSeekPostHeaders(),
-            body: JSON.stringify(body),
-          });
-          const resJson = await resp.json().catch(() => null);
-          if (resp.ok && (!resJson || resJson.success !== false)) {
-            ok = true;
-            break;
+        const strategyKey = `nsc_v7_mv_strategy_${kind}`;
+        const candidates = [];
+        if (numId > 0) {
+          if (kind === "at-me") {
+            candidates.push({ name: "atMeArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ atMe: [numId] }) }) });
+          } else {
+            candidates.push({ name: "replyToMeArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ replyToMe: [numId] }) }) });
+            candidates.push({ name: "replyArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ reply: [numId] }) }) });
+          }
+          candidates.push({ name: "idListArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ idList: [numId] }) }) });
+          candidates.push({ name: "idsArr", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ ids: [numId] }) }) });
+          candidates.push({ name: "idScalar", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ id: numId }) }) });
+          candidates.push({ name: "idQuery", run: () => fetch(`${api}?id=${numId}`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders() }) });
+        }
+        if (commentIdNum > 0 && commentIdNum !== numId) {
+          candidates.push({ name: "commentId", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ commentId: commentIdNum }) }) });
+        }
+        if (postIdNum > 0) {
+          candidates.push({ name: "postFloorCamel", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ postId: postIdNum, floorId: floorIdNum }) }) });
+          candidates.push({ name: "postFloorSnake", run: () => fetch(api, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders(), body: JSON.stringify({ post_id: postIdNum, floor_id: floorIdNum }) }) });
+          candidates.push({ name: "postFloorQuery", run: () => fetch(`${api}?postId=${postIdNum}&floorId=${floorIdNum}`, { method: "POST", credentials: "include", headers: getNodeSeekPostHeaders() }) });
+        }
+
+        const cachedName = localStorage.getItem(strategyKey) || "";
+        if (cachedName) {
+          const hitCand = candidates.find((c) => c.name === cachedName);
+          if (hitCand) {
+            const resp = await hitCand.run();
+            const resJson = await resp.json().catch(() => null);
+            if (resp.ok && (!resJson || resJson.success !== false)) {
+              const after = await readServerUnreadCountFor(countKey);
+              if (after === null || after < beforeServerCount || beforeServerCount === 0) {
+                ok = true;
+              } else {
+                localStorage.removeItem(strategyKey);
+              }
+            } else {
+              localStorage.removeItem(strategyKey);
+            }
+          }
+        }
+
+        if (!ok) {
+          for (const cand of candidates) {
+            if (cand.name === cachedName) continue;
+            try {
+              const resp = await cand.run();
+              const resJson = await resp.json().catch(() => null);
+              if (!resp.ok || (resJson && resJson.success === false)) continue;
+              const after = await readServerUnreadCountFor(countKey);
+              if (after !== null && after < beforeServerCount) {
+                localStorage.setItem(strategyKey, cand.name);
+                ok = true;
+                break;
+              }
+              if (beforeServerCount === 0) {
+                ok = true;
+                break;
+              }
+            } catch (_) {}
           }
         }
       }
 
-      if (ok) {
-        setTimeout(async () => {
-          await fetchUnreadCounts();
-          if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
-        }, 350);
+      if (!ok && !all && store) {
+        const localUnreadLeft = store.items.filter((x) => !x.viewed).length;
+        if (localUnreadLeft === 0 && beforeServerCount > 0 && beforeServerCount <= store.items.length) {
+          const allResp = await fetch(`${api}?all=true`, {
+            method: "POST",
+            credentials: "include",
+            headers: { Accept: "application/json, text/plain, */*" },
+          }).catch(() => null);
+          if (allResp && allResp.ok) ok = true;
+        }
       }
+
+      setTimeout(async () => {
+        await fetchUnreadCounts();
+        if (typeof renderUserHubIfOpen === "function") renderUserHubIfOpen();
+      }, 280);
     } catch (_) {}
   }
 
@@ -1301,15 +1381,7 @@
         row.addEventListener("click", () => {
           state.selectedNotifKey = rowKey;
           if (!it.viewed) {
-            if (it.id) {
-              markNotificationViewed(kind, it.id, false);
-            } else {
-              it.viewed = true;
-              const countKey = kind === "at-me" ? "atMe" : "reply";
-              state.unreadCounts[countKey] = Math.max(0, (Number(state.unreadCounts[countKey]) || 0) - 1);
-              renderLeftNav();
-              renderTopicList();
-            }
+            markNotificationViewed(kind, it, false);
           }
           openPostInChat({
             postId: it.postId,

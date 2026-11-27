@@ -1292,7 +1292,7 @@
             ${!it.viewed ? `<span class="nsc-badge-dot" style="margin-top:0;"></span>` : `<span class="nsc-badge-read">已读</span>`}
           `;
           row.addEventListener("click", () => {
-            if (!it.viewed) markNotificationViewed(state.hubNotifSub, it.id, false);
+            if (!it.viewed) markNotificationViewed(state.hubNotifSub, it, false);
             closeHub();
             switchChannel(state.hubNotifSub, false);
             openPostInChat({
