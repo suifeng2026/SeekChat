@@ -341,7 +341,9 @@
               </div>
             `;
             const insFn = () => { NodeImage.insertToTarget(niTargetMode, md); closeNi(); };
-            card.querySelector("img").addEventListener("click", insFn);
+            const niImg = card.querySelector("img");
+            niImg.addEventListener("click", insFn);
+            if (typeof attachHoverImagePreview === "function") attachHoverImagePreview(niImg);
             card.querySelectorAll("button")[0].addEventListener("click", insFn);
             card.querySelectorAll("button")[1].addEventListener("click", () => {
               if (typeof openLightbox === "function") openLightbox(directUrl);

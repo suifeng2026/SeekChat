@@ -371,7 +371,7 @@
       .nsc-bubble img.nsc-zoomable-img,
       .nsc-thread-content img,
       .nsc-thread-content img.nsc-zoomable-img {
-        max-width: min(100%, 420px) !important; max-height: 280px !important;
+        max-width: min(100%, 480px) !important; max-height: 320px !important;
         width: auto !important; height: auto !important; object-fit: contain;
         border-radius: 10px; display: block; margin: 6px 0; cursor: zoom-in;
         border: 1px solid var(--nsc-border); background: rgba(0, 0, 0, 0.02);
@@ -390,16 +390,29 @@
 
       /* 帖子多图联动网格画廊（贴图版块与多图贴自动排版） */
       .nsc-img-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 8px; margin: 6px 0; max-width: 560px;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+        gap: 8px; margin: 6px 0; max-width: 620px;
       }
       .nsc-img-grid img.nsc-zoomable-img {
-        width: 100% !important; height: 150px !important; max-width: none !important; max-height: none !important;
+        width: 100% !important; height: 170px !important; max-width: none !important; max-height: none !important;
         object-fit: cover !important; margin: 0 !important; border-radius: 10px;
         transition: transform 0.16s ease, box-shadow 0.16s ease;
       }
       .nsc-img-grid img.nsc-zoomable-img:hover {
         transform: scale(1.02); box-shadow: 0 6px 18px rgba(0,0,0,0.14);
+      }
+
+      /* 悬停图片快速放大预览浮窗 */
+      #nsc-img-hover-preview {
+        position: fixed; z-index: 9800; pointer-events: none;
+        display: none; padding: 6px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      }
+      #nsc-img-hover-preview.is-open { display: block; }
+      #nsc-img-hover-preview img {
+        max-width: 460px; max-height: 360px; width: auto; height: auto;
+        object-fit: contain; border-radius: 8px; display: block;
       }
 
       .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
@@ -512,6 +525,7 @@
         box-sizing: border-box !important;
       }
       .nsc-composer-dock #editor-body { background: transparent !important; position: static !important; margin: 0 !important; padding: 0 !important; }
+      .nsc-composer-dock #cm-editor-wrapper,
       .nsc-composer-dock .content-area,
       .nsc-composer-dock .split-view-container {
         min-height: 0 !important; height: auto !important; margin: 0 !important; padding: 0 !important;
@@ -589,18 +603,21 @@
         padding: 7px 10px; font-size: 13px; line-height: 1.45; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板改为贴底悬浮层，缩小贴图网格，未选分组时彻底隐藏 */
+      /* 表情面板改为贴底悬浮层（最多约 2 行高度），AC娘仅显示前 32 个热门经典贴图 */
       .nsc-composer-dock .exp-container.cur-sticker-group-null,
       .nsc-composer-dock .exp-container:empty {
         display: none !important;
       }
       .nsc-composer-dock .exp-container {
-        position: absolute !important; bottom: calc(100% + 4px) !important; left: 10px !important; right: 10px !important;
-        z-index: 260 !important; max-height: 205px !important; overflow-y: auto !important;
-        padding: 8px 10px !important;
+        position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
+        z-index: 260 !important; max-height: 92px !important; overflow-y: auto !important;
+        padding: 6px 8px !important; flex-wrap: wrap !important; align-content: flex-start !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
+      }
+      .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33) {
+        display: none !important;
       }
       .nsc-composer-dock .exp-container img,
       .nsc-composer-dock .exp-container video {
@@ -612,7 +629,7 @@
       .nsc-composer-dock .exp-container span,
       .nsc-composer-dock .exp-container button,
       .nsc-composer-dock .exp-container a {
-        padding: 3px !important; margin: 2px !important; border-radius: 7px !important;
+        padding: 2px !important; margin: 2px !important; border-radius: 7px !important;
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-fb-exp-pop {
@@ -632,8 +649,8 @@
       }
       .nsc-fb-exp-tab.is-active { color: var(--nsc-accent); background: var(--nsc-bg-card); }
       .nsc-fb-exp-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
-        gap: 4px; padding: 8px 10px; max-height: 175px; overflow-y: auto;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+        gap: 3px; padding: 6px 8px; max-height: 88px; overflow-y: auto;
       }
       .nsc-fb-exp-item {
         width: 40px; height: 40px; padding: 3px; border: none; border-radius: 7px;

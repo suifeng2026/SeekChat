@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.9.3
+// @version      7.9.4
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -102,12 +102,10 @@
       id: "ac",
       label: "AC娘",
       files: [
-        "01.png","02.png","03.png","04.png","05.png","06.png","07.png","08.png","09.png","10.png",
-        "11.png","12.png","13.png","14.png","15.png","16.png","17.png","18.png","19.png","20.png",
-        "21.png","22.png","23.png","24.png","25.png","26.png","27.png","28.png","29.png","30.png",
-        "31.png","32.png","33.png","34.png","35.png","36.png","37.png","38.png","39.png","40.png",
-        "41.png","42.png","43.png","44.png","45.png","46.png","47.png","48.png","49.png","50.png",
-        "51.png","52.png","53.png","54.png",
+        "01.png","02.png","03.png","04.png","05.png","06.png","07.png","08.png",
+        "09.png","10.png","11.png","12.png","13.png","14.png","15.png","16.png",
+        "17.png","18.png","19.png","20.png","21.png","22.png","23.png","24.png",
+        "25.png","26.png","27.png","28.png","29.png","30.png","31.png","32.png",
       ],
     },
     {
@@ -906,7 +904,7 @@
       .nsc-bubble img.nsc-zoomable-img,
       .nsc-thread-content img,
       .nsc-thread-content img.nsc-zoomable-img {
-        max-width: min(100%, 420px) !important; max-height: 280px !important;
+        max-width: min(100%, 480px) !important; max-height: 320px !important;
         width: auto !important; height: auto !important; object-fit: contain;
         border-radius: 10px; display: block; margin: 6px 0; cursor: zoom-in;
         border: 1px solid var(--nsc-border); background: rgba(0, 0, 0, 0.02);
@@ -925,16 +923,29 @@
 
       /* 帖子多图联动网格画廊（贴图版块与多图贴自动排版） */
       .nsc-img-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 8px; margin: 6px 0; max-width: 560px;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+        gap: 8px; margin: 6px 0; max-width: 620px;
       }
       .nsc-img-grid img.nsc-zoomable-img {
-        width: 100% !important; height: 150px !important; max-width: none !important; max-height: none !important;
+        width: 100% !important; height: 170px !important; max-width: none !important; max-height: none !important;
         object-fit: cover !important; margin: 0 !important; border-radius: 10px;
         transition: transform 0.16s ease, box-shadow 0.16s ease;
       }
       .nsc-img-grid img.nsc-zoomable-img:hover {
         transform: scale(1.02); box-shadow: 0 6px 18px rgba(0,0,0,0.14);
+      }
+
+      /* 悬停图片快速放大预览浮窗 */
+      #nsc-img-hover-preview {
+        position: fixed; z-index: 9800; pointer-events: none;
+        display: none; padding: 6px; border-radius: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+      }
+      #nsc-img-hover-preview.is-open { display: block; }
+      #nsc-img-hover-preview img {
+        max-width: 460px; max-height: 360px; width: auto; height: auto;
+        object-fit: contain; border-radius: 8px; display: block;
       }
 
       .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
@@ -1047,6 +1058,7 @@
         box-sizing: border-box !important;
       }
       .nsc-composer-dock #editor-body { background: transparent !important; position: static !important; margin: 0 !important; padding: 0 !important; }
+      .nsc-composer-dock #cm-editor-wrapper,
       .nsc-composer-dock .content-area,
       .nsc-composer-dock .split-view-container {
         min-height: 0 !important; height: auto !important; margin: 0 !important; padding: 0 !important;
@@ -1124,18 +1136,21 @@
         padding: 7px 10px; font-size: 13px; line-height: 1.45; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
-      /* 表情面板改为贴底悬浮层，缩小贴图网格，未选分组时彻底隐藏 */
+      /* 表情面板改为贴底悬浮层（最多约 2 行高度），AC娘仅显示前 32 个热门经典贴图 */
       .nsc-composer-dock .exp-container.cur-sticker-group-null,
       .nsc-composer-dock .exp-container:empty {
         display: none !important;
       }
       .nsc-composer-dock .exp-container {
-        position: absolute !important; bottom: calc(100% + 4px) !important; left: 10px !important; right: 10px !important;
-        z-index: 260 !important; max-height: 205px !important; overflow-y: auto !important;
-        padding: 8px 10px !important;
+        position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
+        z-index: 260 !important; max-height: 92px !important; overflow-y: auto !important;
+        padding: 6px 8px !important; flex-wrap: wrap !important; align-content: flex-start !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
+      }
+      .nsc-composer-dock .exp-container.cur-sticker-group-ac > *:nth-child(n+33) {
+        display: none !important;
       }
       .nsc-composer-dock .exp-container img,
       .nsc-composer-dock .exp-container video {
@@ -1147,7 +1162,7 @@
       .nsc-composer-dock .exp-container span,
       .nsc-composer-dock .exp-container button,
       .nsc-composer-dock .exp-container a {
-        padding: 3px !important; margin: 2px !important; border-radius: 7px !important;
+        padding: 2px !important; margin: 2px !important; border-radius: 7px !important;
       }
       .nsc-mde-btn svg { width: 14px; height: 14px; }
       .nsc-fb-exp-pop {
@@ -1167,8 +1182,8 @@
       }
       .nsc-fb-exp-tab.is-active { color: var(--nsc-accent); background: var(--nsc-bg-card); }
       .nsc-fb-exp-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
-        gap: 4px; padding: 8px 10px; max-height: 175px; overflow-y: auto;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+        gap: 3px; padding: 6px 8px; max-height: 88px; overflow-y: auto;
       }
       .nsc-fb-exp-item {
         width: 40px; height: 40px; padding: 3px; border: none; border-radius: 7px;
@@ -1896,7 +1911,9 @@
               </div>
             `;
             const insFn = () => { NodeImage.insertToTarget(niTargetMode, md); closeNi(); };
-            card.querySelector("img").addEventListener("click", insFn);
+            const niImg = card.querySelector("img");
+            niImg.addEventListener("click", insFn);
+            if (typeof attachHoverImagePreview === "function") attachHoverImagePreview(niImg);
             card.querySelectorAll("button")[0].addEventListener("click", insFn);
             card.querySelectorAll("button")[1].addEventListener("click", () => {
               if (typeof openLightbox === "function") openLightbox(directUrl);
@@ -2867,6 +2884,58 @@
     showLightboxAt(idx >= 0 ? idx : 0);
   }
 
+  let _hoverPreviewTimer = null;
+  function ensureHoverPreviewEl() {
+    let el = document.getElementById("nsc-img-hover-preview");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "nsc-img-hover-preview";
+      el.innerHTML = `<img src="" alt="" />`;
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function hideHoverImagePreview() {
+    clearTimeout(_hoverPreviewTimer);
+    const el = document.getElementById("nsc-img-hover-preview");
+    if (el) el.classList.remove("is-open");
+  }
+
+  function attachHoverImagePreview(imgEl) {
+    if (!imgEl || imgEl.dataset.nscHoverBound === "1") return;
+    imgEl.dataset.nscHoverBound = "1";
+    const positionAt = (e) => {
+      const box = ensureHoverPreviewEl();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const maxW = 476;
+      const maxH = 376;
+      let left = e.clientX + 18;
+      if (left + maxW > vw - 12) left = Math.max(12, e.clientX - maxW - 18);
+      let top = Math.min(vh - maxH - 12, Math.max(12, e.clientY - 120));
+      box.style.left = `${left}px`;
+      box.style.top = `${top}px`;
+    };
+    imgEl.addEventListener("mouseenter", (e) => {
+      clearTimeout(_hoverPreviewTimer);
+      const src = imgEl.currentSrc || imgEl.getAttribute("src") || "";
+      if (!src) return;
+      _hoverPreviewTimer = setTimeout(() => {
+        const box = ensureHoverPreviewEl();
+        box.querySelector("img").src = src;
+        positionAt(e);
+        box.classList.add("is-open");
+      }, 220);
+    });
+    imgEl.addEventListener("mousemove", (e) => {
+      const box = document.getElementById("nsc-img-hover-preview");
+      if (box && box.classList.contains("is-open")) positionAt(e);
+    });
+    imgEl.addEventListener("mouseleave", hideHoverImagePreview);
+    imgEl.addEventListener("click", hideHoverImagePreview);
+  }
+
   function processBubbleImages(containerEl) {
     if (!containerEl) return;
     const zoomImgs = [];
@@ -2882,12 +2951,13 @@
         continue;
       }
       img.classList.add("nsc-zoomable-img");
-      img.title = "点击查看大图（支持左右键翻页）";
+      img.title = "悬停放大预览 · 点击打开原图画廊（支持滚轮缩放）";
       img.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         openLightbox(img.currentSrc || src);
       });
+      attachHoverImagePreview(img);
       zoomImgs.push(img);
     }
 
