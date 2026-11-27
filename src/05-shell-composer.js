@@ -481,6 +481,24 @@
     shell.querySelector("#nsc-qb-post").addEventListener("click", () => {
       shell.querySelector("#nsc-newpost-open-btn").click();
     });
+    const qbLucky = shell.querySelector("#nsc-qb-lucky");
+    if (qbLucky) {
+      qbLucky.addEventListener("click", (e) => {
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          openUserHubModal("lucky");
+        }
+      });
+    }
+    const qbInvite = shell.querySelector("#nsc-qb-invite");
+    if (qbInvite) {
+      qbInvite.addEventListener("click", (e) => {
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          openUserHubModal("invite");
+        }
+      });
+    }
 
     initNodeImageUi(npBackdrop);
     const npEditorEl = npBackdrop.querySelector(".nsc-newpost-editor");
@@ -1140,5 +1158,46 @@
       }
     }
     flushRun();
+  }
+
+  function enhanceCodeBlocks(containerEl) {
+    if (!containerEl) return;
+    for (const pre of containerEl.querySelectorAll("pre")) {
+      if (pre.dataset.nscCopyInit === "1") continue;
+      pre.dataset.nscCopyInit = "1";
+      const codeEl = pre.querySelector("code");
+      const rawText = ((codeEl ? codeEl.textContent : pre.textContent) || "").replace(/\n+$/, "");
+      if (!rawText.trim()) continue;
+      pre.classList.add("has-copy-btn");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "nsc-copy-code-btn";
+      btn.title = "复制代码";
+      btn.innerHTML = `${ICONS.copy}<span>复制</span>`;
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(rawText);
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = rawText;
+            ta.style.cssText = "position:fixed;left:-9999px;opacity:0;";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            ta.remove();
+          }
+          btn.classList.add("is-copied");
+          btn.innerHTML = `${ICONS.check}<span>已复制</span>`;
+          setTimeout(() => {
+            btn.classList.remove("is-copied");
+            btn.innerHTML = `${ICONS.copy}<span>复制</span>`;
+          }, 1500);
+        } catch (_) {}
+      });
+      pre.appendChild(btn);
+    }
   }
 

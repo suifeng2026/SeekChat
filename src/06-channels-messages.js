@@ -70,6 +70,30 @@
         }
       });
     }
+    const signBtn = userCard.querySelector('.menu span[title="签到"]');
+    if (signBtn && signBtn.dataset.nscHubBound !== "1") {
+      signBtn.dataset.nscHubBound = "1";
+      signBtn.addEventListener("click", (e) => {
+        if (!document.body.classList.contains("nsc-app-active")) return;
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          e.stopPropagation();
+          openUserHubModal("attendance");
+        }
+      }, true);
+    }
+    const setBtn = userCard.querySelector('.menu a[title="设置"]');
+    if (setBtn && setBtn.dataset.nscHubBound !== "1") {
+      setBtn.dataset.nscHubBound = "1";
+      setBtn.addEventListener("click", (e) => {
+        if (!document.body.classList.contains("nsc-app-active")) return;
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          e.stopPropagation();
+          openUserHubModal("setting");
+        }
+      });
+    }
   }
 
   function mountNativeWidgetsIntoApp() {
@@ -560,7 +584,10 @@
         if (!isMine) openUserProfileModal(peer);
       });
       const pmBubble = wrap.querySelector(".nsc-bubble");
-      if (pmBubble) processBubbleImages(pmBubble);
+      if (pmBubble) {
+        enhanceCodeBlocks(pmBubble);
+        processBubbleImages(pmBubble);
+      }
       msgsEl.appendChild(wrap);
     }
     msgsEl.scrollTop = msgsEl.scrollHeight;

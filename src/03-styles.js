@@ -553,8 +553,34 @@
       .nsc-bubble .nsk-magic-tab-body { padding: 10px 12px; }
       .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img { margin: 4px 0 !important; }
 
-      .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
-      body.dark-layout .nsc-bubble pre { background: rgba(0,0,0,0.35); }
+      .nsc-bubble pre {
+        position: relative; max-width: 100%; overflow-x: auto;
+        padding: 12px 12px 10px; border-radius: 9px; background: rgba(0,0,0,0.05);
+        border: 1px solid var(--nsc-border);
+      }
+      body.dark-layout .nsc-bubble pre { background: rgba(0,0,0,0.34); }
+      .nsc-bubble pre.has-copy-btn { padding-top: 28px; }
+      .nsc-copy-code-btn {
+        position: absolute; top: 6px; right: 6px; z-index: 2;
+        display: inline-flex; align-items: center; gap: 4px;
+        height: 20px; padding: 0 7px; border-radius: 6px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card);
+        color: var(--nsc-muted); font-size: 10.5px; font-weight: 600;
+        cursor: pointer; opacity: 0.78; transition: all 0.14s ease;
+        font-family: var(--mac-font);
+      }
+      .nsc-copy-code-btn svg { width: 11px; height: 11px; }
+      .nsc-bubble pre:hover .nsc-copy-code-btn,
+      .nsc-thread-content pre:hover .nsc-copy-code-btn { opacity: 1; }
+      .nsc-copy-code-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); }
+      .nsc-copy-code-btn.is-copied { color: var(--nsc-green); border-color: var(--nsc-green); opacity: 1; }
+      .nsc-thread-content pre {
+        position: relative; max-width: 100%; overflow-x: auto;
+        padding: 10px 10px 8px; border-radius: 8px; background: rgba(0,0,0,0.05);
+        border: 1px solid var(--nsc-border);
+      }
+      body.dark-layout .nsc-thread-content pre { background: rgba(0,0,0,0.34); }
+      .nsc-thread-content pre.has-copy-btn { padding-top: 26px; }
       .nsc-bubble blockquote {
         margin: 0 0 8px; padding: 6px 10px; border-left: 3px solid var(--nsc-accent);
         background: var(--nsc-quote-bg); border-radius: 6px; font-size: 12px; color: var(--nsc-muted);
@@ -1259,6 +1285,46 @@
       .nsc-hub-kpi-val { font-size: 20px; font-weight: 700; color: var(--nsc-text); margin-top: 4px; }
       .nsc-hub-kpi-lbl { font-size: 11.5px; color: var(--nsc-muted); }
       .nsc-hub-fan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+      .nsc-hub-iframe {
+        width: 100%; height: 100%; min-height: 460px; border: none; border-radius: 10px;
+        background: transparent; display: block;
+      }
+      .nsc-checkin-card {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        padding: 12px 14px; border-radius: 12px; margin-bottom: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-checkin-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-checkin-btn {
+        height: 30px; padding: 0 13px; border-radius: 8px; font-size: 12px; font-weight: 600;
+        border: 1px solid var(--nsc-border); background: var(--nsc-hover); color: var(--nsc-text);
+        cursor: pointer; transition: all 0.13s ease;
+      }
+      .nsc-checkin-btn:hover:not(:disabled) { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-checkin-btn.primary { background: var(--nsc-accent); color: #fff; border-color: transparent; }
+      .nsc-checkin-btn.primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; background: var(--nsc-accent); }
+      .nsc-checkin-btn:disabled { opacity: 0.55; cursor: wait; }
+
+      /* 原生弹框（如 Stardust 转账 / mscDialog）macOS 视觉兼容与层级抬升 */
+      body.nsc-app-active #nsc-app-shell:has(.msc-overlay, .msc-dialog, .el-dialog, [class*="transfer"], [class*="stardust"][style*="fixed"]),
+      body.nsc-app-active .nsc-pane-right:has(.msc-overlay, .msc-dialog, .el-dialog, [class*="transfer"], [class*="stardust"][style*="fixed"]) {
+        overflow: visible !important;
+        backdrop-filter: none !important;
+      }
+      body.nsc-app-active .msc-overlay,
+      body.nsc-app-active .el-overlay,
+      body.nsc-app-active [class*="stardust"][style*="fixed"],
+      body.nsc-app-active [class*="modal"][style*="fixed"] {
+        z-index: 9800 !important;
+      }
+      body.nsc-app-active .msc-dialog {
+        font-family: var(--mac-font) !important;
+        border-radius: 14px !important;
+        background: var(--nsc-bg-card) !important;
+        color: var(--nsc-text) !important;
+        border: 1px solid var(--nsc-border) !important;
+        box-shadow: var(--nsc-shadow) !important;
+      }
 
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }

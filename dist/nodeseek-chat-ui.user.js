@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.15.0
+// @version      7.16.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -108,6 +108,8 @@
     bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`,
     opOnly: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
     layers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+    copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+    check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -229,6 +231,9 @@
       credit: { items: [], page: 0, loading: false, noMore: false, error: null },
       stardust: { items: [], cursor: null, mode: "recv", loading: false, noMore: false, error: null },
       progress: { data: null, loading: false, error: null },
+      board: { items: [], page: 0, loading: false, noMore: false, error: null },
+      checkinResult: null,
+      checkinLoading: false,
     },
   };
 
@@ -1235,8 +1240,34 @@
       .nsc-bubble .nsk-magic-tab-body { padding: 10px 12px; }
       .nsc-bubble .nsk-magic-tab-body img.nsc-zoomable-img { margin: 4px 0 !important; }
 
-      .nsc-bubble pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.05); }
-      body.dark-layout .nsc-bubble pre { background: rgba(0,0,0,0.35); }
+      .nsc-bubble pre {
+        position: relative; max-width: 100%; overflow-x: auto;
+        padding: 12px 12px 10px; border-radius: 9px; background: rgba(0,0,0,0.05);
+        border: 1px solid var(--nsc-border);
+      }
+      body.dark-layout .nsc-bubble pre { background: rgba(0,0,0,0.34); }
+      .nsc-bubble pre.has-copy-btn { padding-top: 28px; }
+      .nsc-copy-code-btn {
+        position: absolute; top: 6px; right: 6px; z-index: 2;
+        display: inline-flex; align-items: center; gap: 4px;
+        height: 20px; padding: 0 7px; border-radius: 6px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-bg-card);
+        color: var(--nsc-muted); font-size: 10.5px; font-weight: 600;
+        cursor: pointer; opacity: 0.78; transition: all 0.14s ease;
+        font-family: var(--mac-font);
+      }
+      .nsc-copy-code-btn svg { width: 11px; height: 11px; }
+      .nsc-bubble pre:hover .nsc-copy-code-btn,
+      .nsc-thread-content pre:hover .nsc-copy-code-btn { opacity: 1; }
+      .nsc-copy-code-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); }
+      .nsc-copy-code-btn.is-copied { color: var(--nsc-green); border-color: var(--nsc-green); opacity: 1; }
+      .nsc-thread-content pre {
+        position: relative; max-width: 100%; overflow-x: auto;
+        padding: 10px 10px 8px; border-radius: 8px; background: rgba(0,0,0,0.05);
+        border: 1px solid var(--nsc-border);
+      }
+      body.dark-layout .nsc-thread-content pre { background: rgba(0,0,0,0.34); }
+      .nsc-thread-content pre.has-copy-btn { padding-top: 26px; }
       .nsc-bubble blockquote {
         margin: 0 0 8px; padding: 6px 10px; border-left: 3px solid var(--nsc-accent);
         background: var(--nsc-quote-bg); border-radius: 6px; font-size: 12px; color: var(--nsc-muted);
@@ -1941,6 +1972,46 @@
       .nsc-hub-kpi-val { font-size: 20px; font-weight: 700; color: var(--nsc-text); margin-top: 4px; }
       .nsc-hub-kpi-lbl { font-size: 11.5px; color: var(--nsc-muted); }
       .nsc-hub-fan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+      .nsc-hub-iframe {
+        width: 100%; height: 100%; min-height: 460px; border: none; border-radius: 10px;
+        background: transparent; display: block;
+      }
+      .nsc-checkin-card {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+        padding: 12px 14px; border-radius: 12px; margin-bottom: 12px;
+        background: var(--nsc-bg-card); border: 1px solid var(--nsc-border);
+      }
+      .nsc-checkin-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-checkin-btn {
+        height: 30px; padding: 0 13px; border-radius: 8px; font-size: 12px; font-weight: 600;
+        border: 1px solid var(--nsc-border); background: var(--nsc-hover); color: var(--nsc-text);
+        cursor: pointer; transition: all 0.13s ease;
+      }
+      .nsc-checkin-btn:hover:not(:disabled) { border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-checkin-btn.primary { background: var(--nsc-accent); color: #fff; border-color: transparent; }
+      .nsc-checkin-btn.primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; background: var(--nsc-accent); }
+      .nsc-checkin-btn:disabled { opacity: 0.55; cursor: wait; }
+
+      /* 原生弹框（如 Stardust 转账 / mscDialog）macOS 视觉兼容与层级抬升 */
+      body.nsc-app-active #nsc-app-shell:has(.msc-overlay, .msc-dialog, .el-dialog, [class*="transfer"], [class*="stardust"][style*="fixed"]),
+      body.nsc-app-active .nsc-pane-right:has(.msc-overlay, .msc-dialog, .el-dialog, [class*="transfer"], [class*="stardust"][style*="fixed"]) {
+        overflow: visible !important;
+        backdrop-filter: none !important;
+      }
+      body.nsc-app-active .msc-overlay,
+      body.nsc-app-active .el-overlay,
+      body.nsc-app-active [class*="stardust"][style*="fixed"],
+      body.nsc-app-active [class*="modal"][style*="fixed"] {
+        z-index: 9800 !important;
+      }
+      body.nsc-app-active .msc-dialog {
+        font-family: var(--mac-font) !important;
+        border-radius: 14px !important;
+        background: var(--nsc-bg-card) !important;
+        color: var(--nsc-text) !important;
+        border: 1px solid var(--nsc-border) !important;
+        box-shadow: var(--nsc-shadow) !important;
+      }
 
       @keyframes nscFlash {
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
@@ -2848,6 +2919,24 @@
     shell.querySelector("#nsc-qb-post").addEventListener("click", () => {
       shell.querySelector("#nsc-newpost-open-btn").click();
     });
+    const qbLucky = shell.querySelector("#nsc-qb-lucky");
+    if (qbLucky) {
+      qbLucky.addEventListener("click", (e) => {
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          openUserHubModal("lucky");
+        }
+      });
+    }
+    const qbInvite = shell.querySelector("#nsc-qb-invite");
+    if (qbInvite) {
+      qbInvite.addEventListener("click", (e) => {
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          openUserHubModal("invite");
+        }
+      });
+    }
 
     initNodeImageUi(npBackdrop);
     const npEditorEl = npBackdrop.querySelector(".nsc-newpost-editor");
@@ -3509,6 +3598,47 @@
     flushRun();
   }
 
+  function enhanceCodeBlocks(containerEl) {
+    if (!containerEl) return;
+    for (const pre of containerEl.querySelectorAll("pre")) {
+      if (pre.dataset.nscCopyInit === "1") continue;
+      pre.dataset.nscCopyInit = "1";
+      const codeEl = pre.querySelector("code");
+      const rawText = ((codeEl ? codeEl.textContent : pre.textContent) || "").replace(/\n+$/, "");
+      if (!rawText.trim()) continue;
+      pre.classList.add("has-copy-btn");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "nsc-copy-code-btn";
+      btn.title = "复制代码";
+      btn.innerHTML = `${ICONS.copy}<span>复制</span>`;
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(rawText);
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = rawText;
+            ta.style.cssText = "position:fixed;left:-9999px;opacity:0;";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            ta.remove();
+          }
+          btn.classList.add("is-copied");
+          btn.innerHTML = `${ICONS.check}<span>已复制</span>`;
+          setTimeout(() => {
+            btn.classList.remove("is-copied");
+            btn.innerHTML = `${ICONS.copy}<span>复制</span>`;
+          }, 1500);
+        } catch (_) {}
+      });
+      pre.appendChild(btn);
+    }
+  }
+
   // ==========================================================================
   // Module: 06-channels-messages.js
   // ==========================================================================
@@ -3581,6 +3711,30 @@
           e.preventDefault();
           e.stopPropagation();
           openUserHubModal(tab);
+        }
+      });
+    }
+    const signBtn = userCard.querySelector('.menu span[title="签到"]');
+    if (signBtn && signBtn.dataset.nscHubBound !== "1") {
+      signBtn.dataset.nscHubBound = "1";
+      signBtn.addEventListener("click", (e) => {
+        if (!document.body.classList.contains("nsc-app-active")) return;
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          e.stopPropagation();
+          openUserHubModal("attendance");
+        }
+      }, true);
+    }
+    const setBtn = userCard.querySelector('.menu a[title="设置"]');
+    if (setBtn && setBtn.dataset.nscHubBound !== "1") {
+      setBtn.dataset.nscHubBound = "1";
+      setBtn.addEventListener("click", (e) => {
+        if (!document.body.classList.contains("nsc-app-active")) return;
+        if (typeof openUserHubModal === "function") {
+          e.preventDefault();
+          e.stopPropagation();
+          openUserHubModal("setting");
         }
       });
     }
@@ -4074,7 +4228,10 @@
         if (!isMine) openUserProfileModal(peer);
       });
       const pmBubble = wrap.querySelector(".nsc-bubble");
-      if (pmBubble) processBubbleImages(pmBubble);
+      if (pmBubble) {
+        enhanceCodeBlocks(pmBubble);
+        processBubbleImages(pmBubble);
+      }
       msgsEl.appendChild(wrap);
     }
     msgsEl.scrollTop = msgsEl.scrollHeight;
@@ -6354,6 +6511,7 @@
     }
     linkifyFloorReferences(bubble);
     enhanceMagicTabs(bubble);
+    enhanceCodeBlocks(bubble);
     processBubbleImages(bubble);
 
     const reactionsEl = document.createElement("div");
@@ -6423,6 +6581,7 @@
         const tc = ti.querySelector(".nsc-thread-content");
         linkifyFloorReferences(tc);
         enhanceMagicTabs(tc);
+        enhanceCodeBlocks(tc);
         processBubbleImages(tc);
         const chReactions = ti.querySelector(".nsc-reactions");
         renderReactionPills(chReactions, ch, isNativePage);
@@ -7599,11 +7758,139 @@
     }
   }
 
+  async function loadHubAttendanceBoard(reset = false) {
+    const st = state.hubData.board;
+    if (st.loading) return;
+    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
+    if (st.noMore) return;
+    st.loading = true;
+    renderUserHubIfOpen();
+    try {
+      const nextPage = st.page + 1;
+      const resp = await fetch(`/api/attendance/board?page=${nextPage}`, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const rows = (json && (json.list || json.data || json.records)) || [];
+      if (!Array.isArray(rows) || rows.length === 0) st.noMore = true;
+      else {
+        st.items.push(...rows);
+        st.page = nextPage;
+        if (rows.length < 15) st.noMore = true;
+      }
+    } catch (err) {
+      st.error = err.message;
+    } finally {
+      st.loading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  async function performAttendance(randomMode = false) {
+    if (state.hubData.checkinLoading) return;
+    state.hubData.checkinLoading = true;
+    renderUserHubIfOpen();
+    try {
+      const resp = await fetch(`/api/attendance?random=${randomMode ? "true" : "false"}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { Accept: "application/json, text/plain, */*", "Content-Type": "application/json" },
+      });
+      const json = await resp.json().catch(() => ({}));
+      state.hubData.checkinResult = {
+        ok: Boolean(resp.ok && json && json.success !== false),
+        message: (json && json.message) || (resp.ok ? "签到请求已处理" : `HTTP ${resp.status}`),
+        gain: json && json.gain,
+        current: json && json.current,
+        mode: randomMode ? "随机签到" : "固定签到",
+      };
+      if (json && json.current !== undefined) {
+        const legSpan = document.querySelector('.user-card .user-stat a[href="/credit"] span');
+        if (legSpan) legSpan.textContent = `鸡腿 ${json.current}`;
+      }
+      if (state.hubData.checkinResult.ok) {
+        loadHubAttendanceBoard(true);
+      }
+    } catch (err) {
+      state.hubData.checkinResult = { ok: false, message: err.message, mode: randomMode ? "随机签到" : "固定签到" };
+    } finally {
+      state.hubData.checkinLoading = false;
+      renderUserHubIfOpen();
+    }
+  }
+
+  function mountHubThemedIframe(bodyEl, srcPath) {
+    if (!bodyEl) return;
+    bodyEl.style.padding = "8px 10px";
+    bodyEl.style.overflow = "hidden";
+    const iframe = document.createElement("iframe");
+    iframe.className = "nsc-hub-iframe";
+    iframe.src = srcPath;
+    iframe.addEventListener("load", () => {
+      try {
+        const idoc = iframe.contentDocument;
+        if (!idoc) return;
+        const isDark = document.body.classList.contains("dark-layout");
+        const isDusk = document.body.classList.contains("nsc-theme-dusk");
+        if (isDark) {
+          idoc.body.classList.remove("light-layout");
+          idoc.body.classList.add("dark-layout");
+        } else {
+          idoc.body.classList.remove("dark-layout");
+          idoc.body.classList.add("light-layout");
+        }
+        const st = idoc.createElement("style");
+        st.textContent = `
+          header, footer, #nsk-right-panel-container, #fast-nav-button-group, #nsc-app-shell { display: none !important; }
+          body {
+            background: transparent !important;
+            color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif !important;
+            margin: 0 !important; padding: 6px !important;
+          }
+          #nsk-frame, #nsk-body, #nsk-body-left {
+            width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
+            float: none !important;
+          }
+          #user-setting-panel, .nsk-panel, .board-container, .lucky-container, .invite-container {
+            background: ${isDark ? "#2f333d" : isDusk ? "#faf4e8" : "#ffffff"} !important;
+            color: ${isDark ? "#f2f2f7" : isDusk ? "#3a3025" : "#1d1d1f"} !important;
+            border: 1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"} !important;
+            border-radius: 12px !important;
+            box-shadow: none !important;
+            margin: 0 auto !important;
+            padding: 16px 20px !important;
+          }
+          input, textarea, select {
+            border-radius: 8px !important;
+            border: 1px solid ${isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)"} !important;
+            background: ${isDark ? "#22252c" : isDusk ? "#f4ecdf" : "#f8f9fb"} !important;
+            color: ${isDark ? "#f2f2f7" : "#1d1d1f"} !important;
+          }
+          .btn, button[type="submit"] { border-radius: 8px !important; }
+        `;
+        (idoc.head || idoc.documentElement).appendChild(st);
+      } catch (_) {}
+    });
+    bodyEl.innerHTML = "";
+    bodyEl.appendChild(iframe);
+  }
+
   function renderUserHub() {
     const bd = document.getElementById("nsc-hub-backdrop");
     if (!bd) return;
     const modal = bd.querySelector(".nsc-hub-modal");
     if (!modal) return;
+
+    const sameTab = state._lastRenderedHubTab === state.hubTab;
+    const oldBody = modal.querySelector("#nsc-hub-body");
+    if (sameTab && oldBody && oldBody.querySelector(".nsc-hub-iframe")) {
+      return;
+    }
+    const prevScrollTop = sameTab && oldBody ? oldBody.scrollTop : 0;
+    state._lastRenderedHubTab = state.hubTab;
 
     detectCurrentUser();
     const uid = state.currentUserId || "";
@@ -7623,17 +7910,23 @@
       stardust: `/stardust/list?member_id=${uid}`,
       fans: "/fans?type=fans",
       progress: "/progress",
+      attendance: "/board",
+      setting: "/setting",
+      lucky: "/lucky",
+      invite: "/invite",
     };
 
     const tabs = [
-      { id: "notif", label: "通知中心", cnt: totalNotif },
+      { id: "notif", label: "通知", cnt: totalNotif },
       { id: "posts", label: "主题帖" },
       { id: "comments", label: "评论" },
       { id: "collections", label: "收藏" },
-      { id: "credit", label: "鸡腿账簿" },
-      { id: "stardust", label: "星辰记录" },
-      { id: "fans", label: "粉丝/关注" },
-      { id: "progress", label: "等级额度" },
+      { id: "credit", label: "鸡腿" },
+      { id: "stardust", label: "星辰" },
+      { id: "fans", label: "粉丝" },
+      { id: "attendance", label: "签到" },
+      { id: "progress", label: "等级" },
+      { id: "setting", label: "设置" },
     ];
 
     const uInfo = uid && state.userCache[String(uid)];
@@ -7674,6 +7967,28 @@
 
     const subbar = modal.querySelector("#nsc-hub-subbar");
     const body = modal.querySelector("#nsc-hub-body");
+
+    const restoreHubScroll = () => {
+      if (prevScrollTop > 0) body.scrollTop = prevScrollTop;
+    };
+    const appendWaterfallFooter = (stObj, loadFn, label = "记录") => {
+      const wf = document.createElement("div");
+      wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:10px 4px;";
+      if (stObj.noMore) wf.textContent = `已加载全部${label}`;
+      else if (stObj.loading) wf.textContent = "正在瀑布流加载更多...";
+      else wf.textContent = `下滑自动加载更多${label}`;
+      body.appendChild(wf);
+    };
+    body.addEventListener("scroll", () => {
+      if (body.scrollHeight - body.scrollTop - body.clientHeight < 180) {
+        if (state.hubTab === "posts") loadHubPosts(false);
+        else if (state.hubTab === "comments") loadHubComments(false);
+        else if (state.hubTab === "collections") loadHubCollections(false);
+        else if (state.hubTab === "credit") loadHubCredit(false);
+        else if (state.hubTab === "stardust") loadHubStardust(false);
+        else if (state.hubTab === "attendance") loadHubAttendanceBoard(false);
+      }
+    });
 
     if (state.hubTab === "notif") {
       const subTabs = [
@@ -7888,14 +8203,8 @@
         });
         body.appendChild(row);
       });
-      if (!st.noMore) {
-        const more = document.createElement("button");
-        more.type = "button";
-        more.className = "nsc-load-more-btn";
-        more.textContent = st.loading ? "加载中..." : "加载更多主题帖";
-        more.addEventListener("click", () => loadHubPosts(false));
-        body.appendChild(more);
-      }
+      if (!st.noMore) appendWaterfallFooter(st, loadHubPosts, "主题帖");
+      restoreHubScroll();
       return;
     }
 
@@ -7945,14 +8254,8 @@
         });
         body.appendChild(row);
       });
-      if (!st.noMore) {
-        const more = document.createElement("button");
-        more.type = "button";
-        more.className = "nsc-load-more-btn";
-        more.textContent = st.loading ? "加载中..." : "加载更多评论";
-        more.addEventListener("click", () => loadHubComments(false));
-        body.appendChild(more);
-      }
+      if (!st.noMore) appendWaterfallFooter(st, loadHubComments, "评论");
+      restoreHubScroll();
       return;
     }
 
@@ -8009,14 +8312,8 @@
         });
         body.appendChild(row);
       });
-      if (!st.noMore) {
-        const more = document.createElement("button");
-        more.type = "button";
-        more.className = "nsc-load-more-btn";
-        more.textContent = st.loading ? "加载中..." : "加载更多收藏";
-        more.addEventListener("click", () => loadHubCollections(false));
-        body.appendChild(more);
-      }
+      appendWaterfallFooter(st, loadHubCollections, "收藏");
+      restoreHubScroll();
       return;
     }
 
@@ -8074,14 +8371,8 @@
         `;
         body.appendChild(row);
       });
-      if (!st.noMore) {
-        const more = document.createElement("button");
-        more.type = "button";
-        more.className = "nsc-load-more-btn";
-        more.textContent = st.loading ? "加载中..." : "加载下一页账簿";
-        more.addEventListener("click", () => loadHubCredit(false));
-        body.appendChild(more);
-      }
+      appendWaterfallFooter(st, loadHubCredit, "账簿明细");
+      restoreHubScroll();
       return;
     }
 
@@ -8144,14 +8435,8 @@
         });
         body.appendChild(row);
       });
-      if (!st.noMore) {
-        const more = document.createElement("button");
-        more.type = "button";
-        more.className = "nsc-load-more-btn";
-        more.textContent = st.loading ? "加载中..." : "加载更多记录";
-        more.addEventListener("click", () => loadHubStardust(false));
-        body.appendChild(more);
-      }
+      appendWaterfallFooter(st, loadHubStardust, "星辰记录");
+      restoreHubScroll();
       return;
     }
 
@@ -8217,6 +8502,91 @@
         grid.appendChild(card);
       });
       body.appendChild(grid);
+      return;
+    }
+
+    if (state.hubTab === "attendance") {
+      const st = state.hubData.board;
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">每日签到（固定 5 鸡腿 / 随机试试手气）与今日排行榜</span>`;
+      const refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.className = "nsc-mini-btn";
+      refBtn.textContent = st.loading ? "同步中..." : "刷新榜单";
+      refBtn.addEventListener("click", () => loadHubAttendanceBoard(true));
+      subbar.appendChild(refBtn);
+
+      const res = state.hubData.checkinResult;
+      const ckCard = document.createElement("div");
+      ckCard.className = "nsc-checkin-card";
+      ckCard.innerHTML = `
+        <div style="min-width:0;">
+          <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);">每日签到领取鸡腿</div>
+          <div style="font-size:11.5px;color:${res ? (res.ok ? "var(--nsc-green)" : "#ff9f0a") : "var(--nsc-muted)"};margin-top:3px;">
+            ${res ? `${escHtml(res.mode)}：${escHtml(res.message)}${res.gain !== undefined ? ` (+${res.gain} 🍗)` : ""}${res.current !== undefined ? ` · 当前 ${res.current} 🍗` : ""}` : "固定签到稳定 +5 鸡腿；随机签到拼手气（1~10+ 鸡腿）"}
+          </div>
+        </div>
+        <div class="nsc-checkin-actions">
+          <button type="button" class="nsc-checkin-btn primary" id="nsc-ck-fixed" ${state.hubData.checkinLoading ? "disabled" : ""}>固定签到 (+5🍗)</button>
+          <button type="button" class="nsc-checkin-btn" id="nsc-ck-random" ${state.hubData.checkinLoading ? "disabled" : ""}>随机签到 (拼手气)</button>
+        </div>
+      `;
+      ckCard.querySelector("#nsc-ck-fixed").addEventListener("click", () => performAttendance(false));
+      ckCard.querySelector("#nsc-ck-random").addEventListener("click", () => performAttendance(true));
+      body.appendChild(ckCard);
+
+      if (st.loading && st.items.length === 0) {
+        const tip = document.createElement("div");
+        tip.className = "nsc-empty-state";
+        tip.textContent = "正在加载今日签到排行榜...";
+        body.appendChild(tip);
+        return;
+      }
+      if (st.items.length === 0) {
+        const tip = document.createElement("div");
+        tip.className = "nsc-empty-state";
+        tip.textContent = st.error ? `加载失败: ${st.error}` : "暂无今日签到排行数据";
+        body.appendChild(tip);
+        return;
+      }
+      st.items.forEach((it, idx) => {
+        const rank = idx + 1;
+        const rankCls = rank === 1 ? "rank1" : rank === 2 ? "rank2" : rank === 3 ? "rank3" : "";
+        const uidStr = String(it.member_id || "");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <span class="nsc-hot-rank ${rankCls}" style="margin-top:0;">${rank}</span>
+          <img src="${uidStr ? `/avatar/${uidStr}.png` : "/static/image/favicon/android-chrome-192x192.png"}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;flex:0 0 30px;" />
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${escHtml(it.member_name || `用户 #${uidStr}`)}</div>
+            <div class="nsc-hub-row-sub">${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}</div>
+          </div>
+          <span class="nsc-hub-delta pos">+${Number(it.gain) || 0} 🍗</span>
+        `;
+        row.addEventListener("click", () => {
+          if (uidStr) openUserProfileModal({ uid: uidStr, name: it.member_name || `用户 #${uidStr}` });
+        });
+        body.appendChild(row);
+      });
+      appendWaterfallFooter(st, loadHubAttendanceBoard, "排行榜");
+      restoreHubScroll();
+      return;
+    }
+
+    if (state.hubTab === "setting" || state.hubTab === "lucky" || state.hubTab === "invite") {
+      const titleMap = {
+        setting: "账号设置（已套用 macOS 主题，含签名/README/安全/偏好）",
+        lucky: "幸运抽奖（已套用 macOS 主题）",
+        invite: "邀请好友与邀请码（已套用 macOS 主题）",
+      };
+      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">${titleMap[state.hubTab]}</span>`;
+      const reloadBtn = document.createElement("button");
+      reloadBtn.type = "button";
+      reloadBtn.className = "nsc-mini-btn";
+      reloadBtn.textContent = "重新加载";
+      reloadBtn.addEventListener("click", () => mountHubThemedIframe(body, nativeHrefMap[state.hubTab]));
+      subbar.appendChild(reloadBtn);
+      mountHubThemedIframe(body, nativeHrefMap[state.hubTab]);
       return;
     }
 
@@ -8301,6 +8671,8 @@
     } else if (tab === "fans") {
       if (!state.fansData.loaded && !state.fansData.loading) fetchFansOrFollow("fans").then(() => renderUserHubIfOpen());
       if (!state.followData.loaded && !state.followData.loading) fetchFansOrFollow("follow").then(() => renderUserHubIfOpen());
+    } else if (tab === "attendance" && state.hubData.board.items.length === 0) {
+      loadHubAttendanceBoard(true);
     } else if (tab === "progress") {
       loadHubProgress(false);
     }

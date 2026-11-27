@@ -1291,6 +1291,7 @@
     }
     linkifyFloorReferences(bubble);
     enhanceMagicTabs(bubble);
+    enhanceCodeBlocks(bubble);
     processBubbleImages(bubble);
 
     const reactionsEl = document.createElement("div");
@@ -1360,6 +1361,7 @@
         const tc = ti.querySelector(".nsc-thread-content");
         linkifyFloorReferences(tc);
         enhanceMagicTabs(tc);
+        enhanceCodeBlocks(tc);
         processBubbleImages(tc);
         const chReactions = ti.querySelector(".nsc-reactions");
         renderReactionPills(chReactions, ch, isNativePage);
