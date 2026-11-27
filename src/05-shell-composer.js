@@ -1263,7 +1263,26 @@
       }
       if (imgsInRun.length >= 2) {
         const grid = document.createElement("div");
-        grid.className = "nsc-img-grid" + (imgsInRun.length === 2 || imgsInRun.length === 4 ? " cols-2" : "");
+        const cnt = imgsInRun.length;
+        const applyGridAspectLayout = () => {
+          const ratios = imgsInRun
+            .map((im) => (im.naturalWidth > 0 && im.naturalHeight > 0 ? im.naturalWidth / im.naturalHeight : 0))
+            .filter((r) => r > 0)
+            .sort((a, b) => a - b);
+          const medianRatio = ratios.length > 0 ? ratios[Math.floor(ratios.length / 2)] : 1.33;
+
+          grid.classList.remove("cols-1", "cols-2", "ratio-banner", "ratio-wide", "ratio-landscape", "ratio-square", "ratio-portrait");
+          if (medianRatio >= 2.2) {
+            grid.classList.add("cols-1", "ratio-banner");
+          } else {
+            if (cnt === 2 || cnt === 4) grid.classList.add("cols-2");
+            if (medianRatio >= 1.55) grid.classList.add("ratio-wide");
+            else if (medianRatio >= 1.15) grid.classList.add("ratio-landscape");
+            else if (medianRatio >= 0.82) grid.classList.add("ratio-square");
+            else grid.classList.add("ratio-portrait");
+          }
+        };
+
         containerEl.insertBefore(grid, run[0]);
         for (const el of run) {
           if (el.tagName === "IMG") {
@@ -1271,6 +1290,12 @@
           } else {
             for (const im of el.querySelectorAll("img.nsc-zoomable-img")) grid.appendChild(im);
             el.remove();
+          }
+        }
+        applyGridAspectLayout();
+        for (const im of imgsInRun) {
+          if (!(im.complete && im.naturalWidth > 0)) {
+            im.addEventListener("load", applyGridAspectLayout, { once: true });
           }
         }
       }

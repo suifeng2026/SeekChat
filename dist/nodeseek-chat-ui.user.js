@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.8
+// @version      7.22.9
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -304,7 +304,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.8",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.9",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -2031,23 +2031,41 @@
         border: none; background: transparent; cursor: default; vertical-align: middle;
       }
 
-      /* 帖子多图朋友圈宫格画廊（2/4图两列，3/5+图三列九宫格） */
+      /* 帖子多图自适应宫格画廊（按图片比例动态适配 1/2/3 列与容器比例，完整缩放不裁切、不变形） */
       .nsc-img-grid {
         display: grid; grid-template-columns: repeat(3, 1fr);
-        gap: 6px; margin: 6px 0; width: min(100%, 396px);
+        gap: 7px; margin: 6px 0; width: min(100%, 580px);
+        --nsc-grid-ar: 4 / 3;
+      }
+      .nsc-img-grid.cols-1 {
+        grid-template-columns: 1fr;
+        width: min(100%, 580px);
       }
       .nsc-img-grid.cols-2 {
         grid-template-columns: repeat(2, 1fr);
-        width: min(100%, 300px);
+        width: min(100%, 560px);
       }
+      .nsc-img-grid.ratio-wide { --nsc-grid-ar: 16 / 10; }
+      .nsc-img-grid.ratio-landscape { --nsc-grid-ar: 4 / 3; }
+      .nsc-img-grid.ratio-square { --nsc-grid-ar: 1 / 1; width: min(100%, 520px); }
+      .nsc-img-grid.cols-2.ratio-square { width: min(100%, 440px); }
+      .nsc-img-grid.ratio-portrait { --nsc-grid-ar: 3 / 4; width: min(100%, 520px); }
+      .nsc-img-grid.cols-2.ratio-portrait { width: min(100%, 440px); }
+
       .nsc-img-grid img.nsc-zoomable-img {
-        width: 100% !important; height: auto !important; aspect-ratio: 1 / 1;
+        width: 100% !important; height: auto !important;
+        aspect-ratio: var(--nsc-grid-ar, 4 / 3);
         max-width: none !important; max-height: none !important;
-        object-fit: cover !important; margin: 0 !important; border-radius: 8px;
+        object-fit: contain !important; margin: 0 !important; border-radius: 9px;
+        background: rgba(128, 128, 128, 0.06);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
+      .nsc-img-grid.ratio-banner img.nsc-zoomable-img {
+        aspect-ratio: auto !important;
+        max-height: 280px !important;
+      }
       .nsc-img-grid img.nsc-zoomable-img:hover {
-        transform: scale(1.02); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
+        transform: scale(1.015); box-shadow: 0 5px 16px rgba(0,0,0,0.16);
       }
 
       /* 测评帖魔术标签页 (.nsk-magic-tabs) 适配与交互样式（保持原生直系结构，避免触发站点校验提示） */
@@ -5007,7 +5025,26 @@
       }
       if (imgsInRun.length >= 2) {
         const grid = document.createElement("div");
-        grid.className = "nsc-img-grid" + (imgsInRun.length === 2 || imgsInRun.length === 4 ? " cols-2" : "");
+        const cnt = imgsInRun.length;
+        const applyGridAspectLayout = () => {
+          const ratios = imgsInRun
+            .map((im) => (im.naturalWidth > 0 && im.naturalHeight > 0 ? im.naturalWidth / im.naturalHeight : 0))
+            .filter((r) => r > 0)
+            .sort((a, b) => a - b);
+          const medianRatio = ratios.length > 0 ? ratios[Math.floor(ratios.length / 2)] : 1.33;
+
+          grid.classList.remove("cols-1", "cols-2", "ratio-banner", "ratio-wide", "ratio-landscape", "ratio-square", "ratio-portrait");
+          if (medianRatio >= 2.2) {
+            grid.classList.add("cols-1", "ratio-banner");
+          } else {
+            if (cnt === 2 || cnt === 4) grid.classList.add("cols-2");
+            if (medianRatio >= 1.55) grid.classList.add("ratio-wide");
+            else if (medianRatio >= 1.15) grid.classList.add("ratio-landscape");
+            else if (medianRatio >= 0.82) grid.classList.add("ratio-square");
+            else grid.classList.add("ratio-portrait");
+          }
+        };
+
         containerEl.insertBefore(grid, run[0]);
         for (const el of run) {
           if (el.tagName === "IMG") {
@@ -5015,6 +5052,12 @@
           } else {
             for (const im of el.querySelectorAll("img.nsc-zoomable-img")) grid.appendChild(im);
             el.remove();
+          }
+        }
+        applyGridAspectLayout();
+        for (const im of imgsInRun) {
+          if (!(im.complete && im.naturalWidth > 0)) {
+            im.addEventListener("load", applyGridAspectLayout, { once: true });
           }
         }
       }
