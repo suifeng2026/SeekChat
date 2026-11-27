@@ -241,6 +241,101 @@
   let niBackdrop = null;
   let niTargetMode = "chat";
   let niFileInput = null;
+  const _niThumbCache = new Map();
+  const _niThumbQueue = [];
+  let _niThumbActive = 0;
+
+  function formatNiBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function formatNiDate(raw) {
+    if (!raw) return "";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10);
+    const pad = (x) => String(x).padStart(2, "0");
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+  }
+
+  async function buildCompressedThumbUrl(directUrl) {
+    if (typeof GM_xmlhttpRequest !== "function" || typeof createImageBitmap !== "function") {
+      return directUrl;
+    }
+    if (/\.gif(\?|$)/i.test(directUrl)) return directUrl;
+    const blob = await new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: directUrl,
+        responseType: "blob",
+        timeout: 12000,
+        onload: (r) => (r.status >= 200 && r.status < 300 && r.response ? resolve(r.response) : reject(new Error("fetch_fail"))),
+        onerror: () => reject(new Error("net_err")),
+        ontimeout: () => reject(new Error("timeout")),
+      });
+    });
+    if (blob.size && blob.size <= 45 * 1024) {
+      return URL.createObjectURL(blob);
+    }
+    const bmp = await createImageBitmap(blob);
+    try {
+      const maxW = 320;
+      const scale = bmp.width > maxW ? maxW / bmp.width : 1;
+      const w = Math.max(1, Math.round(bmp.width * scale));
+      const h = Math.max(1, Math.round(bmp.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return URL.createObjectURL(blob);
+      ctx.drawImage(bmp, 0, 0, w, h);
+      const outBlob = await new Promise((res) => canvas.toBlob(res, "image/webp", 0.78));
+      return URL.createObjectURL(outBlob || blob);
+    } finally {
+      if (typeof bmp.close === "function") bmp.close();
+    }
+  }
+
+  function pumpNiThumbQueue() {
+    while (_niThumbActive < 3 && _niThumbQueue.length > 0) {
+      const job = _niThumbQueue.shift();
+      if (!job || !job.imgEl || !job.imgEl.isConnected) continue;
+      if (_niThumbCache.has(job.key)) {
+        job.imgEl.src = _niThumbCache.get(job.key);
+        continue;
+      }
+      _niThumbActive += 1;
+      buildCompressedThumbUrl(job.url)
+        .then((thumbSrc) => {
+          _niThumbCache.set(job.key, thumbSrc);
+          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = thumbSrc;
+        })
+        .catch(() => {
+          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = job.url;
+        })
+        .finally(() => {
+          _niThumbActive = Math.max(0, _niThumbActive - 1);
+          pumpNiThumbQueue();
+        });
+    }
+  }
+
+  function attachNiThumb(imgEl, directUrl, apiThumbUrl, cacheKey) {
+    if (!imgEl) return;
+    if (apiThumbUrl) {
+      imgEl.src = apiThumbUrl;
+      return;
+    }
+    if (_niThumbCache.has(cacheKey)) {
+      imgEl.src = _niThumbCache.get(cacheKey);
+      return;
+    }
+    _niThumbQueue.push({ imgEl, url: directUrl, key: cacheKey });
+    pumpNiThumbQueue();
+  }
 
   function openNodeImageModal(targetMode = "chat") {
     niTargetMode = targetMode;
@@ -248,31 +343,44 @@
       niBackdrop = document.createElement("div");
       niBackdrop.id = "nsc-ni-backdrop";
       niBackdrop.innerHTML = `
-        <div class="nsc-ni-modal" role="dialog" aria-label="NodeImage 图床关联与上传">
+        <div class="nsc-ni-modal" role="dialog" aria-label="NodeImage 图床管理">
           <div class="nsc-newpost-head">
-            <span style="font-size:14px;font-weight:700;">NodeImage 图床 · 授权与传图</span>
-            <button type="button" id="nsc-ni-close" style="border:none;background:transparent;color:var(--nsc-muted);font-size:16px;cursor:pointer;">✕</button>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              <span style="font-size:14px;font-weight:700;">NodeImage 图床</span>
+              <span class="nsc-badge-read" id="nsc-ni-auth-pill" style="font-weight:600;">检测中</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button type="button" class="nsc-mini-btn" id="nsc-ni-toggle-settings">设置</button>
+              <button type="button" class="nsc-mini-btn" id="nsc-ni-load-list">刷新</button>
+              <button type="button" id="nsc-ni-close" style="border:none;background:transparent;color:var(--nsc-muted);font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
+            </div>
           </div>
-          <div class="nsc-newpost-body" style="gap:10px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 10px;border-radius:10px;background:var(--nsc-hover);">
-              <div style="font-size:12px;">
-                状态：<strong id="nsc-ni-auth-state">检测中...</strong>
+          <div class="nsc-newpost-body" style="gap:9px;overflow:hidden;">
+            <div class="nsc-ni-settings" id="nsc-ni-settings">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:12px;">状态：<strong id="nsc-ni-auth-state">检测中...</strong></span>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" class="nsc-mini-btn" id="nsc-ni-detect">自动检测授权</button>
+                  <a class="nsc-mini-btn" href="https://www.nodeimage.com/" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">去 NodeImage 登录授权 ↗</a>
+                </div>
               </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button type="button" class="nsc-mini-btn" id="nsc-ni-detect">自动检测授权</button>
-                <a class="nsc-mini-btn" href="https://www.nodeimage.com/" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">去 NodeImage 登录授权 ↗</a>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="password" id="nsc-ni-key-input" class="nsc-search-input" placeholder="或直接粘贴 NodeImage API Key..." style="flex:1;" />
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-save-key">保存 Key</button>
               </div>
             </div>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <input type="password" id="nsc-ni-key-input" class="nsc-search-input" placeholder="或直接粘贴 NodeImage API Key..." style="flex:1;" />
-              <button type="button" class="nsc-mini-btn" id="nsc-ni-save-key">保存 Key</button>
+            <div class="nsc-ni-toolbar">
+              <span id="nsc-ni-tip" style="font-size:11.5px;color:var(--nsc-muted);">支持拖拽或 Ctrl+V 粘贴传图，默认仅加载最近 12 张压缩预览</span>
+              <button type="button" class="nsc-mini-btn" id="nsc-ni-pick-btn">选择图片上传</button>
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-              <div style="display:flex;gap:6px;">
-                <button type="button" class="nsc-newpost-btn" id="nsc-ni-pick-btn">选择图片上传</button>
-                <button type="button" class="nsc-mini-btn" id="nsc-ni-load-list">加载我的图床</button>
+            <div class="nsc-ni-batch-bar" id="nsc-ni-batch-bar">
+              <span id="nsc-ni-batch-count" style="font-weight:600;color:var(--nsc-text);">已选 0 张</span>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-sel-all">全选已加载</button>
+                <button type="button" class="nsc-mac-btn primary" id="nsc-ni-batch-ins" style="height:24px;padding:0 10px;font-size:11.5px;">批量插入</button>
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-batch-del" style="color:#ff3b30;border-color:rgba(255,59,48,0.35);">批量删除</button>
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-sel-clear">取消</button>
               </div>
-              <span id="nsc-ni-tip" style="font-size:11px;color:var(--nsc-muted);">授权后支持在任意编辑框 Ctrl+V 粘贴图片直传</span>
             </div>
             <div class="nsc-ni-grid" id="nsc-ni-grid"></div>
           </div>
@@ -290,119 +398,350 @@
       niBackdrop.addEventListener("click", (e) => { if (e.target === niBackdrop) closeNi(); });
       niBackdrop.querySelector("#nsc-ni-close").addEventListener("click", closeNi);
 
-      const refreshAuthUi = () => {
+      const settingsPanel = niBackdrop.querySelector("#nsc-ni-settings");
+      const toggleSettingsBtn = niBackdrop.querySelector("#nsc-ni-toggle-settings");
+      const batchBar = niBackdrop.querySelector("#nsc-ni-batch-bar");
+      const batchCountEl = niBackdrop.querySelector("#nsc-ni-batch-count");
+      const batchDelBtn = niBackdrop.querySelector("#nsc-ni-batch-del");
+      const grid = niBackdrop.querySelector("#nsc-ni-grid");
+      const tip = niBackdrop.querySelector("#nsc-ni-tip");
+
+      let _niImages = [];
+      let _niDisplayCount = 12;
+      const _niSelected = new Set();
+      let _batchDelConfirm = false;
+
+      const syncBatchBar = () => {
+        const cnt = _niSelected.size;
+        batchBar.classList.toggle("is-open", cnt > 0);
+        if (batchCountEl) batchCountEl.textContent = `已选 ${cnt} 张`;
+        if (cnt === 0) {
+          _batchDelConfirm = false;
+          if (batchDelBtn) batchDelBtn.textContent = "批量删除";
+        }
+      };
+
+      const refreshAuthUi = (forceShowSettings = false) => {
         const k = NodeImage.getKey();
         const stEl = niBackdrop.querySelector("#nsc-ni-auth-state");
+        const pillEl = niBackdrop.querySelector("#nsc-ni-auth-pill");
         const inp = niBackdrop.querySelector("#nsc-ni-key-input");
         if (stEl) {
           stEl.textContent = k ? "已关联授权（支持 Ctrl+V 粘贴上传）" : "未授权（请先登录 NodeImage 后点自动检测）";
           stEl.style.color = k ? "var(--nsc-green)" : "#ff3b30";
         }
+        if (pillEl) {
+          pillEl.textContent = k ? "已授权" : "未授权";
+          pillEl.style.color = k ? "var(--nsc-green)" : "#ff3b30";
+          pillEl.style.borderColor = k ? "rgba(52,199,89,0.45)" : "rgba(255,59,48,0.4)";
+        }
+        if (settingsPanel) {
+          settingsPanel.classList.toggle("is-open", forceShowSettings || !k);
+        }
         if (inp && k && !inp.value) inp.value = k;
         NodeImage.syncDots();
       };
 
+      toggleSettingsBtn.addEventListener("click", () => {
+        settingsPanel.classList.toggle("is-open");
+      });
+
+      const getImgUrls = (im) => {
+        const directUrl = (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`;
+        const apiThumb = (im.links && (im.links.thumb || im.links.thumbnail)) || im.thumbnail_url || im.thumb_url || "";
+        const md = (im.links && im.links.markdown) || `![image](${directUrl})`;
+        const htmlTag = (im.links && im.links.html) || `<img src="${directUrl}" alt="image" />`;
+        return { directUrl, apiThumb, md, htmlTag };
+      };
+
+      const renderNiGrid = () => {
+        _niThumbQueue.length = 0;
+        grid.innerHTML = "";
+
+        const dropCard = document.createElement("button");
+        dropCard.type = "button";
+        dropCard.className = "nsc-ni-dropcard";
+        dropCard.innerHTML = `
+          ${ICONS.imgHost}
+          <span style="font-size:12px;font-weight:700;">上传或拖拽图片</span>
+          <span style="font-size:10.5px;opacity:0.85;">支持多选 · Ctrl+V 粘贴直传</span>
+        `;
+        dropCard.addEventListener("click", () => niFileInput.click());
+        grid.appendChild(dropCard);
+
+        const visible = _niImages.slice(0, _niDisplayCount);
+        const galleryUrls = visible.map((im) => getImgUrls(im).directUrl);
+
+        for (const im of visible) {
+          const idKey = String(im.image_id || "");
+          const { directUrl, apiThumb, md, htmlTag } = getImgUrls(im);
+          const isSel = _niSelected.has(idKey);
+          const fname = im.filename || im.name || `${idKey || "image"}`;
+          const sizeStr = formatNiBytes(im.size || im.file_size || 0);
+          const dateStr = formatNiDate(im.created_at || im.uploaded_at || "");
+
+          const card = document.createElement("div");
+          card.className = "nsc-ni-card" + (isSel ? " is-selected" : "");
+          card.innerHTML = `
+            <div class="nsc-ni-thumb-wrap" title="点击直接插入到编辑器">
+              <input type="checkbox" class="nsc-ni-chk" ${isSel ? "checked" : ""} title="多选" />
+              <button type="button" class="nsc-ni-overlay-btn nsc-ni-del" title="删除图片">${ICONS.trash}</button>
+              <img decoding="async" alt="" />
+              <button type="button" class="nsc-ni-overlay-btn nsc-ni-zoom" title="查看大图">${ICONS.zoomIn}</button>
+              <button type="button" class="nsc-ni-overlay-btn nsc-ni-ins" title="插入 Markdown">${ICONS.insert}</button>
+            </div>
+            <div class="nsc-ni-meta">
+              <div class="nsc-ni-fname" title="${escHtml(fname)}">${escHtml(fname)}</div>
+              <div class="nsc-ni-sub">
+                <span>${escHtml(dateStr || "NodeImage")}</span>
+                <span>${escHtml(sizeStr || "")}</span>
+              </div>
+              <div class="nsc-ni-fmts">
+                <button type="button" class="nsc-ni-fmt-btn" data-fmt="md" title="复制 Markdown">MD</button>
+                <button type="button" class="nsc-ni-fmt-btn" data-fmt="url" title="复制图片直链">URL</button>
+                <button type="button" class="nsc-ni-fmt-btn" data-fmt="html" title="复制 HTML 代码">HTML</button>
+              </div>
+            </div>
+          `;
+
+          const imgEl = card.querySelector("img");
+          attachNiThumb(imgEl, directUrl, apiThumb, idKey || directUrl);
+
+          const chk = card.querySelector(".nsc-ni-chk");
+          chk.addEventListener("click", (e) => e.stopPropagation());
+          chk.addEventListener("change", () => {
+            if (!idKey) return;
+            if (chk.checked) _niSelected.add(idKey);
+            else _niSelected.delete(idKey);
+            card.classList.toggle("is-selected", chk.checked);
+            syncBatchBar();
+          });
+
+          const insFn = () => {
+            NodeImage.insertToTarget(niTargetMode, md);
+            closeNi();
+          };
+          card.querySelector(".nsc-ni-thumb-wrap").addEventListener("click", (e) => {
+            if (e.target.closest("button, input")) return;
+            insFn();
+          });
+          card.querySelector(".nsc-ni-ins").addEventListener("click", (e) => {
+            e.stopPropagation();
+            insFn();
+          });
+          card.querySelector(".nsc-ni-zoom").addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (typeof openLightbox === "function") openLightbox(directUrl, galleryUrls);
+          });
+
+          const delBtn = card.querySelector(".nsc-ni-del");
+          let delConfirmTimer = 0;
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!idKey) return;
+            if (delBtn.dataset.armed !== "1") {
+              delBtn.dataset.armed = "1";
+              delBtn.style.width = "auto";
+              delBtn.style.padding = "0 6px";
+              delBtn.style.fontSize = "10.5px";
+              delBtn.style.fontWeight = "700";
+              delBtn.style.color = "#ff3b30";
+              delBtn.textContent = "删?";
+              clearTimeout(delConfirmTimer);
+              delConfirmTimer = setTimeout(() => {
+                if (!delBtn.isConnected) return;
+                delBtn.dataset.armed = "";
+                delBtn.style.width = "";
+                delBtn.style.padding = "";
+                delBtn.innerHTML = ICONS.trash;
+              }, 2600);
+              return;
+            }
+            delBtn.disabled = true;
+            const ok = await NodeImage.deleteImage(idKey).catch(() => false);
+            if (ok) {
+              _niImages = _niImages.filter((x) => String(x.image_id || "") !== idKey);
+              _niSelected.delete(idKey);
+              syncBatchBar();
+              renderNiGrid();
+              if (tip) tip.textContent = `已删除图片，当前共 ${_niImages.length} 张`;
+            } else {
+              delBtn.disabled = false;
+              if (tip) tip.textContent = "删除失败，请稍后重试";
+            }
+          });
+
+          card.querySelectorAll(".nsc-ni-fmt-btn").forEach((fb) => {
+            fb.addEventListener("click", async () => {
+              const fmt = fb.dataset.fmt;
+              const txt = fmt === "url" ? directUrl : fmt === "html" ? htmlTag : md;
+              const copied = await copyTextToClipboard(txt);
+              if (copied) {
+                const orig = fb.textContent;
+                fb.textContent = "已复制";
+                setTimeout(() => { fb.textContent = orig; }, 1000);
+              }
+            });
+          });
+
+          grid.appendChild(card);
+        }
+
+        if (_niImages.length > _niDisplayCount) {
+          const remain = _niImages.length - _niDisplayCount;
+          const moreRow = document.createElement("div");
+          moreRow.className = "nsc-ni-more-row";
+          moreRow.innerHTML = `<button type="button" class="nsc-mini-btn" id="nsc-ni-more-btn">显示更多压缩预览（再加载 ${Math.min(12, remain)} 张 · 剩余 ${remain} 张）</button>`;
+          moreRow.querySelector("#nsc-ni-more-btn").addEventListener("click", () => {
+            _niDisplayCount += 12;
+            renderNiGrid();
+          });
+          grid.appendChild(moreRow);
+        }
+      };
+
+      const loadNiImages = async () => {
+        grid.innerHTML = `<div style="padding:18px;font-size:12px;color:var(--nsc-muted);">正在加载图床列表...</div>`;
+        try {
+          _niImages = await NodeImage.listImages();
+          _niDisplayCount = 12;
+          _niSelected.clear();
+          syncBatchBar();
+          renderNiGrid();
+          if (tip) {
+            tip.textContent = _niImages.length > 0
+              ? `共 ${_niImages.length} 张 · 默认仅预览最近 ${Math.min(12, _niImages.length)} 张（点击图片插入，右上角垃圾桶删除）`
+              : "暂无图片，点击首格卡片或 Ctrl+V 即可上传";
+          }
+        } catch (err) {
+          grid.innerHTML = `<div style="padding:18px;font-size:12px;color:#ff3b30;">加载失败: ${escHtml(err.message)}</div>`;
+        }
+      };
+
+      const handleUploadFiles = async (files) => {
+        const imgs = Array.from(files || []).filter((f) => f && f.type && f.type.startsWith("image/"));
+        if (imgs.length === 0) return;
+        const insertedMds = [];
+        for (const f of imgs) {
+          if (tip) tip.textContent = `正在上传 ${f.name}...`;
+          try {
+            const md = await NodeImage.uploadFile(f);
+            insertedMds.push(md);
+          } catch (err) {
+            if (tip) tip.textContent = "上传失败: " + err.message;
+          }
+        }
+        if (insertedMds.length > 0) {
+          NodeImage.insertToTarget(niTargetMode, insertedMds.join("\n"));
+          if (tip) tip.textContent = `已上传并插入 ${insertedMds.length} 张图片`;
+          closeNi();
+        }
+      };
+
+      niBackdrop.querySelector(".nsc-ni-modal").addEventListener("drop", (e) => {
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleUploadFiles(files);
+        }
+      });
+      niBackdrop.querySelector(".nsc-ni-modal").addEventListener("dragover", (e) => {
+        if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) {
+          e.preventDefault();
+        }
+      });
+
       niBackdrop.querySelector("#nsc-ni-detect").addEventListener("click", async () => {
-        const tip = niBackdrop.querySelector("#nsc-ni-tip");
         if (tip) tip.textContent = "正在连接 api.nodeimage.com 获取授权...";
         const k = await NodeImage.checkAuth();
-        refreshAuthUi();
+        refreshAuthUi(!k);
         if (tip) tip.textContent = k ? "授权关联成功！" : "未检测到登录态，请先点击「去 NodeImage 登录授权」完成关联";
+        if (k) loadNiImages();
       });
 
       niBackdrop.querySelector("#nsc-ni-save-key").addEventListener("click", () => {
         const val = niBackdrop.querySelector("#nsc-ni-key-input").value.trim();
         NodeImage.setKey(val);
-        refreshAuthUi();
+        refreshAuthUi(!val);
+        if (val) loadNiImages();
       });
 
       niBackdrop.querySelector("#nsc-ni-pick-btn").addEventListener("click", () => niFileInput.click());
-      niFileInput.addEventListener("change", async () => {
+      niFileInput.addEventListener("change", () => {
         const files = Array.from(niFileInput.files || []);
         niFileInput.value = "";
-        if (files.length === 0) return;
-        const tip = niBackdrop.querySelector("#nsc-ni-tip");
-        for (const f of files) {
-          if (tip) tip.textContent = `正在上传 ${f.name}...`;
-          try {
-            const md = await NodeImage.uploadFile(f);
-            NodeImage.insertToTarget(niTargetMode, md);
-            if (tip) tip.textContent = "上传并插入成功！";
-            closeNi();
-          } catch (err) {
-            if (tip) tip.textContent = "上传失败: " + err.message;
-          }
-        }
+        handleUploadFiles(files);
       });
 
-      niBackdrop.querySelector("#nsc-ni-load-list").addEventListener("click", async () => {
-        const grid = niBackdrop.querySelector("#nsc-ni-grid");
-        const tip = niBackdrop.querySelector("#nsc-ni-tip");
-        grid.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--nsc-muted);">加载中...</div>`;
-        try {
-          const imgs = await NodeImage.listImages();
-          grid.innerHTML = "";
-          if (imgs.length === 0) {
-            grid.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--nsc-muted);">暂无已上传图片</div>`;
-            return;
-          }
-          const sliced = imgs.slice(0, 30);
-          const galleryUrls = sliced.map((im) => (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`);
-          for (const im of sliced) {
-            const directUrl = (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`;
-            const md = (im.links && im.links.markdown) || `![image](${directUrl})`;
-            const card = document.createElement("div");
-            card.className = "nsc-ni-card";
-            card.innerHTML = `
-              <img src="${directUrl}" loading="lazy" title="点击插入到编辑器" />
-              <div class="nsc-ni-card-ops">
-                <button type="button" class="nsc-mini-btn" style="padding:2px 8px;font-size:11px;">插入</button>
-                <div style="display:inline-flex;gap:4px;">
-                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;" title="放大查看">看图</button>
-                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;color:#ff3b30;">删除</button>
-                </div>
-              </div>
-            `;
-            const insFn = () => { NodeImage.insertToTarget(niTargetMode, md); closeNi(); };
-            const niImg = card.querySelector("img");
-            niImg.addEventListener("click", insFn);
-            card.querySelectorAll("button")[0].addEventListener("click", insFn);
-            card.querySelectorAll("button")[1].addEventListener("click", () => {
-              if (typeof openLightbox === "function") openLightbox(directUrl, galleryUrls);
-            });
-            card.querySelectorAll("button")[2].addEventListener("click", async () => {
-              if (!im.image_id) return;
-              await NodeImage.deleteImage(im.image_id);
-              card.remove();
-            });
-            grid.appendChild(card);
-          }
-          if (tip) tip.textContent = `已加载 ${imgs.length} 张图片，点击即可插入`;
-        } catch (err) {
-          grid.innerHTML = `<div style="padding:12px;font-size:12px;color:#ff3b30;">加载失败: ${err.message}</div>`;
+      niBackdrop.querySelector("#nsc-ni-load-list").addEventListener("click", loadNiImages);
+
+      niBackdrop.querySelector("#nsc-ni-sel-all").addEventListener("click", () => {
+        const visible = _niImages.slice(0, _niDisplayCount);
+        for (const im of visible) {
+          if (im.image_id) _niSelected.add(String(im.image_id));
         }
+        syncBatchBar();
+        renderNiGrid();
       });
+      niBackdrop.querySelector("#nsc-ni-sel-clear").addEventListener("click", () => {
+        _niSelected.clear();
+        syncBatchBar();
+        renderNiGrid();
+      });
+      niBackdrop.querySelector("#nsc-ni-batch-ins").addEventListener("click", () => {
+        const mds = _niImages
+          .filter((im) => _niSelected.has(String(im.image_id || "")))
+          .map((im) => getImgUrls(im).md);
+        if (mds.length === 0) return;
+        NodeImage.insertToTarget(niTargetMode, mds.join("\n"));
+        _niSelected.clear();
+        syncBatchBar();
+        closeNi();
+      });
+      batchDelBtn.addEventListener("click", async () => {
+        if (_niSelected.size === 0) return;
+        if (!_batchDelConfirm) {
+          _batchDelConfirm = true;
+          batchDelBtn.textContent = `确认删除 ${_niSelected.size} 张?`;
+          return;
+        }
+        const ids = Array.from(_niSelected);
+        batchDelBtn.disabled = true;
+        batchDelBtn.textContent = "删除中...";
+        let deleted = 0;
+        for (const id of ids) {
+          const ok = await NodeImage.deleteImage(id).catch(() => false);
+          if (ok) {
+            deleted += 1;
+            _niSelected.delete(id);
+            _niImages = _niImages.filter((x) => String(x.image_id || "") !== id);
+          }
+        }
+        batchDelBtn.disabled = false;
+        _batchDelConfirm = false;
+        batchDelBtn.textContent = "批量删除";
+        syncBatchBar();
+        renderNiGrid();
+        if (tip) tip.textContent = `已批量删除 ${deleted} 张图片`;
+      });
+
+      niBackdrop._refreshAuthUi = refreshAuthUi;
+      niBackdrop._loadNiImages = loadNiImages;
     }
 
-    const stEl = niBackdrop.querySelector("#nsc-ni-auth-state");
     const k = NodeImage.getKey();
-    if (stEl) {
-      stEl.textContent = k ? "已关联授权（支持 Ctrl+V 粘贴上传）" : "未授权（正在检测登录态...）";
-      stEl.style.color = k ? "var(--nsc-green)" : "#ff3b30";
-    }
-    NodeImage.syncDots();
+    if (niBackdrop._refreshAuthUi) niBackdrop._refreshAuthUi(!k);
     niBackdrop.classList.add("is-open");
     const gridEl = niBackdrop.querySelector("#nsc-ni-grid");
-    if (k && gridEl && !gridEl.hasChildNodes()) {
-      niBackdrop.querySelector("#nsc-ni-load-list").click();
+    if (k && gridEl && !gridEl.hasChildNodes() && niBackdrop._loadNiImages) {
+      niBackdrop._loadNiImages();
     }
     if (!k) {
       NodeImage.checkAuth().then((newK) => {
-        if (newK && stEl) {
-          stEl.textContent = "已关联授权（支持 Ctrl+V 粘贴上传）";
-          stEl.style.color = "var(--nsc-green)";
-          const inp = niBackdrop.querySelector("#nsc-ni-key-input");
-          if (inp) inp.value = newK;
+        if (newK) {
+          if (niBackdrop._refreshAuthUi) niBackdrop._refreshAuthUi(false);
+          if (niBackdrop._loadNiImages) niBackdrop._loadNiImages();
         }
       });
     }

@@ -1,17 +1,108 @@
+  const EDITOR_EXTRA_SNIPPETS = [
+    {
+      id: "tip",
+      title: "提示框 (> [!TIP])",
+      icon: () => ICONS.tip,
+      tpl: "> [!TIP]\n> @@CURSOR@@",
+    },
+    {
+      id: "note",
+      title: "信息框 (> [!NOTE])",
+      icon: () => ICONS.note,
+      tpl: "> [!NOTE]\n> @@CURSOR@@",
+    },
+    {
+      id: "warn",
+      title: "警告框 (> [!WARNING])",
+      icon: () => ICONS.expose,
+      tpl: "> [!WARNING]\n> @@CURSOR@@",
+    },
+    {
+      id: "details",
+      title: "折叠内容 (:::details)",
+      icon: () => ICONS.details,
+      tpl: ":::details 点击展开\n@@CURSOR@@\n:::",
+    },
+    {
+      id: "tabs",
+      title: "标签模板 (:::: tabs)",
+      icon: () => ICONS.tabs,
+      tpl: ":::: tabs\n::: tab-item 1.\n@@CURSOR@@\n:::\n::: tab-item 2.\n\n:::\n::: tab-item 3.\n\n:::\n::: tab-item 4.\n\n:::\n::: tab-item 5\n\n:::\n::::",
+    },
+    {
+      id: "terminal",
+      title: "终端代码块 (```bash)",
+      icon: () => ICONS.terminal,
+      tpl: "```bash\n@@CURSOR@@\n```",
+    },
+  ];
+
+  function insertSnippetIntoTextarea(ta, rawTpl) {
+    if (!ta) return;
+    const s = ta.selectionStart || 0;
+    const e = ta.selectionEnd || 0;
+    const raw = String(rawTpl || "");
+    const markerIdx = raw.indexOf("@@CURSOR@@");
+    const clean = raw.replace("@@CURSOR@@", "");
+    const before = ta.value.slice(0, s);
+    const needLeadNl = raw.includes("\n") && before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+    const full = `${needLeadNl}${clean}`;
+    ta.setRangeText(full, s, e, "end");
+    if (markerIdx >= 0) {
+      const pos = s + needLeadNl.length + markerIdx;
+      ta.setSelectionRange(pos, pos);
+    }
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    ta.focus({ preventScroll: true });
+  }
+
+  function insertSnippetIntoNativeCm(cm, rawTpl) {
+    if (!cm || typeof cm.replaceSelection !== "function") return;
+    const raw = String(rawTpl || "");
+    const markerIdx = raw.indexOf("@@CURSOR@@");
+    const clean = raw.replace("@@CURSOR@@", "");
+    const cur = cm.getCursor();
+    const lineTxt = cm.getLine(cur.line) || "";
+    const needLeadNl = raw.includes("\n") && cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
+    const full = `${needLeadNl}${clean}`;
+    cm.operation(() => {
+      cm.replaceSelection(full);
+      if (markerIdx >= 0) {
+        const beforeCursor = full.slice(0, needLeadNl.length + markerIdx);
+        const lines = beforeCursor.split("\n");
+        const targetLine = cur.line + lines.length - 1;
+        const targetCh = lines.length === 1 ? cur.ch + lines[0].length : lines[lines.length - 1].length;
+        cm.setCursor({ line: targetLine, ch: targetCh });
+      }
+    });
+    if (typeof cm.refresh === "function") cm.refresh();
+    const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
+    if (inputField && typeof inputField.focus === "function") inputField.focus({ preventScroll: true });
+    else if (typeof cm.focus === "function") cm.focus();
+  }
+
   function buildMarkdownToolbarHtml({ id = "", expBtnId = "", niTarget = "", includeList = false } = {}) {
+    const extraBtns = EDITOR_EXTRA_SNIPPETS.map(
+      (it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`
+    ).join("");
     return `
       <div class="nsc-mde-toolbar"${id ? ` id="${id}"` : ""}>
-        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
-        ${includeList ? `<button type="button" class="nsc-mde-btn" data-prefix="- " title="列表">•</button>` : ""}
-        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">${ICONS.bold}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">${ICONS.italic}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">${ICONS.strike}</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" data-prefix="## " title="标题">${ICONS.heading}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">${ICONS.quote}</button>
+        ${includeList ? `<button type="button" class="nsc-mde-btn" data-prefix="- " title="无序列表">${ICONS.listUl}</button>` : ""}
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">${ICONS.codeInline}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n@@CURSOR@@\n\`\`\`" title="代码块">${ICONS.codeBlock}</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://@@CURSOR@@)" title="链接">${ICONS.links}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://@@CURSOR@@)" title="图片">${ICONS.photo}</button>
+        <span class="nsc-mde-sep"></span>
+        ${extraBtns}
         ${expBtnId ? `<button type="button" class="nsc-mde-btn" id="${expBtnId}" title="插入贴图表情">${ICONS.smile}</button>` : ""}
-        ${niTarget ? `<button type="button" class="nsc-nodeimage-btn" data-ni-btn="${niTarget}" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>` : ""}
+        ${niTarget ? `<button type="button" class="nsc-mde-btn nsc-mde-ni-btn" data-ni-btn="${niTarget}" title="NodeImage 图床上传与管理" style="margin-left:auto;">${ICONS.imgHost}<span class="nsc-ni-dot"></span></button>` : ""}
       </div>
     `;
   }
@@ -20,16 +111,24 @@
     if (!toolbarEl || !textareaEl) return;
     toolbarEl.querySelectorAll(".nsc-mde-btn[data-wrap], .nsc-mde-btn[data-prefix], .nsc-mde-btn[data-tpl]").forEach((b) => {
       b.addEventListener("click", () => {
+        if (b.dataset.tpl) {
+          insertSnippetIntoTextarea(textareaEl, b.dataset.tpl);
+          return;
+        }
         const s = textareaEl.selectionStart || 0;
         const e = textareaEl.selectionEnd || 0;
         const sel = textareaEl.value.slice(s, e);
         let ins = "";
         if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
         else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
-        else if (b.dataset.tpl) ins = b.dataset.tpl;
         textareaEl.setRangeText(ins, s, e, "end");
         textareaEl.dispatchEvent(new Event("input", { bubbles: true }));
         textareaEl.focus({ preventScroll: true });
+      });
+    });
+    toolbarEl.querySelectorAll("[data-ni-btn]").forEach((b) => {
+      b.addEventListener("click", () => {
+        openNodeImageModal(b.dataset.niBtn || "edit");
       });
     });
   }
@@ -290,7 +389,7 @@
       document.addEventListener("pointerdown", (e) => {
         if (!dockEl.isConnected || dockEl.style.display === "none") return;
         const t = e.target;
-        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-nodeimage-backdrop"))) return;
+        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-ni-backdrop"))) return;
         setTimeout(() => syncComposerCompactState(false), 60);
       });
     }
@@ -1338,31 +1437,33 @@
           <button type="button" class="nsc-u-exp-tab sticker-group-app" data-ugroup="app">App</button>
         </div>
         <div class="nsc-u-top-acts">
-          <button type="button" class="nsc-mde-btn" data-role="toggle-tb" title="显示/隐藏工具栏">🛠</button>
+          <button type="button" class="nsc-mde-btn" data-role="toggle-tb" title="显示/隐藏工具栏">${ICONS.tools}</button>
           <button type="button" class="nsc-mde-btn" data-role="toggle-fs" title="全屏编辑">${ICONS.fullscreen}</button>
         </div>
       </div>
       <div class="nsc-mde-toolbar">
-        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">${ICONS.bold}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">${ICONS.italic}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">${ICONS.strike}</button>
         <span class="nsc-mde-sep"></span>
-        <button type="button" class="nsc-mde-btn" data-prefix="## " title="标题">H</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="- " title="无序列表">•</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="1. " title="有序列表">1.</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="## " title="标题">${ICONS.heading}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="- " title="无序列表">${ICONS.listUl}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="1. " title="有序列表">${ICONS.listOl}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">${ICONS.quote}</button>
         <span class="nsc-mde-sep"></span>
-        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://@@CURSOR@@)" title="链接">${ICONS.links}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://@@CURSOR@@)" title="图片">${ICONS.photo}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">${ICONS.codeInline}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n@@CURSOR@@\n\`\`\`" title="代码块">${ICONS.codeBlock}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| @@CURSOR@@ | 内容 |\n" title="表格">${ICONS.table}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\n---\n@@CURSOR@@" title="分割线">${ICONS.hr}</button>
         <span class="nsc-mde-sep"></span>
-        <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| 内容 | 内容 |\n" title="表格">田</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="\n---\n" title="分割线">—</button>
+        ${EDITOR_EXTRA_SNIPPETS.map((it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`).join("")}
         <span class="nsc-mde-sep"></span>
         <button type="button" class="nsc-mde-btn" data-role="undo" title="撤销">${ICONS.undo}</button>
         <button type="button" class="nsc-mde-btn" data-role="redo" title="重做">${ICONS.redo}</button>
         <button type="button" class="nsc-mde-btn" data-role="clear" title="清空内容">${ICONS.eraser}</button>
+        <button type="button" class="nsc-mde-btn nsc-mde-ni-btn" data-role="ni-btn" title="NodeImage 图床上传与管理" style="margin-left:auto;">${ICONS.imgHost}<span class="nsc-ni-dot"></span></button>
       </div>
       <div class="nsc-u-body">
         <textarea class="nsc-fallback-textarea" id="${prefix}-unified-ta" placeholder="${escHtml(opts.placeholder || "支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发送")}"></textarea>
@@ -1390,8 +1491,7 @@
       </div>
       <div class="topic-select nsc-composer-footer">
         <div style="display:inline-flex;align-items:center;gap:8px;min-width:0;">
-          <button type="button" class="nsc-nodeimage-btn" data-role="ni-btn" title="NodeImage 图床上传/管理"><span class="nsc-ni-dot"></span>图床</button>
-          <span id="${prefix}-unified-status" class="nsc-ni-status" style="font-size:11px;color:var(--nsc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">支持完整 Markdown · Ctrl+V 贴图 · Ctrl+Enter 发送</span>
+          <span id="${prefix}-unified-status" class="nsc-ni-status" style="font-size:11px;color:var(--nsc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">支持完整 Markdown · Ctrl+V 贴图 · 工具栏右上角可打开图床</span>
         </div>
         <button type="button" class="submit btn nsc-send-btn" id="${prefix}-unified-send" ${opts.hideFooterSubmit ? 'style="display:none;"' : ""}>发布评论</button>
       </div>
@@ -1800,31 +1900,68 @@
       appTabBtn.addEventListener("click", () => positionAppPopover(editor));
     }
 
-    const topicFooter = editor.querySelector(".topic-select");
-    if (topicFooter && !topicFooter.querySelector(".nsc-nodeimage-btn")) {
-      const leftSlot = topicFooter.querySelector("div:first-child");
-      const imgHostBtn = document.createElement("button");
-      imgHostBtn.type = "button";
-      imgHostBtn.className = "nsc-nodeimage-btn";
-      imgHostBtn.title = "NodeImage 图床上传与授权";
-      imgHostBtn.innerHTML = `<span class="nsc-ni-dot"></span>图床`;
-      imgHostBtn.addEventListener("click", () => {
+    const mdeToolbar = editor.querySelector(".mde-toolbar");
+    if (mdeToolbar && !mdeToolbar.querySelector(".nsc-mde-extra-sep")) {
+      const sep1 = document.createElement("div");
+      sep1.className = "sep nsc-mde-extra-sep";
+      mdeToolbar.appendChild(sep1);
+      for (const snip of EDITOR_EXTRA_SNIPPETS) {
+        const b = document.createElement("span");
+        b.className = "toolbar-item nsc-mde-extra-btn";
+        b.title = snip.title;
+        b.innerHTML = snip.icon();
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ensureNativeEditorWriteTab(editor);
+          const cm = getNativeCodeMirror(editor);
+          if (cm) insertSnippetIntoNativeCm(cm, snip.tpl);
+          if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
+        });
+        mdeToolbar.appendChild(b);
+      }
+      const sep2 = document.createElement("div");
+      sep2.className = "sep";
+      mdeToolbar.appendChild(sep2);
+
+      const clearBtn = document.createElement("span");
+      clearBtn.className = "toolbar-item";
+      clearBtn.title = "清空内容";
+      clearBtn.innerHTML = ICONS.eraser;
+      clearBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setNativeEditorValue(editor, "");
+      });
+      mdeToolbar.appendChild(clearBtn);
+
+      const niBtn = document.createElement("span");
+      niBtn.className = "toolbar-item nsc-mde-ni-btn";
+      niBtn.title = "NodeImage 图床上传与管理";
+      niBtn.style.marginLeft = "auto";
+      niBtn.innerHTML = `${ICONS.imgHost}<span class="nsc-ni-dot"></span>`;
+      niBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const mode = editor.closest("#nsc-newpost-backdrop") ? "newpost" : (state.activePmPeer ? "pm" : "chat");
         openNodeImageModal(mode);
       });
+      mdeToolbar.appendChild(niBtn);
+      NodeImage.syncDots();
+    }
+
+    const topicFooter = editor.querySelector(".topic-select");
+    if (topicFooter && !topicFooter.querySelector(".nsc-ni-status")) {
+      const leftSlot = topicFooter.querySelector("div:first-child");
       if (leftSlot) {
         leftSlot.style.cssText = "display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--nsc-muted);min-width:0;";
         leftSlot.innerHTML = "";
-        leftSlot.appendChild(imgHostBtn);
         const hint = document.createElement("span");
         hint.className = "nsc-ni-status";
         hint.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
         hint.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
         leftSlot.appendChild(hint);
-      } else {
-        topicFooter.insertBefore(imgHostBtn, topicFooter.firstChild);
       }
-      NodeImage.syncDots();
     }
 
     editor.addEventListener("keydown", (e) => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.29
+// @version      7.22.30
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -17,6 +17,7 @@
 // @connect      api.nodeimage.com
 // @connect      nodeimage.com
 // @connect      www.nodeimage.com
+// @connect      cdn.nodeimage.com
 // @connect      raw.githubusercontent.com
 // @connect      api.github.com
 // @connect      api.xxboxx.de
@@ -159,6 +160,25 @@
     redo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>`,
     fullscreen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`,
     eraser: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21h10"/><path d="M5.5 13.5l8-8a2.1 2.1 0 0 1 3 0l3 3a2.1 2.1 0 0 1 0 3l-6.5 6.5a2 2 0 0 1-1.4.6H7.2a2 2 0 0 1-1.4-.6l-1.3-1.3a2.1 2.1 0 0 1 0-3z"/><path d="M10.5 8.5l5 5"/></svg>`,
+    bold: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>`,
+    italic: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>`,
+    strike: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/></svg>`,
+    heading: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16"/><path d="M18 4v16"/><path d="M6 12h12"/></svg>`,
+    listUl: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="5" cy="6" r="1" fill="currentColor"/><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="5" cy="18" r="1" fill="currentColor"/></svg>`,
+    listOl: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>`,
+    codeInline: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="13.5" y1="5" x2="10.5" y2="19"/></svg>`,
+    codeBlock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="9 9 6.5 12 9 15"/><polyline points="15 9 17.5 12 15 15"/></svg>`,
+    terminal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="7 9 10.5 12 7 15"/><line x1="12.5" y1="15" x2="17" y2="15"/></svg>`,
+    table: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="4" x2="12" y2="20"/></svg>`,
+    hr: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="8" y2="12"/><circle cx="12" cy="12" r="1" fill="currentColor"/><line x1="16" y1="12" x2="20" y2="12"/></svg>`,
+    tip: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>`,
+    note: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="12"/><circle cx="12" cy="8" r="0.8" fill="currentColor"/></svg>`,
+    details: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polyline points="9 13 12 16 15 13"/></svg>`,
+    tabs: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="4" x2="9" y2="9"/><line x1="15" y1="4" x2="15" y2="9"/></svg>`,
+    imgHost: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+    tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    insert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 19h14"/></svg>`,
+    zoomIn: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -321,7 +341,7 @@
     checkinToday: loadJson(LS.CHECKIN_TODAY, { date: "", gain: null, current: null, mode: "" }),
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.29",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.30",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -3270,10 +3290,10 @@
       .nsc-composer-dock .mde-toolbar .toolbar-item,
       #nsc-np-editor-host .mde-toolbar .toolbar-item {
         display: inline-flex !important; align-items: center !important; justify-content: center !important;
-        width: 23px !important; height: 21px !important; padding: 0 !important; border-radius: 5px !important;
-        flex: 0 0 auto !important;
+        width: 24px !important; height: 22px !important; padding: 0 !important; border-radius: 6px !important;
+        flex: 0 0 auto !important; position: relative;
         border: none; background: transparent;
-        color: var(--nsc-muted) !important; transition: none !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
+        color: var(--nsc-muted) !important; transition: background 0.12s ease, color 0.12s ease !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
       }
       .nsc-mde-btn:hover,
       .nsc-composer-dock .mde-toolbar .toolbar-item:hover,
@@ -3281,7 +3301,16 @@
         background: var(--nsc-accent-soft) !important; color: var(--nsc-accent) !important;
       }
       .nsc-composer-dock .mde-toolbar .toolbar-item svg,
-      #nsc-np-editor-host .mde-toolbar .toolbar-item svg { width: 13px !important; height: 13px !important; }
+      #nsc-np-editor-host .mde-toolbar .toolbar-item svg,
+      .nsc-mde-btn svg { width: 14px !important; height: 14px !important; }
+      .nsc-composer-dock .mde-toolbar .sep,
+      #nsc-np-editor-host .mde-toolbar .sep {
+        width: 1px; height: 13px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px;
+      }
+      .nsc-mde-ni-btn .nsc-ni-dot {
+        position: absolute; top: 2px; right: 2px; width: 5px; height: 5px;
+        border-radius: 50%; border: 1px solid var(--nsc-bg-card);
+      }
       .nsc-composer-dock .md-editor:not(.fullscreen) .CodeMirror {
         height: 132px !important; min-height: 132px !important; max-height: 132px !important;
         font-size: 13px !important; line-height: 1.5 !important;
@@ -3855,28 +3884,106 @@
       }
       #nsc-ni-backdrop.is-open { display: flex; }
       .nsc-ni-modal {
-        width: min(820px, 94vw); max-height: 88vh;
+        width: min(880px, 95vw); max-height: 88vh;
         background: var(--nsc-bg-card); color: var(--nsc-text);
-        border: 1px solid var(--nsc-border); border-radius: 16px;
+        border: 1px solid var(--nsc-border); border-radius: 14px;
         box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
         display: flex; flex-direction: column; overflow: hidden;
       }
+      .nsc-ni-settings {
+        display: none; flex-direction: column; gap: 8px;
+        padding: 10px 12px; border-radius: 9px;
+        background: var(--nsc-hover); border: 1px solid var(--nsc-border);
+      }
+      .nsc-ni-settings.is-open { display: flex; }
+      .nsc-ni-toolbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        min-height: 28px;
+      }
+      .nsc-ni-batch-bar {
+        display: none; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        padding: 6px 10px; border-radius: 8px;
+        background: var(--nsc-accent-soft); border: 1px solid rgba(0, 122, 255, 0.22);
+        font-size: 12px;
+      }
+      .nsc-ni-batch-bar.is-open { display: flex; }
       .nsc-ni-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        gap: 12px; max-height: 52vh; overflow-y: auto; padding: 4px;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+        gap: 11px; max-height: 58vh; overflow-y: auto; padding: 2px;
+        contain: layout style;
       }
+      .nsc-ni-dropcard {
+        border: 1.5px dashed var(--nsc-border); border-radius: 10px; min-height: 186px;
+        background: var(--nsc-hover); color: var(--nsc-muted);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 6px; padding: 12px; text-align: center; cursor: pointer;
+        transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+      }
+      .nsc-ni-dropcard:hover {
+        border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft);
+      }
+      .nsc-ni-dropcard svg { width: 26px; height: 26px; }
       .nsc-ni-card {
-        border: 1px solid var(--nsc-border); border-radius: 10px; overflow: hidden;
-        background: var(--nsc-hover); display: flex; flex-direction: column;
-        transition: border-color 0.14s ease, box-shadow 0.14s ease;
+        position: relative; border: 1px solid var(--nsc-border); border-radius: 10px; overflow: hidden;
+        background: var(--nsc-bg-card); display: flex; flex-direction: column;
+        content-visibility: auto; contain-intrinsic-size: 168px 186px;
+        transition: border-color 0.14s ease;
       }
-      .nsc-ni-card:hover { border-color: var(--nsc-accent); box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
-      .nsc-ni-card img {
-        width: 100%; height: 138px; box-sizing: border-box; padding: 4px;
-        object-fit: contain; cursor: pointer; display: block;
-        background: rgba(128, 128, 128, 0.06); image-rendering: auto;
+      .nsc-ni-card:hover { border-color: var(--nsc-accent); }
+      .nsc-ni-card.is-selected { border-color: var(--nsc-accent); box-shadow: 0 0 0 2px var(--nsc-accent-soft); }
+      .nsc-ni-thumb-wrap {
+        position: relative; height: 124px; background: rgba(128, 128, 128, 0.06);
+        overflow: hidden; cursor: pointer;
       }
-      .nsc-ni-card-ops { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; gap: 6px; font-size: 11px; border-top: 1px solid var(--nsc-border); }
+      .nsc-ni-thumb-wrap img {
+        width: 100%; height: 100%; box-sizing: border-box; padding: 4px;
+        object-fit: contain; display: block;
+      }
+      .nsc-ni-chk {
+        position: absolute; top: 6px; left: 6px; z-index: 2;
+        width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--nsc-accent);
+      }
+      .nsc-ni-overlay-btn {
+        position: absolute; z-index: 2; width: 24px; height: 24px; padding: 0;
+        border-radius: 6px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-card); color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; opacity: 0.88; transition: all 0.12s ease;
+      }
+      .nsc-ni-overlay-btn svg { width: 13px; height: 13px; }
+      .nsc-ni-overlay-btn:hover { opacity: 1; }
+      .nsc-ni-del { top: 6px; right: 6px; }
+      .nsc-ni-del:hover { color: #ff3b30; border-color: rgba(255, 59, 48, 0.45); background: rgba(255, 59, 48, 0.10); }
+      .nsc-ni-zoom { bottom: 6px; left: 6px; }
+      .nsc-ni-zoom:hover { color: var(--nsc-text); border-color: var(--nsc-accent); }
+      .nsc-ni-ins {
+        bottom: 6px; right: 6px;
+        color: var(--nsc-accent); border-color: rgba(0, 122, 255, 0.30);
+      }
+      .nsc-ni-ins:hover { background: var(--nsc-accent); color: #fff; border-color: var(--nsc-accent); }
+      .nsc-ni-meta {
+        padding: 6px 8px 7px; border-top: 1px solid var(--nsc-border);
+        display: flex; flex-direction: column; gap: 4px;
+      }
+      .nsc-ni-fname {
+        font-size: 11px; font-weight: 600; color: var(--nsc-text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .nsc-ni-sub {
+        display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        font-size: 10px; color: var(--nsc-muted);
+      }
+      .nsc-ni-fmts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 1px; }
+      .nsc-ni-fmt-btn {
+        height: 21px; padding: 0; border-radius: 5px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-hover); color: var(--nsc-muted);
+        font-size: 10.5px; font-weight: 600; cursor: pointer;
+      }
+      .nsc-ni-fmt-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-ni-more-row {
+        grid-column: 1 / -1; display: flex; align-items: center; justify-content: center;
+        padding: 6px 0 2px;
+      }
 
       #nsc-hub-backdrop {
         position: fixed; inset: 0; z-index: 9400;
@@ -4789,6 +4896,101 @@
   let niBackdrop = null;
   let niTargetMode = "chat";
   let niFileInput = null;
+  const _niThumbCache = new Map();
+  const _niThumbQueue = [];
+  let _niThumbActive = 0;
+
+  function formatNiBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function formatNiDate(raw) {
+    if (!raw) return "";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10);
+    const pad = (x) => String(x).padStart(2, "0");
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+  }
+
+  async function buildCompressedThumbUrl(directUrl) {
+    if (typeof GM_xmlhttpRequest !== "function" || typeof createImageBitmap !== "function") {
+      return directUrl;
+    }
+    if (/\.gif(\?|$)/i.test(directUrl)) return directUrl;
+    const blob = await new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: directUrl,
+        responseType: "blob",
+        timeout: 12000,
+        onload: (r) => (r.status >= 200 && r.status < 300 && r.response ? resolve(r.response) : reject(new Error("fetch_fail"))),
+        onerror: () => reject(new Error("net_err")),
+        ontimeout: () => reject(new Error("timeout")),
+      });
+    });
+    if (blob.size && blob.size <= 45 * 1024) {
+      return URL.createObjectURL(blob);
+    }
+    const bmp = await createImageBitmap(blob);
+    try {
+      const maxW = 320;
+      const scale = bmp.width > maxW ? maxW / bmp.width : 1;
+      const w = Math.max(1, Math.round(bmp.width * scale));
+      const h = Math.max(1, Math.round(bmp.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return URL.createObjectURL(blob);
+      ctx.drawImage(bmp, 0, 0, w, h);
+      const outBlob = await new Promise((res) => canvas.toBlob(res, "image/webp", 0.78));
+      return URL.createObjectURL(outBlob || blob);
+    } finally {
+      if (typeof bmp.close === "function") bmp.close();
+    }
+  }
+
+  function pumpNiThumbQueue() {
+    while (_niThumbActive < 3 && _niThumbQueue.length > 0) {
+      const job = _niThumbQueue.shift();
+      if (!job || !job.imgEl || !job.imgEl.isConnected) continue;
+      if (_niThumbCache.has(job.key)) {
+        job.imgEl.src = _niThumbCache.get(job.key);
+        continue;
+      }
+      _niThumbActive += 1;
+      buildCompressedThumbUrl(job.url)
+        .then((thumbSrc) => {
+          _niThumbCache.set(job.key, thumbSrc);
+          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = thumbSrc;
+        })
+        .catch(() => {
+          if (job.imgEl && job.imgEl.isConnected) job.imgEl.src = job.url;
+        })
+        .finally(() => {
+          _niThumbActive = Math.max(0, _niThumbActive - 1);
+          pumpNiThumbQueue();
+        });
+    }
+  }
+
+  function attachNiThumb(imgEl, directUrl, apiThumbUrl, cacheKey) {
+    if (!imgEl) return;
+    if (apiThumbUrl) {
+      imgEl.src = apiThumbUrl;
+      return;
+    }
+    if (_niThumbCache.has(cacheKey)) {
+      imgEl.src = _niThumbCache.get(cacheKey);
+      return;
+    }
+    _niThumbQueue.push({ imgEl, url: directUrl, key: cacheKey });
+    pumpNiThumbQueue();
+  }
 
   function openNodeImageModal(targetMode = "chat") {
     niTargetMode = targetMode;
@@ -4796,31 +4998,44 @@
       niBackdrop = document.createElement("div");
       niBackdrop.id = "nsc-ni-backdrop";
       niBackdrop.innerHTML = `
-        <div class="nsc-ni-modal" role="dialog" aria-label="NodeImage 图床关联与上传">
+        <div class="nsc-ni-modal" role="dialog" aria-label="NodeImage 图床管理">
           <div class="nsc-newpost-head">
-            <span style="font-size:14px;font-weight:700;">NodeImage 图床 · 授权与传图</span>
-            <button type="button" id="nsc-ni-close" style="border:none;background:transparent;color:var(--nsc-muted);font-size:16px;cursor:pointer;">✕</button>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              <span style="font-size:14px;font-weight:700;">NodeImage 图床</span>
+              <span class="nsc-badge-read" id="nsc-ni-auth-pill" style="font-weight:600;">检测中</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <button type="button" class="nsc-mini-btn" id="nsc-ni-toggle-settings">设置</button>
+              <button type="button" class="nsc-mini-btn" id="nsc-ni-load-list">刷新</button>
+              <button type="button" id="nsc-ni-close" style="border:none;background:transparent;color:var(--nsc-muted);font-size:16px;cursor:pointer;padding:0 4px;">✕</button>
+            </div>
           </div>
-          <div class="nsc-newpost-body" style="gap:10px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 10px;border-radius:10px;background:var(--nsc-hover);">
-              <div style="font-size:12px;">
-                状态：<strong id="nsc-ni-auth-state">检测中...</strong>
+          <div class="nsc-newpost-body" style="gap:9px;overflow:hidden;">
+            <div class="nsc-ni-settings" id="nsc-ni-settings">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:12px;">状态：<strong id="nsc-ni-auth-state">检测中...</strong></span>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" class="nsc-mini-btn" id="nsc-ni-detect">自动检测授权</button>
+                  <a class="nsc-mini-btn" href="https://www.nodeimage.com/" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">去 NodeImage 登录授权 ↗</a>
+                </div>
               </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button type="button" class="nsc-mini-btn" id="nsc-ni-detect">自动检测授权</button>
-                <a class="nsc-mini-btn" href="https://www.nodeimage.com/" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">去 NodeImage 登录授权 ↗</a>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="password" id="nsc-ni-key-input" class="nsc-search-input" placeholder="或直接粘贴 NodeImage API Key..." style="flex:1;" />
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-save-key">保存 Key</button>
               </div>
             </div>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <input type="password" id="nsc-ni-key-input" class="nsc-search-input" placeholder="或直接粘贴 NodeImage API Key..." style="flex:1;" />
-              <button type="button" class="nsc-mini-btn" id="nsc-ni-save-key">保存 Key</button>
+            <div class="nsc-ni-toolbar">
+              <span id="nsc-ni-tip" style="font-size:11.5px;color:var(--nsc-muted);">支持拖拽或 Ctrl+V 粘贴传图，默认仅加载最近 12 张压缩预览</span>
+              <button type="button" class="nsc-mini-btn" id="nsc-ni-pick-btn">选择图片上传</button>
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-              <div style="display:flex;gap:6px;">
-                <button type="button" class="nsc-newpost-btn" id="nsc-ni-pick-btn">选择图片上传</button>
-                <button type="button" class="nsc-mini-btn" id="nsc-ni-load-list">加载我的图床</button>
+            <div class="nsc-ni-batch-bar" id="nsc-ni-batch-bar">
+              <span id="nsc-ni-batch-count" style="font-weight:600;color:var(--nsc-text);">已选 0 张</span>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-sel-all">全选已加载</button>
+                <button type="button" class="nsc-mac-btn primary" id="nsc-ni-batch-ins" style="height:24px;padding:0 10px;font-size:11.5px;">批量插入</button>
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-batch-del" style="color:#ff3b30;border-color:rgba(255,59,48,0.35);">批量删除</button>
+                <button type="button" class="nsc-mini-btn" id="nsc-ni-sel-clear">取消</button>
               </div>
-              <span id="nsc-ni-tip" style="font-size:11px;color:var(--nsc-muted);">授权后支持在任意编辑框 Ctrl+V 粘贴图片直传</span>
             </div>
             <div class="nsc-ni-grid" id="nsc-ni-grid"></div>
           </div>
@@ -4838,119 +5053,350 @@
       niBackdrop.addEventListener("click", (e) => { if (e.target === niBackdrop) closeNi(); });
       niBackdrop.querySelector("#nsc-ni-close").addEventListener("click", closeNi);
 
-      const refreshAuthUi = () => {
+      const settingsPanel = niBackdrop.querySelector("#nsc-ni-settings");
+      const toggleSettingsBtn = niBackdrop.querySelector("#nsc-ni-toggle-settings");
+      const batchBar = niBackdrop.querySelector("#nsc-ni-batch-bar");
+      const batchCountEl = niBackdrop.querySelector("#nsc-ni-batch-count");
+      const batchDelBtn = niBackdrop.querySelector("#nsc-ni-batch-del");
+      const grid = niBackdrop.querySelector("#nsc-ni-grid");
+      const tip = niBackdrop.querySelector("#nsc-ni-tip");
+
+      let _niImages = [];
+      let _niDisplayCount = 12;
+      const _niSelected = new Set();
+      let _batchDelConfirm = false;
+
+      const syncBatchBar = () => {
+        const cnt = _niSelected.size;
+        batchBar.classList.toggle("is-open", cnt > 0);
+        if (batchCountEl) batchCountEl.textContent = `已选 ${cnt} 张`;
+        if (cnt === 0) {
+          _batchDelConfirm = false;
+          if (batchDelBtn) batchDelBtn.textContent = "批量删除";
+        }
+      };
+
+      const refreshAuthUi = (forceShowSettings = false) => {
         const k = NodeImage.getKey();
         const stEl = niBackdrop.querySelector("#nsc-ni-auth-state");
+        const pillEl = niBackdrop.querySelector("#nsc-ni-auth-pill");
         const inp = niBackdrop.querySelector("#nsc-ni-key-input");
         if (stEl) {
           stEl.textContent = k ? "已关联授权（支持 Ctrl+V 粘贴上传）" : "未授权（请先登录 NodeImage 后点自动检测）";
           stEl.style.color = k ? "var(--nsc-green)" : "#ff3b30";
         }
+        if (pillEl) {
+          pillEl.textContent = k ? "已授权" : "未授权";
+          pillEl.style.color = k ? "var(--nsc-green)" : "#ff3b30";
+          pillEl.style.borderColor = k ? "rgba(52,199,89,0.45)" : "rgba(255,59,48,0.4)";
+        }
+        if (settingsPanel) {
+          settingsPanel.classList.toggle("is-open", forceShowSettings || !k);
+        }
         if (inp && k && !inp.value) inp.value = k;
         NodeImage.syncDots();
       };
 
+      toggleSettingsBtn.addEventListener("click", () => {
+        settingsPanel.classList.toggle("is-open");
+      });
+
+      const getImgUrls = (im) => {
+        const directUrl = (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`;
+        const apiThumb = (im.links && (im.links.thumb || im.links.thumbnail)) || im.thumbnail_url || im.thumb_url || "";
+        const md = (im.links && im.links.markdown) || `![image](${directUrl})`;
+        const htmlTag = (im.links && im.links.html) || `<img src="${directUrl}" alt="image" />`;
+        return { directUrl, apiThumb, md, htmlTag };
+      };
+
+      const renderNiGrid = () => {
+        _niThumbQueue.length = 0;
+        grid.innerHTML = "";
+
+        const dropCard = document.createElement("button");
+        dropCard.type = "button";
+        dropCard.className = "nsc-ni-dropcard";
+        dropCard.innerHTML = `
+          ${ICONS.imgHost}
+          <span style="font-size:12px;font-weight:700;">上传或拖拽图片</span>
+          <span style="font-size:10.5px;opacity:0.85;">支持多选 · Ctrl+V 粘贴直传</span>
+        `;
+        dropCard.addEventListener("click", () => niFileInput.click());
+        grid.appendChild(dropCard);
+
+        const visible = _niImages.slice(0, _niDisplayCount);
+        const galleryUrls = visible.map((im) => getImgUrls(im).directUrl);
+
+        for (const im of visible) {
+          const idKey = String(im.image_id || "");
+          const { directUrl, apiThumb, md, htmlTag } = getImgUrls(im);
+          const isSel = _niSelected.has(idKey);
+          const fname = im.filename || im.name || `${idKey || "image"}`;
+          const sizeStr = formatNiBytes(im.size || im.file_size || 0);
+          const dateStr = formatNiDate(im.created_at || im.uploaded_at || "");
+
+          const card = document.createElement("div");
+          card.className = "nsc-ni-card" + (isSel ? " is-selected" : "");
+          card.innerHTML = `
+            <div class="nsc-ni-thumb-wrap" title="点击直接插入到编辑器">
+              <input type="checkbox" class="nsc-ni-chk" ${isSel ? "checked" : ""} title="多选" />
+              <button type="button" class="nsc-ni-overlay-btn nsc-ni-del" title="删除图片">${ICONS.trash}</button>
+              <img decoding="async" alt="" />
+              <button type="button" class="nsc-ni-overlay-btn nsc-ni-zoom" title="查看大图">${ICONS.zoomIn}</button>
+              <button type="button" class="nsc-ni-overlay-btn nsc-ni-ins" title="插入 Markdown">${ICONS.insert}</button>
+            </div>
+            <div class="nsc-ni-meta">
+              <div class="nsc-ni-fname" title="${escHtml(fname)}">${escHtml(fname)}</div>
+              <div class="nsc-ni-sub">
+                <span>${escHtml(dateStr || "NodeImage")}</span>
+                <span>${escHtml(sizeStr || "")}</span>
+              </div>
+              <div class="nsc-ni-fmts">
+                <button type="button" class="nsc-ni-fmt-btn" data-fmt="md" title="复制 Markdown">MD</button>
+                <button type="button" class="nsc-ni-fmt-btn" data-fmt="url" title="复制图片直链">URL</button>
+                <button type="button" class="nsc-ni-fmt-btn" data-fmt="html" title="复制 HTML 代码">HTML</button>
+              </div>
+            </div>
+          `;
+
+          const imgEl = card.querySelector("img");
+          attachNiThumb(imgEl, directUrl, apiThumb, idKey || directUrl);
+
+          const chk = card.querySelector(".nsc-ni-chk");
+          chk.addEventListener("click", (e) => e.stopPropagation());
+          chk.addEventListener("change", () => {
+            if (!idKey) return;
+            if (chk.checked) _niSelected.add(idKey);
+            else _niSelected.delete(idKey);
+            card.classList.toggle("is-selected", chk.checked);
+            syncBatchBar();
+          });
+
+          const insFn = () => {
+            NodeImage.insertToTarget(niTargetMode, md);
+            closeNi();
+          };
+          card.querySelector(".nsc-ni-thumb-wrap").addEventListener("click", (e) => {
+            if (e.target.closest("button, input")) return;
+            insFn();
+          });
+          card.querySelector(".nsc-ni-ins").addEventListener("click", (e) => {
+            e.stopPropagation();
+            insFn();
+          });
+          card.querySelector(".nsc-ni-zoom").addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (typeof openLightbox === "function") openLightbox(directUrl, galleryUrls);
+          });
+
+          const delBtn = card.querySelector(".nsc-ni-del");
+          let delConfirmTimer = 0;
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!idKey) return;
+            if (delBtn.dataset.armed !== "1") {
+              delBtn.dataset.armed = "1";
+              delBtn.style.width = "auto";
+              delBtn.style.padding = "0 6px";
+              delBtn.style.fontSize = "10.5px";
+              delBtn.style.fontWeight = "700";
+              delBtn.style.color = "#ff3b30";
+              delBtn.textContent = "删?";
+              clearTimeout(delConfirmTimer);
+              delConfirmTimer = setTimeout(() => {
+                if (!delBtn.isConnected) return;
+                delBtn.dataset.armed = "";
+                delBtn.style.width = "";
+                delBtn.style.padding = "";
+                delBtn.innerHTML = ICONS.trash;
+              }, 2600);
+              return;
+            }
+            delBtn.disabled = true;
+            const ok = await NodeImage.deleteImage(idKey).catch(() => false);
+            if (ok) {
+              _niImages = _niImages.filter((x) => String(x.image_id || "") !== idKey);
+              _niSelected.delete(idKey);
+              syncBatchBar();
+              renderNiGrid();
+              if (tip) tip.textContent = `已删除图片，当前共 ${_niImages.length} 张`;
+            } else {
+              delBtn.disabled = false;
+              if (tip) tip.textContent = "删除失败，请稍后重试";
+            }
+          });
+
+          card.querySelectorAll(".nsc-ni-fmt-btn").forEach((fb) => {
+            fb.addEventListener("click", async () => {
+              const fmt = fb.dataset.fmt;
+              const txt = fmt === "url" ? directUrl : fmt === "html" ? htmlTag : md;
+              const copied = await copyTextToClipboard(txt);
+              if (copied) {
+                const orig = fb.textContent;
+                fb.textContent = "已复制";
+                setTimeout(() => { fb.textContent = orig; }, 1000);
+              }
+            });
+          });
+
+          grid.appendChild(card);
+        }
+
+        if (_niImages.length > _niDisplayCount) {
+          const remain = _niImages.length - _niDisplayCount;
+          const moreRow = document.createElement("div");
+          moreRow.className = "nsc-ni-more-row";
+          moreRow.innerHTML = `<button type="button" class="nsc-mini-btn" id="nsc-ni-more-btn">显示更多压缩预览（再加载 ${Math.min(12, remain)} 张 · 剩余 ${remain} 张）</button>`;
+          moreRow.querySelector("#nsc-ni-more-btn").addEventListener("click", () => {
+            _niDisplayCount += 12;
+            renderNiGrid();
+          });
+          grid.appendChild(moreRow);
+        }
+      };
+
+      const loadNiImages = async () => {
+        grid.innerHTML = `<div style="padding:18px;font-size:12px;color:var(--nsc-muted);">正在加载图床列表...</div>`;
+        try {
+          _niImages = await NodeImage.listImages();
+          _niDisplayCount = 12;
+          _niSelected.clear();
+          syncBatchBar();
+          renderNiGrid();
+          if (tip) {
+            tip.textContent = _niImages.length > 0
+              ? `共 ${_niImages.length} 张 · 默认仅预览最近 ${Math.min(12, _niImages.length)} 张（点击图片插入，右上角垃圾桶删除）`
+              : "暂无图片，点击首格卡片或 Ctrl+V 即可上传";
+          }
+        } catch (err) {
+          grid.innerHTML = `<div style="padding:18px;font-size:12px;color:#ff3b30;">加载失败: ${escHtml(err.message)}</div>`;
+        }
+      };
+
+      const handleUploadFiles = async (files) => {
+        const imgs = Array.from(files || []).filter((f) => f && f.type && f.type.startsWith("image/"));
+        if (imgs.length === 0) return;
+        const insertedMds = [];
+        for (const f of imgs) {
+          if (tip) tip.textContent = `正在上传 ${f.name}...`;
+          try {
+            const md = await NodeImage.uploadFile(f);
+            insertedMds.push(md);
+          } catch (err) {
+            if (tip) tip.textContent = "上传失败: " + err.message;
+          }
+        }
+        if (insertedMds.length > 0) {
+          NodeImage.insertToTarget(niTargetMode, insertedMds.join("\n"));
+          if (tip) tip.textContent = `已上传并插入 ${insertedMds.length} 张图片`;
+          closeNi();
+        }
+      };
+
+      niBackdrop.querySelector(".nsc-ni-modal").addEventListener("drop", (e) => {
+        const files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleUploadFiles(files);
+        }
+      });
+      niBackdrop.querySelector(".nsc-ni-modal").addEventListener("dragover", (e) => {
+        if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) {
+          e.preventDefault();
+        }
+      });
+
       niBackdrop.querySelector("#nsc-ni-detect").addEventListener("click", async () => {
-        const tip = niBackdrop.querySelector("#nsc-ni-tip");
         if (tip) tip.textContent = "正在连接 api.nodeimage.com 获取授权...";
         const k = await NodeImage.checkAuth();
-        refreshAuthUi();
+        refreshAuthUi(!k);
         if (tip) tip.textContent = k ? "授权关联成功！" : "未检测到登录态，请先点击「去 NodeImage 登录授权」完成关联";
+        if (k) loadNiImages();
       });
 
       niBackdrop.querySelector("#nsc-ni-save-key").addEventListener("click", () => {
         const val = niBackdrop.querySelector("#nsc-ni-key-input").value.trim();
         NodeImage.setKey(val);
-        refreshAuthUi();
+        refreshAuthUi(!val);
+        if (val) loadNiImages();
       });
 
       niBackdrop.querySelector("#nsc-ni-pick-btn").addEventListener("click", () => niFileInput.click());
-      niFileInput.addEventListener("change", async () => {
+      niFileInput.addEventListener("change", () => {
         const files = Array.from(niFileInput.files || []);
         niFileInput.value = "";
-        if (files.length === 0) return;
-        const tip = niBackdrop.querySelector("#nsc-ni-tip");
-        for (const f of files) {
-          if (tip) tip.textContent = `正在上传 ${f.name}...`;
-          try {
-            const md = await NodeImage.uploadFile(f);
-            NodeImage.insertToTarget(niTargetMode, md);
-            if (tip) tip.textContent = "上传并插入成功！";
-            closeNi();
-          } catch (err) {
-            if (tip) tip.textContent = "上传失败: " + err.message;
-          }
-        }
+        handleUploadFiles(files);
       });
 
-      niBackdrop.querySelector("#nsc-ni-load-list").addEventListener("click", async () => {
-        const grid = niBackdrop.querySelector("#nsc-ni-grid");
-        const tip = niBackdrop.querySelector("#nsc-ni-tip");
-        grid.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--nsc-muted);">加载中...</div>`;
-        try {
-          const imgs = await NodeImage.listImages();
-          grid.innerHTML = "";
-          if (imgs.length === 0) {
-            grid.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--nsc-muted);">暂无已上传图片</div>`;
-            return;
-          }
-          const sliced = imgs.slice(0, 30);
-          const galleryUrls = sliced.map((im) => (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`);
-          for (const im of sliced) {
-            const directUrl = (im.links && im.links.direct) || im.url || `https://cdn.nodeimage.com/i/${im.image_id}.png`;
-            const md = (im.links && im.links.markdown) || `![image](${directUrl})`;
-            const card = document.createElement("div");
-            card.className = "nsc-ni-card";
-            card.innerHTML = `
-              <img src="${directUrl}" loading="lazy" title="点击插入到编辑器" />
-              <div class="nsc-ni-card-ops">
-                <button type="button" class="nsc-mini-btn" style="padding:2px 8px;font-size:11px;">插入</button>
-                <div style="display:inline-flex;gap:4px;">
-                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;" title="放大查看">看图</button>
-                  <button type="button" class="nsc-mini-btn" style="padding:2px 6px;font-size:11px;color:#ff3b30;">删除</button>
-                </div>
-              </div>
-            `;
-            const insFn = () => { NodeImage.insertToTarget(niTargetMode, md); closeNi(); };
-            const niImg = card.querySelector("img");
-            niImg.addEventListener("click", insFn);
-            card.querySelectorAll("button")[0].addEventListener("click", insFn);
-            card.querySelectorAll("button")[1].addEventListener("click", () => {
-              if (typeof openLightbox === "function") openLightbox(directUrl, galleryUrls);
-            });
-            card.querySelectorAll("button")[2].addEventListener("click", async () => {
-              if (!im.image_id) return;
-              await NodeImage.deleteImage(im.image_id);
-              card.remove();
-            });
-            grid.appendChild(card);
-          }
-          if (tip) tip.textContent = `已加载 ${imgs.length} 张图片，点击即可插入`;
-        } catch (err) {
-          grid.innerHTML = `<div style="padding:12px;font-size:12px;color:#ff3b30;">加载失败: ${err.message}</div>`;
+      niBackdrop.querySelector("#nsc-ni-load-list").addEventListener("click", loadNiImages);
+
+      niBackdrop.querySelector("#nsc-ni-sel-all").addEventListener("click", () => {
+        const visible = _niImages.slice(0, _niDisplayCount);
+        for (const im of visible) {
+          if (im.image_id) _niSelected.add(String(im.image_id));
         }
+        syncBatchBar();
+        renderNiGrid();
       });
+      niBackdrop.querySelector("#nsc-ni-sel-clear").addEventListener("click", () => {
+        _niSelected.clear();
+        syncBatchBar();
+        renderNiGrid();
+      });
+      niBackdrop.querySelector("#nsc-ni-batch-ins").addEventListener("click", () => {
+        const mds = _niImages
+          .filter((im) => _niSelected.has(String(im.image_id || "")))
+          .map((im) => getImgUrls(im).md);
+        if (mds.length === 0) return;
+        NodeImage.insertToTarget(niTargetMode, mds.join("\n"));
+        _niSelected.clear();
+        syncBatchBar();
+        closeNi();
+      });
+      batchDelBtn.addEventListener("click", async () => {
+        if (_niSelected.size === 0) return;
+        if (!_batchDelConfirm) {
+          _batchDelConfirm = true;
+          batchDelBtn.textContent = `确认删除 ${_niSelected.size} 张?`;
+          return;
+        }
+        const ids = Array.from(_niSelected);
+        batchDelBtn.disabled = true;
+        batchDelBtn.textContent = "删除中...";
+        let deleted = 0;
+        for (const id of ids) {
+          const ok = await NodeImage.deleteImage(id).catch(() => false);
+          if (ok) {
+            deleted += 1;
+            _niSelected.delete(id);
+            _niImages = _niImages.filter((x) => String(x.image_id || "") !== id);
+          }
+        }
+        batchDelBtn.disabled = false;
+        _batchDelConfirm = false;
+        batchDelBtn.textContent = "批量删除";
+        syncBatchBar();
+        renderNiGrid();
+        if (tip) tip.textContent = `已批量删除 ${deleted} 张图片`;
+      });
+
+      niBackdrop._refreshAuthUi = refreshAuthUi;
+      niBackdrop._loadNiImages = loadNiImages;
     }
 
-    const stEl = niBackdrop.querySelector("#nsc-ni-auth-state");
     const k = NodeImage.getKey();
-    if (stEl) {
-      stEl.textContent = k ? "已关联授权（支持 Ctrl+V 粘贴上传）" : "未授权（正在检测登录态...）";
-      stEl.style.color = k ? "var(--nsc-green)" : "#ff3b30";
-    }
-    NodeImage.syncDots();
+    if (niBackdrop._refreshAuthUi) niBackdrop._refreshAuthUi(!k);
     niBackdrop.classList.add("is-open");
     const gridEl = niBackdrop.querySelector("#nsc-ni-grid");
-    if (k && gridEl && !gridEl.hasChildNodes()) {
-      niBackdrop.querySelector("#nsc-ni-load-list").click();
+    if (k && gridEl && !gridEl.hasChildNodes() && niBackdrop._loadNiImages) {
+      niBackdrop._loadNiImages();
     }
     if (!k) {
       NodeImage.checkAuth().then((newK) => {
-        if (newK && stEl) {
-          stEl.textContent = "已关联授权（支持 Ctrl+V 粘贴上传）";
-          stEl.style.color = "var(--nsc-green)";
-          const inp = niBackdrop.querySelector("#nsc-ni-key-input");
-          if (inp) inp.value = newK;
+        if (newK) {
+          if (niBackdrop._refreshAuthUi) niBackdrop._refreshAuthUi(false);
+          if (niBackdrop._loadNiImages) niBackdrop._loadNiImages();
         }
       });
     }
@@ -4973,20 +5419,111 @@
   // ==========================================================================
   // Module: 05-shell-composer.js
   // ==========================================================================
+  const EDITOR_EXTRA_SNIPPETS = [
+    {
+      id: "tip",
+      title: "提示框 (> [!TIP])",
+      icon: () => ICONS.tip,
+      tpl: "> [!TIP]\n> @@CURSOR@@",
+    },
+    {
+      id: "note",
+      title: "信息框 (> [!NOTE])",
+      icon: () => ICONS.note,
+      tpl: "> [!NOTE]\n> @@CURSOR@@",
+    },
+    {
+      id: "warn",
+      title: "警告框 (> [!WARNING])",
+      icon: () => ICONS.expose,
+      tpl: "> [!WARNING]\n> @@CURSOR@@",
+    },
+    {
+      id: "details",
+      title: "折叠内容 (:::details)",
+      icon: () => ICONS.details,
+      tpl: ":::details 点击展开\n@@CURSOR@@\n:::",
+    },
+    {
+      id: "tabs",
+      title: "标签模板 (:::: tabs)",
+      icon: () => ICONS.tabs,
+      tpl: ":::: tabs\n::: tab-item 1.\n@@CURSOR@@\n:::\n::: tab-item 2.\n\n:::\n::: tab-item 3.\n\n:::\n::: tab-item 4.\n\n:::\n::: tab-item 5\n\n:::\n::::",
+    },
+    {
+      id: "terminal",
+      title: "终端代码块 (```bash)",
+      icon: () => ICONS.terminal,
+      tpl: "```bash\n@@CURSOR@@\n```",
+    },
+  ];
+
+  function insertSnippetIntoTextarea(ta, rawTpl) {
+    if (!ta) return;
+    const s = ta.selectionStart || 0;
+    const e = ta.selectionEnd || 0;
+    const raw = String(rawTpl || "");
+    const markerIdx = raw.indexOf("@@CURSOR@@");
+    const clean = raw.replace("@@CURSOR@@", "");
+    const before = ta.value.slice(0, s);
+    const needLeadNl = raw.includes("\n") && before.length > 0 && !before.endsWith("\n") ? "\n" : "";
+    const full = `${needLeadNl}${clean}`;
+    ta.setRangeText(full, s, e, "end");
+    if (markerIdx >= 0) {
+      const pos = s + needLeadNl.length + markerIdx;
+      ta.setSelectionRange(pos, pos);
+    }
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+    ta.focus({ preventScroll: true });
+  }
+
+  function insertSnippetIntoNativeCm(cm, rawTpl) {
+    if (!cm || typeof cm.replaceSelection !== "function") return;
+    const raw = String(rawTpl || "");
+    const markerIdx = raw.indexOf("@@CURSOR@@");
+    const clean = raw.replace("@@CURSOR@@", "");
+    const cur = cm.getCursor();
+    const lineTxt = cm.getLine(cur.line) || "";
+    const needLeadNl = raw.includes("\n") && cur.ch > 0 && lineTxt.slice(0, cur.ch).trim() !== "" ? "\n" : "";
+    const full = `${needLeadNl}${clean}`;
+    cm.operation(() => {
+      cm.replaceSelection(full);
+      if (markerIdx >= 0) {
+        const beforeCursor = full.slice(0, needLeadNl.length + markerIdx);
+        const lines = beforeCursor.split("\n");
+        const targetLine = cur.line + lines.length - 1;
+        const targetCh = lines.length === 1 ? cur.ch + lines[0].length : lines[lines.length - 1].length;
+        cm.setCursor({ line: targetLine, ch: targetCh });
+      }
+    });
+    if (typeof cm.refresh === "function") cm.refresh();
+    const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
+    if (inputField && typeof inputField.focus === "function") inputField.focus({ preventScroll: true });
+    else if (typeof cm.focus === "function") cm.focus();
+  }
+
   function buildMarkdownToolbarHtml({ id = "", expBtnId = "", niTarget = "", includeList = false } = {}) {
+    const extraBtns = EDITOR_EXTRA_SNIPPETS.map(
+      (it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`
+    ).join("");
     return `
       <div class="nsc-mde-toolbar"${id ? ` id="${id}"` : ""}>
-        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
-        ${includeList ? `<button type="button" class="nsc-mde-btn" data-prefix="- " title="列表">•</button>` : ""}
-        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">${ICONS.bold}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">${ICONS.italic}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">${ICONS.strike}</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" data-prefix="## " title="标题">${ICONS.heading}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">${ICONS.quote}</button>
+        ${includeList ? `<button type="button" class="nsc-mde-btn" data-prefix="- " title="无序列表">${ICONS.listUl}</button>` : ""}
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">${ICONS.codeInline}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n@@CURSOR@@\n\`\`\`" title="代码块">${ICONS.codeBlock}</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://@@CURSOR@@)" title="链接">${ICONS.links}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://@@CURSOR@@)" title="图片">${ICONS.photo}</button>
+        <span class="nsc-mde-sep"></span>
+        ${extraBtns}
         ${expBtnId ? `<button type="button" class="nsc-mde-btn" id="${expBtnId}" title="插入贴图表情">${ICONS.smile}</button>` : ""}
-        ${niTarget ? `<button type="button" class="nsc-nodeimage-btn" data-ni-btn="${niTarget}" title="NodeImage 图床上传/管理" style="margin-left:auto;"><span class="nsc-ni-dot"></span>图床</button>` : ""}
+        ${niTarget ? `<button type="button" class="nsc-mde-btn nsc-mde-ni-btn" data-ni-btn="${niTarget}" title="NodeImage 图床上传与管理" style="margin-left:auto;">${ICONS.imgHost}<span class="nsc-ni-dot"></span></button>` : ""}
       </div>
     `;
   }
@@ -4995,16 +5532,24 @@
     if (!toolbarEl || !textareaEl) return;
     toolbarEl.querySelectorAll(".nsc-mde-btn[data-wrap], .nsc-mde-btn[data-prefix], .nsc-mde-btn[data-tpl]").forEach((b) => {
       b.addEventListener("click", () => {
+        if (b.dataset.tpl) {
+          insertSnippetIntoTextarea(textareaEl, b.dataset.tpl);
+          return;
+        }
         const s = textareaEl.selectionStart || 0;
         const e = textareaEl.selectionEnd || 0;
         const sel = textareaEl.value.slice(s, e);
         let ins = "";
         if (b.dataset.wrap) ins = `${b.dataset.wrap}${sel || "文本"}${b.dataset.wrap}`;
         else if (b.dataset.prefix) ins = `${b.dataset.prefix}${sel}`;
-        else if (b.dataset.tpl) ins = b.dataset.tpl;
         textareaEl.setRangeText(ins, s, e, "end");
         textareaEl.dispatchEvent(new Event("input", { bubbles: true }));
         textareaEl.focus({ preventScroll: true });
+      });
+    });
+    toolbarEl.querySelectorAll("[data-ni-btn]").forEach((b) => {
+      b.addEventListener("click", () => {
+        openNodeImageModal(b.dataset.niBtn || "edit");
       });
     });
   }
@@ -5265,7 +5810,7 @@
       document.addEventListener("pointerdown", (e) => {
         if (!dockEl.isConnected || dockEl.style.display === "none") return;
         const t = e.target;
-        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-nodeimage-backdrop"))) return;
+        if (t && t.closest && (t.closest("#nsc-composer-dock") || t.closest("#nsc-ni-backdrop"))) return;
         setTimeout(() => syncComposerCompactState(false), 60);
       });
     }
@@ -6313,31 +6858,33 @@
           <button type="button" class="nsc-u-exp-tab sticker-group-app" data-ugroup="app">App</button>
         </div>
         <div class="nsc-u-top-acts">
-          <button type="button" class="nsc-mde-btn" data-role="toggle-tb" title="显示/隐藏工具栏">🛠</button>
+          <button type="button" class="nsc-mde-btn" data-role="toggle-tb" title="显示/隐藏工具栏">${ICONS.tools}</button>
           <button type="button" class="nsc-mde-btn" data-role="toggle-fs" title="全屏编辑">${ICONS.fullscreen}</button>
         </div>
       </div>
       <div class="nsc-mde-toolbar">
-        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">${ICONS.bold}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">${ICONS.italic}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">${ICONS.strike}</button>
         <span class="nsc-mde-sep"></span>
-        <button type="button" class="nsc-mde-btn" data-prefix="## " title="标题">H</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="- " title="无序列表">•</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="1. " title="有序列表">1.</button>
-        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="## " title="标题">${ICONS.heading}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="- " title="无序列表">${ICONS.listUl}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="1. " title="有序列表">${ICONS.listOl}</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">${ICONS.quote}</button>
         <span class="nsc-mde-sep"></span>
-        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
-        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://@@CURSOR@@)" title="链接">${ICONS.links}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://@@CURSOR@@)" title="图片">${ICONS.photo}</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">${ICONS.codeInline}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n@@CURSOR@@\n\`\`\`" title="代码块">${ICONS.codeBlock}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| @@CURSOR@@ | 内容 |\n" title="表格">${ICONS.table}</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\n---\n@@CURSOR@@" title="分割线">${ICONS.hr}</button>
         <span class="nsc-mde-sep"></span>
-        <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| 内容 | 内容 |\n" title="表格">田</button>
-        <button type="button" class="nsc-mde-btn" data-tpl="\n---\n" title="分割线">—</button>
+        ${EDITOR_EXTRA_SNIPPETS.map((it) => `<button type="button" class="nsc-mde-btn" data-tpl="${escHtml(it.tpl)}" title="${escHtml(it.title)}">${it.icon()}</button>`).join("")}
         <span class="nsc-mde-sep"></span>
         <button type="button" class="nsc-mde-btn" data-role="undo" title="撤销">${ICONS.undo}</button>
         <button type="button" class="nsc-mde-btn" data-role="redo" title="重做">${ICONS.redo}</button>
         <button type="button" class="nsc-mde-btn" data-role="clear" title="清空内容">${ICONS.eraser}</button>
+        <button type="button" class="nsc-mde-btn nsc-mde-ni-btn" data-role="ni-btn" title="NodeImage 图床上传与管理" style="margin-left:auto;">${ICONS.imgHost}<span class="nsc-ni-dot"></span></button>
       </div>
       <div class="nsc-u-body">
         <textarea class="nsc-fallback-textarea" id="${prefix}-unified-ta" placeholder="${escHtml(opts.placeholder || "支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发送")}"></textarea>
@@ -6365,8 +6912,7 @@
       </div>
       <div class="topic-select nsc-composer-footer">
         <div style="display:inline-flex;align-items:center;gap:8px;min-width:0;">
-          <button type="button" class="nsc-nodeimage-btn" data-role="ni-btn" title="NodeImage 图床上传/管理"><span class="nsc-ni-dot"></span>图床</button>
-          <span id="${prefix}-unified-status" class="nsc-ni-status" style="font-size:11px;color:var(--nsc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">支持完整 Markdown · Ctrl+V 贴图 · Ctrl+Enter 发送</span>
+          <span id="${prefix}-unified-status" class="nsc-ni-status" style="font-size:11px;color:var(--nsc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">支持完整 Markdown · Ctrl+V 贴图 · 工具栏右上角可打开图床</span>
         </div>
         <button type="button" class="submit btn nsc-send-btn" id="${prefix}-unified-send" ${opts.hideFooterSubmit ? 'style="display:none;"' : ""}>发布评论</button>
       </div>
@@ -6775,31 +7321,68 @@
       appTabBtn.addEventListener("click", () => positionAppPopover(editor));
     }
 
-    const topicFooter = editor.querySelector(".topic-select");
-    if (topicFooter && !topicFooter.querySelector(".nsc-nodeimage-btn")) {
-      const leftSlot = topicFooter.querySelector("div:first-child");
-      const imgHostBtn = document.createElement("button");
-      imgHostBtn.type = "button";
-      imgHostBtn.className = "nsc-nodeimage-btn";
-      imgHostBtn.title = "NodeImage 图床上传与授权";
-      imgHostBtn.innerHTML = `<span class="nsc-ni-dot"></span>图床`;
-      imgHostBtn.addEventListener("click", () => {
+    const mdeToolbar = editor.querySelector(".mde-toolbar");
+    if (mdeToolbar && !mdeToolbar.querySelector(".nsc-mde-extra-sep")) {
+      const sep1 = document.createElement("div");
+      sep1.className = "sep nsc-mde-extra-sep";
+      mdeToolbar.appendChild(sep1);
+      for (const snip of EDITOR_EXTRA_SNIPPETS) {
+        const b = document.createElement("span");
+        b.className = "toolbar-item nsc-mde-extra-btn";
+        b.title = snip.title;
+        b.innerHTML = snip.icon();
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ensureNativeEditorWriteTab(editor);
+          const cm = getNativeCodeMirror(editor);
+          if (cm) insertSnippetIntoNativeCm(cm, snip.tpl);
+          if (editor.closest("#nsc-composer-dock")) syncComposerCompactState(true);
+        });
+        mdeToolbar.appendChild(b);
+      }
+      const sep2 = document.createElement("div");
+      sep2.className = "sep";
+      mdeToolbar.appendChild(sep2);
+
+      const clearBtn = document.createElement("span");
+      clearBtn.className = "toolbar-item";
+      clearBtn.title = "清空内容";
+      clearBtn.innerHTML = ICONS.eraser;
+      clearBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setNativeEditorValue(editor, "");
+      });
+      mdeToolbar.appendChild(clearBtn);
+
+      const niBtn = document.createElement("span");
+      niBtn.className = "toolbar-item nsc-mde-ni-btn";
+      niBtn.title = "NodeImage 图床上传与管理";
+      niBtn.style.marginLeft = "auto";
+      niBtn.innerHTML = `${ICONS.imgHost}<span class="nsc-ni-dot"></span>`;
+      niBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const mode = editor.closest("#nsc-newpost-backdrop") ? "newpost" : (state.activePmPeer ? "pm" : "chat");
         openNodeImageModal(mode);
       });
+      mdeToolbar.appendChild(niBtn);
+      NodeImage.syncDots();
+    }
+
+    const topicFooter = editor.querySelector(".topic-select");
+    if (topicFooter && !topicFooter.querySelector(".nsc-ni-status")) {
+      const leftSlot = topicFooter.querySelector("div:first-child");
       if (leftSlot) {
         leftSlot.style.cssText = "display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--nsc-muted);min-width:0;";
         leftSlot.innerHTML = "";
-        leftSlot.appendChild(imgHostBtn);
         const hint = document.createElement("span");
         hint.className = "nsc-ni-status";
         hint.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
         hint.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
         leftSlot.appendChild(hint);
-      } else {
-        topicFooter.insertBefore(imgHostBtn, topicFooter.firstChild);
       }
-      NodeImage.syncDots();
     }
 
     editor.addEventListener("keydown", (e) => {

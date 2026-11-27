@@ -1131,10 +1131,10 @@
       .nsc-composer-dock .mde-toolbar .toolbar-item,
       #nsc-np-editor-host .mde-toolbar .toolbar-item {
         display: inline-flex !important; align-items: center !important; justify-content: center !important;
-        width: 23px !important; height: 21px !important; padding: 0 !important; border-radius: 5px !important;
-        flex: 0 0 auto !important;
+        width: 24px !important; height: 22px !important; padding: 0 !important; border-radius: 6px !important;
+        flex: 0 0 auto !important; position: relative;
         border: none; background: transparent;
-        color: var(--nsc-muted) !important; transition: none !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
+        color: var(--nsc-muted) !important; transition: background 0.12s ease, color 0.12s ease !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
       }
       .nsc-mde-btn:hover,
       .nsc-composer-dock .mde-toolbar .toolbar-item:hover,
@@ -1142,7 +1142,16 @@
         background: var(--nsc-accent-soft) !important; color: var(--nsc-accent) !important;
       }
       .nsc-composer-dock .mde-toolbar .toolbar-item svg,
-      #nsc-np-editor-host .mde-toolbar .toolbar-item svg { width: 13px !important; height: 13px !important; }
+      #nsc-np-editor-host .mde-toolbar .toolbar-item svg,
+      .nsc-mde-btn svg { width: 14px !important; height: 14px !important; }
+      .nsc-composer-dock .mde-toolbar .sep,
+      #nsc-np-editor-host .mde-toolbar .sep {
+        width: 1px; height: 13px; background: var(--nsc-border); margin: 0 3px; flex: 0 0 1px;
+      }
+      .nsc-mde-ni-btn .nsc-ni-dot {
+        position: absolute; top: 2px; right: 2px; width: 5px; height: 5px;
+        border-radius: 50%; border: 1px solid var(--nsc-bg-card);
+      }
       .nsc-composer-dock .md-editor:not(.fullscreen) .CodeMirror {
         height: 132px !important; min-height: 132px !important; max-height: 132px !important;
         font-size: 13px !important; line-height: 1.5 !important;
@@ -1716,28 +1725,106 @@
       }
       #nsc-ni-backdrop.is-open { display: flex; }
       .nsc-ni-modal {
-        width: min(820px, 94vw); max-height: 88vh;
+        width: min(880px, 95vw); max-height: 88vh;
         background: var(--nsc-bg-card); color: var(--nsc-text);
-        border: 1px solid var(--nsc-border); border-radius: 16px;
+        border: 1px solid var(--nsc-border); border-radius: 14px;
         box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
         display: flex; flex-direction: column; overflow: hidden;
       }
+      .nsc-ni-settings {
+        display: none; flex-direction: column; gap: 8px;
+        padding: 10px 12px; border-radius: 9px;
+        background: var(--nsc-hover); border: 1px solid var(--nsc-border);
+      }
+      .nsc-ni-settings.is-open { display: flex; }
+      .nsc-ni-toolbar {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        min-height: 28px;
+      }
+      .nsc-ni-batch-bar {
+        display: none; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        padding: 6px 10px; border-radius: 8px;
+        background: var(--nsc-accent-soft); border: 1px solid rgba(0, 122, 255, 0.22);
+        font-size: 12px;
+      }
+      .nsc-ni-batch-bar.is-open { display: flex; }
       .nsc-ni-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        gap: 12px; max-height: 52vh; overflow-y: auto; padding: 4px;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+        gap: 11px; max-height: 58vh; overflow-y: auto; padding: 2px;
+        contain: layout style;
       }
+      .nsc-ni-dropcard {
+        border: 1.5px dashed var(--nsc-border); border-radius: 10px; min-height: 186px;
+        background: var(--nsc-hover); color: var(--nsc-muted);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 6px; padding: 12px; text-align: center; cursor: pointer;
+        transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+      }
+      .nsc-ni-dropcard:hover {
+        border-color: var(--nsc-accent); color: var(--nsc-accent); background: var(--nsc-accent-soft);
+      }
+      .nsc-ni-dropcard svg { width: 26px; height: 26px; }
       .nsc-ni-card {
-        border: 1px solid var(--nsc-border); border-radius: 10px; overflow: hidden;
-        background: var(--nsc-hover); display: flex; flex-direction: column;
-        transition: border-color 0.14s ease, box-shadow 0.14s ease;
+        position: relative; border: 1px solid var(--nsc-border); border-radius: 10px; overflow: hidden;
+        background: var(--nsc-bg-card); display: flex; flex-direction: column;
+        content-visibility: auto; contain-intrinsic-size: 168px 186px;
+        transition: border-color 0.14s ease;
       }
-      .nsc-ni-card:hover { border-color: var(--nsc-accent); box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
-      .nsc-ni-card img {
-        width: 100%; height: 138px; box-sizing: border-box; padding: 4px;
-        object-fit: contain; cursor: pointer; display: block;
-        background: rgba(128, 128, 128, 0.06); image-rendering: auto;
+      .nsc-ni-card:hover { border-color: var(--nsc-accent); }
+      .nsc-ni-card.is-selected { border-color: var(--nsc-accent); box-shadow: 0 0 0 2px var(--nsc-accent-soft); }
+      .nsc-ni-thumb-wrap {
+        position: relative; height: 124px; background: rgba(128, 128, 128, 0.06);
+        overflow: hidden; cursor: pointer;
       }
-      .nsc-ni-card-ops { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; gap: 6px; font-size: 11px; border-top: 1px solid var(--nsc-border); }
+      .nsc-ni-thumb-wrap img {
+        width: 100%; height: 100%; box-sizing: border-box; padding: 4px;
+        object-fit: contain; display: block;
+      }
+      .nsc-ni-chk {
+        position: absolute; top: 6px; left: 6px; z-index: 2;
+        width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--nsc-accent);
+      }
+      .nsc-ni-overlay-btn {
+        position: absolute; z-index: 2; width: 24px; height: 24px; padding: 0;
+        border-radius: 6px; border: 1px solid var(--nsc-border);
+        background: var(--nsc-bg-card); color: var(--nsc-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        cursor: pointer; opacity: 0.88; transition: all 0.12s ease;
+      }
+      .nsc-ni-overlay-btn svg { width: 13px; height: 13px; }
+      .nsc-ni-overlay-btn:hover { opacity: 1; }
+      .nsc-ni-del { top: 6px; right: 6px; }
+      .nsc-ni-del:hover { color: #ff3b30; border-color: rgba(255, 59, 48, 0.45); background: rgba(255, 59, 48, 0.10); }
+      .nsc-ni-zoom { bottom: 6px; left: 6px; }
+      .nsc-ni-zoom:hover { color: var(--nsc-text); border-color: var(--nsc-accent); }
+      .nsc-ni-ins {
+        bottom: 6px; right: 6px;
+        color: var(--nsc-accent); border-color: rgba(0, 122, 255, 0.30);
+      }
+      .nsc-ni-ins:hover { background: var(--nsc-accent); color: #fff; border-color: var(--nsc-accent); }
+      .nsc-ni-meta {
+        padding: 6px 8px 7px; border-top: 1px solid var(--nsc-border);
+        display: flex; flex-direction: column; gap: 4px;
+      }
+      .nsc-ni-fname {
+        font-size: 11px; font-weight: 600; color: var(--nsc-text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .nsc-ni-sub {
+        display: flex; align-items: center; justify-content: space-between; gap: 6px;
+        font-size: 10px; color: var(--nsc-muted);
+      }
+      .nsc-ni-fmts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 1px; }
+      .nsc-ni-fmt-btn {
+        height: 21px; padding: 0; border-radius: 5px;
+        border: 1px solid var(--nsc-border); background: var(--nsc-hover); color: var(--nsc-muted);
+        font-size: 10.5px; font-weight: 600; cursor: pointer;
+      }
+      .nsc-ni-fmt-btn:hover { color: var(--nsc-accent); border-color: var(--nsc-accent); background: var(--nsc-accent-soft); }
+      .nsc-ni-more-row {
+        grid-column: 1 / -1; display: flex; align-items: center; justify-content: center;
+        padding: 6px 0 2px;
+      }
 
       #nsc-hub-backdrop {
         position: fixed; inset: 0; z-index: 9400;
