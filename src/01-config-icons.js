@@ -273,7 +273,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.4",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.5",
       latest: "",
       hasUpdate: false,
       checking: false,

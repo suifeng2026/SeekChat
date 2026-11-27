@@ -1853,7 +1853,8 @@
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
         100% { box-shadow: 0 0 0 0 transparent; }
       }
-      .nsc-flash .nsc-bubble { animation: nscFlash 1.5s ease; }
+      .nsc-flash .nsc-bubble,
+      .nsc-flash > .nsc-thread-body > .nsc-thread-content { animation: nscFlash 1.5s ease; }
     `;
     document.head.appendChild(style);
     if (typeof syncRegisteredThemesCss === "function") syncRegisteredThemesCss();

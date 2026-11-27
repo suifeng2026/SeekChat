@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.4
+// @version      7.22.5
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -303,7 +303,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.4",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.5",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -3281,7 +3281,8 @@
         0% { box-shadow: 0 0 0 3px var(--nsc-accent); }
         100% { box-shadow: 0 0 0 0 transparent; }
       }
-      .nsc-flash .nsc-bubble { animation: nscFlash 1.5s ease; }
+      .nsc-flash .nsc-bubble,
+      .nsc-flash > .nsc-thread-body > .nsc-thread-content { animation: nscFlash 1.5s ease; }
     `;
     document.head.appendChild(style);
     if (typeof syncRegisteredThemesCss === "function") syncRegisteredThemesCss();
@@ -6151,8 +6152,8 @@
       raw.map((it) => {
         const uid = String(it.commenter_id || it.member_id || it.uid || "");
         const postId = String(it.post_id || it.postId || "");
-        const floorId = Number(it.floor_id ?? it.floorId ?? 0) || 0;
-        const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
+        const floorId = Number(it.floor_id ?? it.floorId ?? it.floor_index ?? it.floorIndex ?? it.floor ?? 0) || 0;
+        const pageIndex = floorId > 0 ? Math.ceil(floorId / 10) : 1;
         const rawId = Number(
           it.id || it.notification_id || it.notify_id || it.nid || it.msg_id || it.reply_id || it.comment_id || it.commentId || 0
         ) || 0;
@@ -7641,10 +7642,11 @@
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
       if (itemMeta.targetFloor) {
+        const postRenderSeq = state.chatViewSeq;
         setTimeout(() => {
-          if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
+          if (postRenderSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
           jumpToFloor(itemMeta.targetFloor);
-        }, 80);
+        }, 60);
       }
     } catch (err) {
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
@@ -7930,19 +7932,36 @@
       (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
       document.getElementById(`nsc-floor-${targetId}`);
 
-    if (!target && state.currentRoom && state.currentRoom.pages.length > 1) {
+    if (!target && state.currentRoom) {
       const room = state.currentRoom;
-      for (const p of room.pages) {
-        if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
-        if (state.loadedPages.has(p.num)) continue;
+      const jumpSeq = state.chatViewSeq;
+      const expectedPage = Math.max(1, Math.ceil(Number(targetId) / 10));
+      let foundDuringLoad = false;
+
+      if (!state.loadedPages.has(expectedPage)) {
         try {
-          const doc = await fetchPostPageDoc(p.href);
-          if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
-          mergePostPageComments(room, doc, p.num);
+          const doc = await fetchPostPageDoc(`/post-${room.pid}-${expectedPage}`);
+          if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+          mergePostPageComments(room, doc, expectedPage);
+          foundDuringLoad = room.flatComments.some((c) => String(c.floorId) === targetId);
         } catch (_) {}
       }
-      if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
-      room.flatComments.sort((a, b) => Number(a.floorId) - Number(b.floorId));
+
+      if (!foundDuringLoad && room.pages.length > 1) {
+        for (const p of room.pages) {
+          if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+          if (state.loadedPages.has(p.num)) continue;
+          try {
+            const doc = await fetchPostPageDoc(p.href);
+            if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+            mergePostPageComments(room, doc, p.num);
+            if (room.flatComments.some((c) => String(c.floorId) === targetId)) break;
+          } catch (_) {}
+        }
+      }
+
+      if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+      room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
       renderChatRoom(room, true);
       target =
         (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
@@ -9355,7 +9374,7 @@
       const postId = String(first.post_id || "");
       const floorId = Number(first.floor_id) || 0;
       const title = first.title || `帖子 #${postId}`;
-      const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
+      const pageIndex = floorId > 0 ? Math.ceil(floorId / 10) : 1;
       const postUrl = `/post-${postId}-${pageIndex}`;
 
       let timeStr = "近期发言";
@@ -9686,6 +9705,7 @@
             title: cachedSpeak.title,
             author: u.name,
             avatar: u.avatar,
+            targetFloor: cachedSpeak.floorId ? String(cachedSpeak.floorId) : "",
           });
         });
       }
@@ -10650,7 +10670,7 @@
       st.items.forEach((it) => {
         const pid = String(it.post_id || "");
         const floor = Number(it.floor_id) || 1;
-        const pageIdx = Math.max(1, Math.ceil(floor / 20));
+        const pageIdx = Math.max(1, Math.ceil(floor / 10));
         const row = document.createElement("div");
         row.className = "nsc-hub-row";
         row.innerHTML = `
@@ -11039,6 +11059,7 @@
               title: cachedSpeak.title,
               author: u.name,
               avatar: u.avatar,
+              targetFloor: cachedSpeak.floorId ? String(cachedSpeak.floorId) : "",
             });
           });
         }

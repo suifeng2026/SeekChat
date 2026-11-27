@@ -210,7 +210,7 @@
       const postId = String(first.post_id || "");
       const floorId = Number(first.floor_id) || 0;
       const title = first.title || `帖子 #${postId}`;
-      const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
+      const pageIndex = floorId > 0 ? Math.ceil(floorId / 10) : 1;
       const postUrl = `/post-${postId}-${pageIndex}`;
 
       let timeStr = "近期发言";
@@ -541,6 +541,7 @@
             title: cachedSpeak.title,
             author: u.name,
             avatar: u.avatar,
+            targetFloor: cachedSpeak.floorId ? String(cachedSpeak.floorId) : "",
           });
         });
       }
@@ -1505,7 +1506,7 @@
       st.items.forEach((it) => {
         const pid = String(it.post_id || "");
         const floor = Number(it.floor_id) || 1;
-        const pageIdx = Math.max(1, Math.ceil(floor / 20));
+        const pageIdx = Math.max(1, Math.ceil(floor / 10));
         const row = document.createElement("div");
         row.className = "nsc-hub-row";
         row.innerHTML = `
@@ -1894,6 +1895,7 @@
               title: cachedSpeak.title,
               author: u.name,
               avatar: u.avatar,
+              targetFloor: cachedSpeak.floorId ? String(cachedSpeak.floorId) : "",
             });
           });
         }

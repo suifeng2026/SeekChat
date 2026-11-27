@@ -353,8 +353,8 @@
       raw.map((it) => {
         const uid = String(it.commenter_id || it.member_id || it.uid || "");
         const postId = String(it.post_id || it.postId || "");
-        const floorId = Number(it.floor_id ?? it.floorId ?? 0) || 0;
-        const pageIndex = floorId > 0 ? Math.ceil(floorId / 20) : 1;
+        const floorId = Number(it.floor_id ?? it.floorId ?? it.floor_index ?? it.floorIndex ?? it.floor ?? 0) || 0;
+        const pageIndex = floorId > 0 ? Math.ceil(floorId / 10) : 1;
         const rawId = Number(
           it.id || it.notification_id || it.notify_id || it.nid || it.msg_id || it.reply_id || it.comment_id || it.commentId || 0
         ) || 0;

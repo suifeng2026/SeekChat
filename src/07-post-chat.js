@@ -65,10 +65,11 @@
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
       if (itemMeta.targetFloor) {
+        const postRenderSeq = state.chatViewSeq;
         setTimeout(() => {
-          if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
+          if (postRenderSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
           jumpToFloor(itemMeta.targetFloor);
-        }, 80);
+        }, 60);
       }
     } catch (err) {
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
@@ -354,19 +355,36 @@
       (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
       document.getElementById(`nsc-floor-${targetId}`);
 
-    if (!target && state.currentRoom && state.currentRoom.pages.length > 1) {
+    if (!target && state.currentRoom) {
       const room = state.currentRoom;
-      for (const p of room.pages) {
-        if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
-        if (state.loadedPages.has(p.num)) continue;
+      const jumpSeq = state.chatViewSeq;
+      const expectedPage = Math.max(1, Math.ceil(Number(targetId) / 10));
+      let foundDuringLoad = false;
+
+      if (!state.loadedPages.has(expectedPage)) {
         try {
-          const doc = await fetchPostPageDoc(p.href);
-          if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
-          mergePostPageComments(room, doc, p.num);
+          const doc = await fetchPostPageDoc(`/post-${room.pid}-${expectedPage}`);
+          if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+          mergePostPageComments(room, doc, expectedPage);
+          foundDuringLoad = room.flatComments.some((c) => String(c.floorId) === targetId);
         } catch (_) {}
       }
-      if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
-      room.flatComments.sort((a, b) => Number(a.floorId) - Number(b.floorId));
+
+      if (!foundDuringLoad && room.pages.length > 1) {
+        for (const p of room.pages) {
+          if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+          if (state.loadedPages.has(p.num)) continue;
+          try {
+            const doc = await fetchPostPageDoc(p.href);
+            if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+            mergePostPageComments(room, doc, p.num);
+            if (room.flatComments.some((c) => String(c.floorId) === targetId)) break;
+          } catch (_) {}
+        }
+      }
+
+      if (jumpSeq !== state.chatViewSeq || state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
+      room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
       renderChatRoom(room, true);
       target =
         (msgsEl && msgsEl.querySelector(`[data-floor="${targetId}"]`)) ||
