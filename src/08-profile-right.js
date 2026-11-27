@@ -903,10 +903,25 @@
     );
   }
 
-  async function performAttendance(randomMode = false) {
+  function getBeijingDateStr() {
+    const d = new Date(Date.now() + (new Date().getTimezoneOffset() + 480) * 60000);
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  async function maybeRunAutoCheckin() {
+    if (!state.autoCheckin || state._autoCheckinAttempted) return;
+    detectCurrentUser();
+    if (!state.currentUserId) return;
+    const today = getBeijingDateStr();
+    if (state.autoCheckinDate === today) return;
+    state._autoCheckinAttempted = true;
+    await performAttendance(state.autoCheckinMode === "random", true);
+  }
+
+  async function performAttendance(randomMode = false, silent = false) {
     if (state.hubData.checkinLoading) return;
     state.hubData.checkinLoading = true;
-    renderUserHubIfOpen();
+    if (!silent) renderUserHubIfOpen();
     try {
       const resp = await fetch(`/api/attendance?random=${randomMode ? "true" : "false"}`, {
         method: "POST",
@@ -914,9 +929,17 @@
         headers: { Accept: "application/json, text/plain, */*", "Content-Type": "application/json" },
       });
       const json = await resp.json().catch(() => ({}));
+      const msg = (json && json.message) || (resp.ok ? "签到请求已处理" : `HTTP ${resp.status}`);
+      const ok = Boolean(resp.ok && json && json.success !== false);
+      const alreadyDone = /已完成|已经签到|重复/.test(msg);
+      if (ok || alreadyDone) {
+        const today = getBeijingDateStr();
+        state.autoCheckinDate = today;
+        localStorage.setItem(LS.AUTO_CHECKIN_DATE, today);
+      }
       state.hubData.checkinResult = {
-        ok: Boolean(resp.ok && json && json.success !== false),
-        message: (json && json.message) || (resp.ok ? "签到请求已处理" : `HTTP ${resp.status}`),
+        ok,
+        message: msg,
         gain: json && json.gain,
         current: json && json.current,
         mode: randomMode ? "随机签到" : "固定签到",
@@ -925,7 +948,7 @@
         const legSpan = document.querySelector('.user-card .user-stat a[href="/credit"] span');
         if (legSpan) legSpan.textContent = `鸡腿 ${json.current}`;
       }
-      if (state.hubData.checkinResult.ok) {
+      if (ok && !silent) {
         loadHubAttendanceBoard(true);
       }
     } catch (err) {
@@ -1673,11 +1696,16 @@
       subbar.appendChild(refBtn);
 
       const res = state.hubData.checkinResult;
+      const todayStr = getBeijingDateStr();
+      const signedToday = state.autoCheckinDate === todayStr;
       const ckCard = document.createElement("div");
       ckCard.className = "nsc-checkin-card";
       ckCard.innerHTML = `
         <div style="min-width:0;">
-          <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);">每日签到领取鸡腿</div>
+          <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);display:flex;align-items:center;gap:8px;">
+            <span>每日签到领取鸡腿</span>
+            <span class="nsc-badge-read" style="${signedToday ? "color:var(--nsc-green);border-color:var(--nsc-green);" : ""}">${signedToday ? "今日已签" : "今日待签"}</span>
+          </div>
           <div style="font-size:11.5px;color:${res ? (res.ok ? "var(--nsc-green)" : "#ff9f0a") : "var(--nsc-muted)"};margin-top:3px;">
             ${res ? `${escHtml(res.mode)}：${escHtml(res.message)}${res.gain !== undefined ? ` (+${res.gain} 🍗)` : ""}${res.current !== undefined ? ` · 当前 ${res.current} 🍗` : ""}` : "固定签到稳定 +5 鸡腿；随机签到拼手气（1~10+ 鸡腿）"}
           </div>
@@ -1686,9 +1714,32 @@
           <button type="button" class="nsc-checkin-btn primary" id="nsc-ck-fixed" ${state.hubData.checkinLoading ? "disabled" : ""}>固定签到 (+5🍗)</button>
           <button type="button" class="nsc-checkin-btn" id="nsc-ck-random" ${state.hubData.checkinLoading ? "disabled" : ""}>随机签到 (拼手气)</button>
         </div>
+        <div class="nsc-checkin-auto-row">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-switch ${state.autoCheckin ? "is-on" : ""}" id="nsc-auto-ck-toggle" aria-pressed="${state.autoCheckin ? "true" : "false"}" title="开启后每日首次打开论坛自动执行签到"><span class="nsc-switch-knob"></span></button>
+            <span style="font-weight:600;">每日首次访问自动签到</span>
+          </div>
+          <div class="nsc-seg-tabs" id="nsc-auto-ck-mode">
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">自动固定 (+5🍗)</button>
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">自动随机 (拼手气)</button>
+          </div>
+        </div>
       `;
       ckCard.querySelector("#nsc-ck-fixed").addEventListener("click", () => performAttendance(false));
       ckCard.querySelector("#nsc-ck-random").addEventListener("click", () => performAttendance(true));
+      ckCard.querySelector("#nsc-auto-ck-toggle").addEventListener("click", () => {
+        state.autoCheckin = !state.autoCheckin;
+        localStorage.setItem(LS.AUTO_CHECKIN, state.autoCheckin ? "1" : "0");
+        renderUserHub();
+        if (state.autoCheckin) maybeRunAutoCheckin();
+      });
+      ckCard.querySelectorAll("[data-ckmode]").forEach((b) => {
+        b.addEventListener("click", () => {
+          state.autoCheckinMode = b.dataset.ckmode;
+          localStorage.setItem(LS.AUTO_CHECKIN_MODE, state.autoCheckinMode);
+          renderUserHub();
+        });
+      });
       body.appendChild(ckCard);
 
       if (st.loading && st.items.length === 0) {

@@ -190,6 +190,7 @@
         <div class="nsc-right-user" id="nsc-right-user"></div>
         <div class="nsc-right-quickbar" id="nsc-right-quickbar">
           <button type="button" class="nsc-quick-btn is-primary" id="nsc-qb-post" title="发布新主题帖">+ 发帖</button>
+          <button type="button" class="nsc-quick-btn" id="nsc-qb-checkin" title="每日签到与自动签到设置">签到</button>
           <a class="nsc-quick-btn" id="nsc-qb-lucky" href="/lucky" target="_blank" rel="noopener noreferrer" title="幸运抽奖">抽奖</a>
           <a class="nsc-quick-btn" id="nsc-qb-invite" href="/invite" target="_blank" rel="noopener noreferrer" title="邀请好友">邀请</a>
         </div>
@@ -494,6 +495,12 @@
     shell.querySelector("#nsc-qb-post").addEventListener("click", () => {
       shell.querySelector("#nsc-newpost-open-btn").click();
     });
+    const qbCheckin = shell.querySelector("#nsc-qb-checkin");
+    if (qbCheckin) {
+      qbCheckin.addEventListener("click", () => {
+        if (typeof openUserHubModal === "function") openUserHubModal("attendance");
+      });
+    }
     const qbLucky = shell.querySelector("#nsc-qb-lucky");
     if (qbLucky) {
       qbLucky.addEventListener("click", (e) => {
@@ -809,8 +816,14 @@
   }
 
   function syncComposerMode(modeOrNative) {
+    const dock = document.getElementById("nsc-composer-dock");
     const composerBody = document.getElementById("nsc-composer-body");
     if (!composerBody) return;
+    if (modeOrNative === "none") {
+      if (dock) dock.style.display = "none";
+      return;
+    }
+    if (dock) dock.style.display = "";
     const mode = modeOrNative === "pm" ? "pm" : modeOrNative ? "native" : "fallback";
     const nativeEditor = composerBody.querySelector(".md-editor") || document.querySelector("#nsk-frame .md-editor");
     let fallback = document.getElementById("nsc-fallback-composer");

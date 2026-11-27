@@ -116,6 +116,12 @@
         border-color: rgba(115, 86, 52, 0.18) !important;
         color: #3a3025 !important;
       }
+      body.nsc-app-active.nsc-theme-dusk #nsk-head .search-hint,
+      body.nsc-app-active.dark-layout #nsk-head .search-hint {
+        background: var(--nsc-bg-card) !important;
+        border: 1px solid var(--nsc-border) !important;
+        color: var(--nsc-text) !important;
+      }
       body.nsc-app-active.nsc-theme-dusk .nsc-msg.is-self .nsc-bubble,
       body.nsc-app-active.nsc-theme-dusk .nsc-thread-item.is-self-thread .nsc-thread-content {
         background: linear-gradient(180deg, #5177ad 0%, #3d6094 100%);
@@ -189,7 +195,7 @@
       #nsc-app-shell ::-webkit-scrollbar-track { background: transparent; }
 
       .nsc-pane-nav {
-        width: 148px; flex: 0 0 148px;
+        width: 154px; flex: 0 0 154px; box-sizing: border-box;
         background: var(--nsc-bg-nav); backdrop-filter: blur(28px) saturate(180%);
         border-right: 1px solid var(--nsc-border);
         display: flex; flex-direction: column;
@@ -921,7 +927,7 @@
       }
 
       .nsc-right-quickbar {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
         padding: 7px 10px; border-bottom: 1px solid var(--nsc-border);
       }
       .nsc-quick-btn {
@@ -1303,6 +1309,22 @@
       .nsc-checkin-btn.primary { background: var(--nsc-accent); color: #fff; border-color: transparent; }
       .nsc-checkin-btn.primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; background: var(--nsc-accent); }
       .nsc-checkin-btn:disabled { opacity: 0.55; cursor: wait; }
+      .nsc-checkin-auto-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+        width: 100%; padding-top: 10px; margin-top: 2px; border-top: 1px dashed var(--nsc-border);
+        font-size: 12px; color: var(--nsc-text);
+      }
+      .nsc-switch {
+        position: relative; display: inline-flex; align-items: center; width: 34px; height: 19px;
+        border-radius: 999px; background: rgba(128, 128, 128, 0.28); border: none; padding: 2px;
+        cursor: pointer; transition: background 0.16s ease;
+      }
+      .nsc-switch.is-on { background: var(--nsc-green); }
+      .nsc-switch-knob {
+        width: 15px; height: 15px; border-radius: 50%; background: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); transition: transform 0.16s ease;
+      }
+      .nsc-switch.is-on .nsc-switch-knob { transform: translateX(15px); }
 
       /* 原生弹框（如 Stardust 转账 / mscDialog）macOS 视觉兼容与层级抬升 */
       body.nsc-app-active #nsc-app-shell:has(.msc-overlay, .msc-dialog, .el-dialog, [class*="transfer"], [class*="stardust"][style*="fixed"]),

@@ -13,6 +13,9 @@
     LAST_SPEAK_CACHE: "nsc_v7_last_speak_cache",
     POST_TITLE_CACHE: "nsc_v7_post_title_cache",
     READ_NOTIFS: "nsc_v7_read_notifs",
+    AUTO_CHECKIN: "nsc_v7_auto_checkin",
+    AUTO_CHECKIN_MODE: "nsc_v7_auto_checkin_mode",
+    AUTO_CHECKIN_DATE: "nsc_v7_auto_checkin_date",
   };
 
   function isBrowsePath(pathname) {
@@ -206,6 +209,10 @@
     hubNotifSub: "reply-me",
     _lastRenderedHubTab: "",
     _hubFansMode: "fans",
+    autoCheckin: localStorage.getItem(LS.AUTO_CHECKIN) === "1",
+    autoCheckinMode: localStorage.getItem(LS.AUTO_CHECKIN_MODE) || "fixed",
+    autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
+    _autoCheckinAttempted: false,
     hubData: {
       posts: { items: [], page: 0, loading: false, noMore: false, error: null },
       comments: { items: [], page: 0, loading: false, noMore: false, error: null },

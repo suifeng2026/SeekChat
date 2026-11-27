@@ -562,8 +562,9 @@
       for (const w of msgsEl.querySelectorAll(".nsc-thread-wrap")) {
         w.classList.toggle("is-collapsed", state.threadsCollapsed);
       }
-      for (const t of msgsEl.querySelectorAll(".nsc-thread-toggle")) {
-        t.textContent = state.threadsCollapsed ? `展开 ${t.dataset.count} 条楼中楼` : `收起 ${t.dataset.count} 条楼中楼`;
+      for (const t of msgsEl.querySelectorAll(".nsc-react-pill.is-reply[data-thread-toggle='1']")) {
+        const sp = t.querySelector("span");
+        if (sp) sp.textContent = `${t.dataset.count} 条回复 ${state.threadsCollapsed ? "▸" : "▾"}`;
       }
     }, ICONS.layers);
 
@@ -791,8 +792,14 @@
       const p = document.createElement("button");
       p.type = "button";
       p.className = "nsc-react-pill is-reply";
+      if (!isOpCard) {
+        p.dataset.threadToggle = "1";
+        p.dataset.count = String(replyCnt);
+      }
       p.title = isOpCard ? `共 ${replyCnt} 条评论` : `${replyCnt} 条楼中楼回复（点击展开/收起）`;
-      p.innerHTML = `${ICONS.reply}<span>${replyCnt}</span>`;
+      p.innerHTML = isOpCard
+        ? `${ICONS.reply}<span>${replyCnt}</span>`
+        : `${ICONS.reply}<span>${replyCnt} 条回复 ${state.threadsCollapsed ? "▸" : "▾"}</span>`;
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         if (isOpCard) {
@@ -801,8 +808,12 @@
           return;
         }
         const msgWrap = reactionsEl.closest(".nsc-msg");
-        const toggleBtn = msgWrap && msgWrap.querySelector(".nsc-thread-toggle");
-        if (toggleBtn) toggleBtn.click();
+        const threadWrap = msgWrap && msgWrap.querySelector(".nsc-thread-wrap");
+        if (threadWrap) {
+          const collapsed = threadWrap.classList.toggle("is-collapsed");
+          const sp = p.querySelector("span");
+          if (sp) sp.textContent = `${replyCnt} 条回复 ${collapsed ? "▸" : "▾"}`;
+        }
       });
       reactionsEl.appendChild(p);
     }
@@ -1276,23 +1287,8 @@
 
     if (obj.children && obj.children.length > 0) {
       wrap.classList.add("has-thread");
-      const toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.className = "nsc-thread-toggle";
-      toggleBtn.dataset.count = String(obj.children.length);
-      toggleBtn.textContent = state.threadsCollapsed
-        ? `展开 ${obj.children.length} 条楼中楼`
-        : `收起 ${obj.children.length} 条楼中楼`;
-
       const threadWrap = document.createElement("div");
       threadWrap.className = "nsc-thread-wrap" + (state.threadsCollapsed ? " is-collapsed" : "");
-
-      toggleBtn.addEventListener("click", () => {
-        const collapsed = threadWrap.classList.toggle("is-collapsed");
-        toggleBtn.textContent = collapsed
-          ? `展开 ${obj.children.length} 条楼中楼`
-          : `收起 ${obj.children.length} 条楼中楼`;
-      });
 
       for (const ch of obj.children) {
         const chIsSelf = state.currentUser && ch.author === state.currentUser;
@@ -1339,7 +1335,6 @@
         threadWrap.appendChild(ti);
       }
 
-      mainCol.appendChild(toggleBtn);
       mainCol.appendChild(threadWrap);
     }
 

@@ -1,6 +1,6 @@
 {
   "name": "nodeseek-chat-ui",
-  "version": "7.17.0",
+  "version": "7.18.0",
   "description": "NodeSeek macOS 四栏群聊工作台油猴脚本（模块化构建版）",
   "scripts": {
     "build": "node build.mjs",

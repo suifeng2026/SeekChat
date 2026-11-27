@@ -152,6 +152,8 @@
 
     if (state.activePmPeer) {
       syncComposerMode("pm");
+    } else if (!state.currentPostId && !isPostPath(location.pathname)) {
+      syncComposerMode("none");
     } else {
       syncComposerMode(isPostPath(location.pathname) && (!state.currentPostId || state.currentPostId === state.nativePostId));
     }
@@ -210,6 +212,9 @@
         setTimeout(() => fetchServerBlockList(true), 800);
         setTimeout(() => prefetchCollectionsSet(), 950);
         setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
+        setTimeout(() => {
+          if (typeof maybeRunAutoCheckin === "function") maybeRunAutoCheckin();
+        }, 1600);
       }
 
       if (isPostPath(location.pathname)) {
@@ -1591,7 +1596,7 @@
             ++state.chatViewSeq;
             state.activePmPeer = null;
             clearPostRoomState();
-            syncComposerMode(false);
+            syncComposerMode("none");
             renderTopicList();
             const titleEl = document.getElementById("nsc-chat-title");
             const subChat = document.getElementById("nsc-chat-subtitle");

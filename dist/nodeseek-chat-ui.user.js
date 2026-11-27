@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NodeSeek macOS 群聊工作台 (无刷新发帖 · 热榜融合 · 粉丝好友 · 眼睛查发言)
 // @namespace    https://www.nodeseek.com/
-// @version      7.17.0
+// @version      7.18.0
 // @description  macOS 风格四栏桌面聊天界面：无闪屏启动 + 左侧自适应分区导航与消息中心(@我/回复我/私信/系统通知uid5230) + 中间群聊/居中双边楼中楼/悬停赞鸡腿引用回复/NodeImage授权传图 + 右侧热榜/好友/粉丝。
 // @author       JeikCode Assistant
 // @match        https://www.nodeseek.com/*
@@ -40,6 +40,9 @@
     LAST_SPEAK_CACHE: "nsc_v7_last_speak_cache",
     POST_TITLE_CACHE: "nsc_v7_post_title_cache",
     READ_NOTIFS: "nsc_v7_read_notifs",
+    AUTO_CHECKIN: "nsc_v7_auto_checkin",
+    AUTO_CHECKIN_MODE: "nsc_v7_auto_checkin_mode",
+    AUTO_CHECKIN_DATE: "nsc_v7_auto_checkin_date",
   };
 
   function isBrowsePath(pathname) {
@@ -233,6 +236,10 @@
     hubNotifSub: "reply-me",
     _lastRenderedHubTab: "",
     _hubFansMode: "fans",
+    autoCheckin: localStorage.getItem(LS.AUTO_CHECKIN) === "1",
+    autoCheckinMode: localStorage.getItem(LS.AUTO_CHECKIN_MODE) || "fixed",
+    autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
+    _autoCheckinAttempted: false,
     hubData: {
       posts: { items: [], page: 0, loading: false, noMore: false, error: null },
       comments: { items: [], page: 0, loading: false, noMore: false, error: null },
@@ -905,6 +912,12 @@
         border-color: rgba(115, 86, 52, 0.18) !important;
         color: #3a3025 !important;
       }
+      body.nsc-app-active.nsc-theme-dusk #nsk-head .search-hint,
+      body.nsc-app-active.dark-layout #nsk-head .search-hint {
+        background: var(--nsc-bg-card) !important;
+        border: 1px solid var(--nsc-border) !important;
+        color: var(--nsc-text) !important;
+      }
       body.nsc-app-active.nsc-theme-dusk .nsc-msg.is-self .nsc-bubble,
       body.nsc-app-active.nsc-theme-dusk .nsc-thread-item.is-self-thread .nsc-thread-content {
         background: linear-gradient(180deg, #5177ad 0%, #3d6094 100%);
@@ -978,7 +991,7 @@
       #nsc-app-shell ::-webkit-scrollbar-track { background: transparent; }
 
       .nsc-pane-nav {
-        width: 148px; flex: 0 0 148px;
+        width: 154px; flex: 0 0 154px; box-sizing: border-box;
         background: var(--nsc-bg-nav); backdrop-filter: blur(28px) saturate(180%);
         border-right: 1px solid var(--nsc-border);
         display: flex; flex-direction: column;
@@ -1710,7 +1723,7 @@
       }
 
       .nsc-right-quickbar {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
         padding: 7px 10px; border-bottom: 1px solid var(--nsc-border);
       }
       .nsc-quick-btn {
@@ -2092,6 +2105,22 @@
       .nsc-checkin-btn.primary { background: var(--nsc-accent); color: #fff; border-color: transparent; }
       .nsc-checkin-btn.primary:hover:not(:disabled) { filter: brightness(1.07); color: #fff; background: var(--nsc-accent); }
       .nsc-checkin-btn:disabled { opacity: 0.55; cursor: wait; }
+      .nsc-checkin-auto-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+        width: 100%; padding-top: 10px; margin-top: 2px; border-top: 1px dashed var(--nsc-border);
+        font-size: 12px; color: var(--nsc-text);
+      }
+      .nsc-switch {
+        position: relative; display: inline-flex; align-items: center; width: 34px; height: 19px;
+        border-radius: 999px; background: rgba(128, 128, 128, 0.28); border: none; padding: 2px;
+        cursor: pointer; transition: background 0.16s ease;
+      }
+      .nsc-switch.is-on { background: var(--nsc-green); }
+      .nsc-switch-knob {
+        width: 15px; height: 15px; border-radius: 50%; background: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); transition: transform 0.16s ease;
+      }
+      .nsc-switch.is-on .nsc-switch-knob { transform: translateX(15px); }
 
       /* 原生弹框（如 Stardust 转账 / mscDialog）macOS 视觉兼容与层级抬升 */
       body.nsc-app-active #nsc-app-shell:has(.msc-overlay, .msc-dialog, .el-dialog, [class*="transfer"], [class*="stardust"][style*="fixed"]),
@@ -2729,6 +2758,7 @@
         <div class="nsc-right-user" id="nsc-right-user"></div>
         <div class="nsc-right-quickbar" id="nsc-right-quickbar">
           <button type="button" class="nsc-quick-btn is-primary" id="nsc-qb-post" title="发布新主题帖">+ 发帖</button>
+          <button type="button" class="nsc-quick-btn" id="nsc-qb-checkin" title="每日签到与自动签到设置">签到</button>
           <a class="nsc-quick-btn" id="nsc-qb-lucky" href="/lucky" target="_blank" rel="noopener noreferrer" title="幸运抽奖">抽奖</a>
           <a class="nsc-quick-btn" id="nsc-qb-invite" href="/invite" target="_blank" rel="noopener noreferrer" title="邀请好友">邀请</a>
         </div>
@@ -3033,6 +3063,12 @@
     shell.querySelector("#nsc-qb-post").addEventListener("click", () => {
       shell.querySelector("#nsc-newpost-open-btn").click();
     });
+    const qbCheckin = shell.querySelector("#nsc-qb-checkin");
+    if (qbCheckin) {
+      qbCheckin.addEventListener("click", () => {
+        if (typeof openUserHubModal === "function") openUserHubModal("attendance");
+      });
+    }
     const qbLucky = shell.querySelector("#nsc-qb-lucky");
     if (qbLucky) {
       qbLucky.addEventListener("click", (e) => {
@@ -3348,8 +3384,14 @@
   }
 
   function syncComposerMode(modeOrNative) {
+    const dock = document.getElementById("nsc-composer-dock");
     const composerBody = document.getElementById("nsc-composer-body");
     if (!composerBody) return;
+    if (modeOrNative === "none") {
+      if (dock) dock.style.display = "none";
+      return;
+    }
+    if (dock) dock.style.display = "";
     const mode = modeOrNative === "pm" ? "pm" : modeOrNative ? "native" : "fallback";
     const nativeEditor = composerBody.querySelector(".md-editor") || document.querySelector("#nsk-frame .md-editor");
     let fallback = document.getElementById("nsc-fallback-composer");
@@ -3857,6 +3899,8 @@
 
     if (state.activePmPeer) {
       syncComposerMode("pm");
+    } else if (!state.currentPostId && !isPostPath(location.pathname)) {
+      syncComposerMode("none");
     } else {
       syncComposerMode(isPostPath(location.pathname) && (!state.currentPostId || state.currentPostId === state.nativePostId));
     }
@@ -3915,6 +3959,9 @@
         setTimeout(() => fetchServerBlockList(true), 800);
         setTimeout(() => prefetchCollectionsSet(), 950);
         setTimeout(() => prefetchUnreadBadges(["home", "daily", "tech", "info"]), 1200);
+        setTimeout(() => {
+          if (typeof maybeRunAutoCheckin === "function") maybeRunAutoCheckin();
+        }, 1600);
       }
 
       if (isPostPath(location.pathname)) {
@@ -5296,7 +5343,7 @@
             ++state.chatViewSeq;
             state.activePmPeer = null;
             clearPostRoomState();
-            syncComposerMode(false);
+            syncComposerMode("none");
             renderTopicList();
             const titleEl = document.getElementById("nsc-chat-title");
             const subChat = document.getElementById("nsc-chat-subtitle");
@@ -6006,8 +6053,9 @@
       for (const w of msgsEl.querySelectorAll(".nsc-thread-wrap")) {
         w.classList.toggle("is-collapsed", state.threadsCollapsed);
       }
-      for (const t of msgsEl.querySelectorAll(".nsc-thread-toggle")) {
-        t.textContent = state.threadsCollapsed ? `展开 ${t.dataset.count} 条楼中楼` : `收起 ${t.dataset.count} 条楼中楼`;
+      for (const t of msgsEl.querySelectorAll(".nsc-react-pill.is-reply[data-thread-toggle='1']")) {
+        const sp = t.querySelector("span");
+        if (sp) sp.textContent = `${t.dataset.count} 条回复 ${state.threadsCollapsed ? "▸" : "▾"}`;
       }
     }, ICONS.layers);
 
@@ -6235,8 +6283,14 @@
       const p = document.createElement("button");
       p.type = "button";
       p.className = "nsc-react-pill is-reply";
+      if (!isOpCard) {
+        p.dataset.threadToggle = "1";
+        p.dataset.count = String(replyCnt);
+      }
       p.title = isOpCard ? `共 ${replyCnt} 条评论` : `${replyCnt} 条楼中楼回复（点击展开/收起）`;
-      p.innerHTML = `${ICONS.reply}<span>${replyCnt}</span>`;
+      p.innerHTML = isOpCard
+        ? `${ICONS.reply}<span>${replyCnt}</span>`
+        : `${ICONS.reply}<span>${replyCnt} 条回复 ${state.threadsCollapsed ? "▸" : "▾"}</span>`;
       p.addEventListener("click", (e) => {
         e.stopPropagation();
         if (isOpCard) {
@@ -6245,8 +6299,12 @@
           return;
         }
         const msgWrap = reactionsEl.closest(".nsc-msg");
-        const toggleBtn = msgWrap && msgWrap.querySelector(".nsc-thread-toggle");
-        if (toggleBtn) toggleBtn.click();
+        const threadWrap = msgWrap && msgWrap.querySelector(".nsc-thread-wrap");
+        if (threadWrap) {
+          const collapsed = threadWrap.classList.toggle("is-collapsed");
+          const sp = p.querySelector("span");
+          if (sp) sp.textContent = `${replyCnt} 条回复 ${collapsed ? "▸" : "▾"}`;
+        }
       });
       reactionsEl.appendChild(p);
     }
@@ -6720,23 +6778,8 @@
 
     if (obj.children && obj.children.length > 0) {
       wrap.classList.add("has-thread");
-      const toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.className = "nsc-thread-toggle";
-      toggleBtn.dataset.count = String(obj.children.length);
-      toggleBtn.textContent = state.threadsCollapsed
-        ? `展开 ${obj.children.length} 条楼中楼`
-        : `收起 ${obj.children.length} 条楼中楼`;
-
       const threadWrap = document.createElement("div");
       threadWrap.className = "nsc-thread-wrap" + (state.threadsCollapsed ? " is-collapsed" : "");
-
-      toggleBtn.addEventListener("click", () => {
-        const collapsed = threadWrap.classList.toggle("is-collapsed");
-        toggleBtn.textContent = collapsed
-          ? `展开 ${obj.children.length} 条楼中楼`
-          : `收起 ${obj.children.length} 条楼中楼`;
-      });
 
       for (const ch of obj.children) {
         const chIsSelf = state.currentUser && ch.author === state.currentUser;
@@ -6783,7 +6826,6 @@
         threadWrap.appendChild(ti);
       }
 
-      mainCol.appendChild(toggleBtn);
       mainCol.appendChild(threadWrap);
     }
 
@@ -7921,10 +7963,25 @@
     );
   }
 
-  async function performAttendance(randomMode = false) {
+  function getBeijingDateStr() {
+    const d = new Date(Date.now() + (new Date().getTimezoneOffset() + 480) * 60000);
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  async function maybeRunAutoCheckin() {
+    if (!state.autoCheckin || state._autoCheckinAttempted) return;
+    detectCurrentUser();
+    if (!state.currentUserId) return;
+    const today = getBeijingDateStr();
+    if (state.autoCheckinDate === today) return;
+    state._autoCheckinAttempted = true;
+    await performAttendance(state.autoCheckinMode === "random", true);
+  }
+
+  async function performAttendance(randomMode = false, silent = false) {
     if (state.hubData.checkinLoading) return;
     state.hubData.checkinLoading = true;
-    renderUserHubIfOpen();
+    if (!silent) renderUserHubIfOpen();
     try {
       const resp = await fetch(`/api/attendance?random=${randomMode ? "true" : "false"}`, {
         method: "POST",
@@ -7932,9 +7989,17 @@
         headers: { Accept: "application/json, text/plain, */*", "Content-Type": "application/json" },
       });
       const json = await resp.json().catch(() => ({}));
+      const msg = (json && json.message) || (resp.ok ? "签到请求已处理" : `HTTP ${resp.status}`);
+      const ok = Boolean(resp.ok && json && json.success !== false);
+      const alreadyDone = /已完成|已经签到|重复/.test(msg);
+      if (ok || alreadyDone) {
+        const today = getBeijingDateStr();
+        state.autoCheckinDate = today;
+        localStorage.setItem(LS.AUTO_CHECKIN_DATE, today);
+      }
       state.hubData.checkinResult = {
-        ok: Boolean(resp.ok && json && json.success !== false),
-        message: (json && json.message) || (resp.ok ? "签到请求已处理" : `HTTP ${resp.status}`),
+        ok,
+        message: msg,
         gain: json && json.gain,
         current: json && json.current,
         mode: randomMode ? "随机签到" : "固定签到",
@@ -7943,7 +8008,7 @@
         const legSpan = document.querySelector('.user-card .user-stat a[href="/credit"] span');
         if (legSpan) legSpan.textContent = `鸡腿 ${json.current}`;
       }
-      if (state.hubData.checkinResult.ok) {
+      if (ok && !silent) {
         loadHubAttendanceBoard(true);
       }
     } catch (err) {
@@ -8691,11 +8756,16 @@
       subbar.appendChild(refBtn);
 
       const res = state.hubData.checkinResult;
+      const todayStr = getBeijingDateStr();
+      const signedToday = state.autoCheckinDate === todayStr;
       const ckCard = document.createElement("div");
       ckCard.className = "nsc-checkin-card";
       ckCard.innerHTML = `
         <div style="min-width:0;">
-          <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);">每日签到领取鸡腿</div>
+          <div style="font-size:13.5px;font-weight:700;color:var(--nsc-text);display:flex;align-items:center;gap:8px;">
+            <span>每日签到领取鸡腿</span>
+            <span class="nsc-badge-read" style="${signedToday ? "color:var(--nsc-green);border-color:var(--nsc-green);" : ""}">${signedToday ? "今日已签" : "今日待签"}</span>
+          </div>
           <div style="font-size:11.5px;color:${res ? (res.ok ? "var(--nsc-green)" : "#ff9f0a") : "var(--nsc-muted)"};margin-top:3px;">
             ${res ? `${escHtml(res.mode)}：${escHtml(res.message)}${res.gain !== undefined ? ` (+${res.gain} 🍗)` : ""}${res.current !== undefined ? ` · 当前 ${res.current} 🍗` : ""}` : "固定签到稳定 +5 鸡腿；随机签到拼手气（1~10+ 鸡腿）"}
           </div>
@@ -8704,9 +8774,32 @@
           <button type="button" class="nsc-checkin-btn primary" id="nsc-ck-fixed" ${state.hubData.checkinLoading ? "disabled" : ""}>固定签到 (+5🍗)</button>
           <button type="button" class="nsc-checkin-btn" id="nsc-ck-random" ${state.hubData.checkinLoading ? "disabled" : ""}>随机签到 (拼手气)</button>
         </div>
+        <div class="nsc-checkin-auto-row">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button type="button" class="nsc-switch ${state.autoCheckin ? "is-on" : ""}" id="nsc-auto-ck-toggle" aria-pressed="${state.autoCheckin ? "true" : "false"}" title="开启后每日首次打开论坛自动执行签到"><span class="nsc-switch-knob"></span></button>
+            <span style="font-weight:600;">每日首次访问自动签到</span>
+          </div>
+          <div class="nsc-seg-tabs" id="nsc-auto-ck-mode">
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">自动固定 (+5🍗)</button>
+            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">自动随机 (拼手气)</button>
+          </div>
+        </div>
       `;
       ckCard.querySelector("#nsc-ck-fixed").addEventListener("click", () => performAttendance(false));
       ckCard.querySelector("#nsc-ck-random").addEventListener("click", () => performAttendance(true));
+      ckCard.querySelector("#nsc-auto-ck-toggle").addEventListener("click", () => {
+        state.autoCheckin = !state.autoCheckin;
+        localStorage.setItem(LS.AUTO_CHECKIN, state.autoCheckin ? "1" : "0");
+        renderUserHub();
+        if (state.autoCheckin) maybeRunAutoCheckin();
+      });
+      ckCard.querySelectorAll("[data-ckmode]").forEach((b) => {
+        b.addEventListener("click", () => {
+          state.autoCheckinMode = b.dataset.ckmode;
+          localStorage.setItem(LS.AUTO_CHECKIN_MODE, state.autoCheckinMode);
+          renderUserHub();
+        });
+      });
       body.appendChild(ckCard);
 
       if (st.loading && st.items.length === 0) {
