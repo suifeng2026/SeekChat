@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.5
+// @version      7.22.6
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -303,7 +303,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.5",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.6",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -1841,15 +1841,14 @@
         display: flex; flex-direction: column; min-height: 0; position: relative;
       }
       .nsc-chat-header {
-        padding: 9px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
-        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        padding: 8px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
+        display: flex; flex-direction: column; gap: 5px;
       }
-      .nsc-chat-title-wrap { min-width: 0; flex: 1 1 200px; }
-      .nsc-chat-title-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+      .nsc-chat-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
       .nsc-chat-title {
-        font-size: 14.5px; font-weight: 700; color: var(--nsc-text);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        min-width: 0; transition: color 0.14s ease;
+        font-size: 14.5px; font-weight: 700; line-height: 1.38; color: var(--nsc-text);
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        min-width: 0; flex: 0 1 auto; transition: color 0.14s ease;
       }
       .nsc-chat-title.is-copyable { cursor: pointer; }
       .nsc-chat-title.is-copyable:hover { color: var(--nsc-accent); }
@@ -1859,8 +1858,11 @@
         background: rgba(52, 199, 89, 0.16); color: #16a34a;
       }
       .nsc-chat-copy-tip.is-show { display: inline-flex; align-items: center; }
-      .nsc-chat-subtitle { font-size: 11px; color: var(--nsc-muted); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
+      .nsc-chat-meta-bar {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-width: 0;
+      }
+      .nsc-chat-subtitle { font-size: 11px; color: var(--nsc-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; margin-left: auto; }
       .nsc-pill-btn {
         padding: 4px 8px; border-radius: 7px; border: 1px solid transparent;
         background: transparent; color: var(--nsc-muted); font-size: 11.5px; font-weight: 500; cursor: pointer;
@@ -3931,14 +3933,14 @@
 
       <main class="nsc-pane-chat">
         <div class="nsc-chat-header">
-          <div class="nsc-chat-title-wrap">
-            <div class="nsc-chat-title-row">
-              <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
-              <span class="nsc-chat-copy-tip" id="nsc-chat-copy-tip">已复制链接</span>
-            </div>
-            <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
+          <div class="nsc-chat-title-row">
+            <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
+            <span class="nsc-chat-copy-tip" id="nsc-chat-copy-tip">已复制链接</span>
           </div>
-          <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
+          <div class="nsc-chat-meta-bar">
+            <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
+            <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
+          </div>
         </div>
         <div class="nsc-chat-messages" id="nsc-chat-messages">
           <div class="nsc-empty-state">点击左侧任意版块与帖子主题，即可在中间窗口阅读与讨论</div>
@@ -4369,8 +4371,10 @@
     let chatCopyTimer = 0;
     if (chatTitleEl) {
       chatTitleEl.addEventListener("click", async () => {
-        if (state.activePmPeer || !state.currentPostId) return;
-        const postUrl = `${location.origin}/post-${state.currentPostId}-1`;
+        if (state.activePmPeer) return;
+        const pid = state.currentPostId || (isPostPath(location.pathname) ? getPostIdFromPath(location.pathname) : null);
+        if (!pid) return;
+        const postUrl = `${location.origin}/post-${pid}-1`;
         const ok = await copyTextToClipboard(postUrl);
         if (ok && chatCopyTip) {
           chatCopyTip.classList.add("is-show");

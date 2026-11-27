@@ -413,15 +413,14 @@
         display: flex; flex-direction: column; min-height: 0; position: relative;
       }
       .nsc-chat-header {
-        padding: 9px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
-        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+        padding: 8px 16px; border-bottom: 1px solid var(--nsc-border); background: var(--nsc-bg-right);
+        display: flex; flex-direction: column; gap: 5px;
       }
-      .nsc-chat-title-wrap { min-width: 0; flex: 1 1 200px; }
-      .nsc-chat-title-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+      .nsc-chat-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
       .nsc-chat-title {
-        font-size: 14.5px; font-weight: 700; color: var(--nsc-text);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        min-width: 0; transition: color 0.14s ease;
+        font-size: 14.5px; font-weight: 700; line-height: 1.38; color: var(--nsc-text);
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        min-width: 0; flex: 0 1 auto; transition: color 0.14s ease;
       }
       .nsc-chat-title.is-copyable { cursor: pointer; }
       .nsc-chat-title.is-copyable:hover { color: var(--nsc-accent); }
@@ -431,8 +430,11 @@
         background: rgba(52, 199, 89, 0.16); color: #16a34a;
       }
       .nsc-chat-copy-tip.is-show { display: inline-flex; align-items: center; }
-      .nsc-chat-subtitle { font-size: 11px; color: var(--nsc-muted); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
+      .nsc-chat-meta-bar {
+        display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-width: 0;
+      }
+      .nsc-chat-subtitle { font-size: 11px; color: var(--nsc-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; margin-left: auto; }
       .nsc-pill-btn {
         padding: 4px 8px; border-radius: 7px; border: 1px solid transparent;
         background: transparent; color: var(--nsc-muted); font-size: 11.5px; font-weight: 500; cursor: pointer;

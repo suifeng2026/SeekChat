@@ -201,14 +201,14 @@
 
       <main class="nsc-pane-chat">
         <div class="nsc-chat-header">
-          <div class="nsc-chat-title-wrap">
-            <div class="nsc-chat-title-row">
-              <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
-              <span class="nsc-chat-copy-tip" id="nsc-chat-copy-tip">已复制链接</span>
-            </div>
-            <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
+          <div class="nsc-chat-title-row">
+            <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
+            <span class="nsc-chat-copy-tip" id="nsc-chat-copy-tip">已复制链接</span>
           </div>
-          <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
+          <div class="nsc-chat-meta-bar">
+            <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
+            <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
+          </div>
         </div>
         <div class="nsc-chat-messages" id="nsc-chat-messages">
           <div class="nsc-empty-state">点击左侧任意版块与帖子主题，即可在中间窗口阅读与讨论</div>
@@ -639,8 +639,10 @@
     let chatCopyTimer = 0;
     if (chatTitleEl) {
       chatTitleEl.addEventListener("click", async () => {
-        if (state.activePmPeer || !state.currentPostId) return;
-        const postUrl = `${location.origin}/post-${state.currentPostId}-1`;
+        if (state.activePmPeer) return;
+        const pid = state.currentPostId || (isPostPath(location.pathname) ? getPostIdFromPath(location.pathname) : null);
+        if (!pid) return;
+        const postUrl = `${location.origin}/post-${pid}-1`;
         const ok = await copyTextToClipboard(postUrl);
         if (ok && chatCopyTip) {
           chatCopyTip.classList.add("is-show");
