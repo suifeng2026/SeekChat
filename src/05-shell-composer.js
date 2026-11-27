@@ -1131,6 +1131,7 @@
         <span class="nsc-mde-sep"></span>
         <button type="button" class="nsc-mde-btn" data-role="undo" title="撤销">${ICONS.undo}</button>
         <button type="button" class="nsc-mde-btn" data-role="redo" title="重做">${ICONS.redo}</button>
+        <button type="button" class="nsc-mde-btn" data-role="clear" title="清空内容">${ICONS.eraser}</button>
       </div>
       <div class="nsc-u-body">
         <textarea class="nsc-fallback-textarea" id="${prefix}-unified-ta" placeholder="${escHtml(opts.placeholder || "支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发送")}"></textarea>
@@ -1215,6 +1216,14 @@
       undoStack.push(nxt);
       lastSnap = nxt;
       ta.value = nxt;
+      syncPreview();
+      ta.focus({ preventScroll: true });
+    });
+    box.querySelector('[data-role="clear"]').addEventListener("click", () => {
+      if (!ta.value) return;
+      pushSnap(ta.value);
+      ta.value = "";
+      pushSnap("");
       syncPreview();
       ta.focus({ preventScroll: true });
     });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.15
+// @version      7.22.16
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -150,6 +150,7 @@
     undo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>`,
     redo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>`,
     fullscreen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`,
+    eraser: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21h10"/><path d="M5.5 13.5l8-8a2.1 2.1 0 0 1 3 0l3 3a2.1 2.1 0 0 1 0 3l-6.5 6.5a2 2 0 0 1-1.4.6H7.2a2 2 0 0 1-1.4-.6l-1.3-1.3a2.1 2.1 0 0 1 0-3z"/><path d="M10.5 8.5l5 5"/></svg>`,
   };
 
   const STICKER_GROUPS = [
@@ -311,7 +312,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.15",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.16",
       latest: "",
       installUrl: "",
       hasUpdate: false,
@@ -2487,20 +2488,26 @@
       .nsc-composer-header,
       .nsc-composer-dock .tab-select.window_header,
       #nsc-np-editor-host .tab-select.window_header {
-        display: flex !important; align-items: center !important; flex-wrap: wrap !important; gap: 3px !important;
+        display: flex !important; align-items: center !important; flex-wrap: nowrap !important; gap: 3px !important;
         padding: 2px 8px !important; height: auto !important; min-height: 25px !important;
+        overflow-x: auto !important; scrollbar-width: none !important;
         background: var(--nsc-hover) !important; border-bottom: 1px solid var(--nsc-border) !important;
         border-radius: 10px 10px 0 0 !important;
       }
+      .nsc-composer-dock .tab-select.window_header::-webkit-scrollbar,
+      .nsc-composer-dock .mde-toolbar::-webkit-scrollbar,
+      #nsc-np-editor-host .tab-select.window_header::-webkit-scrollbar,
+      #nsc-np-editor-host .mde-toolbar::-webkit-scrollbar { display: none !important; }
       .nsc-composer-dock .tab-select.window_header .tab-option,
-      #nsc-np-editor-host .tab-select.window_header .tab-option { padding: 2px 7px !important; font-size: 11.5px !important; cursor: pointer; }
+      #nsc-np-editor-host .tab-select.window_header .tab-option { padding: 2px 7px !important; font-size: 11.5px !important; cursor: pointer; white-space: nowrap !important; flex: 0 0 auto !important; }
       .nsc-composer-dock .tab-select.window_header > div[style*="margin-left: auto"],
       #nsc-np-editor-host .tab-select.window_header > div[style*="margin-left: auto"] { display: none !important; }
 
       .nsc-composer-dock .tab-select.window_header .expression,
       #nsc-np-editor-host .tab-select.window_header .expression {
-        display: inline-flex !important; align-items: center !important; gap: 2px !important;
+        display: inline-flex !important; align-items: center !important; flex-wrap: nowrap !important; gap: 2px !important;
         background: transparent !important; border: none !important; padding: 0 !important; margin: 0 auto 0 8px !important;
+        flex: 0 0 auto !important;
       }
       .nsc-composer-dock .tab-select.window_header .expression .exp-item,
       #nsc-np-editor-host .tab-select.window_header .expression .exp-item {
@@ -2514,6 +2521,8 @@
         cursor: pointer !important;
         border-bottom: 2px solid transparent !important;
         transition: none !important;
+        white-space: nowrap !important;
+        flex: 0 0 auto !important;
       }
       .nsc-composer-dock .tab-select.window_header .expression .exp-item:hover,
       .nsc-composer-dock .tab-select.window_header .expression .exp-item.active,
@@ -2536,8 +2545,9 @@
       .nsc-mde-toolbar,
       .nsc-composer-dock .mde-toolbar,
       #nsc-np-editor-host .mde-toolbar {
-        display: flex !important; align-items: center !important; flex-wrap: wrap !important; gap: 2px !important;
+        display: flex !important; align-items: center !important; flex-wrap: nowrap !important; gap: 2px !important;
         padding: 2px 6px !important; height: auto !important; min-height: 24px !important; background: transparent !important;
+        overflow-x: auto !important; scrollbar-width: none !important;
         border-bottom: 1px solid var(--nsc-border) !important;
       }
       .nsc-mde-btn,
@@ -2545,6 +2555,7 @@
       #nsc-np-editor-host .mde-toolbar .toolbar-item {
         display: inline-flex !important; align-items: center !important; justify-content: center !important;
         width: 23px !important; height: 21px !important; padding: 0 !important; border-radius: 5px !important;
+        flex: 0 0 auto !important;
         border: none; background: transparent;
         color: var(--nsc-muted) !important; transition: none !important; cursor: pointer; font-size: 11.5px; font-weight: 700;
       }
@@ -2556,31 +2567,26 @@
       .nsc-composer-dock .mde-toolbar .toolbar-item svg,
       #nsc-np-editor-host .mde-toolbar .toolbar-item svg { width: 13px !important; height: 13px !important; }
       .nsc-composer-dock .md-editor:not(.fullscreen) .CodeMirror {
-        height: auto !important; min-height: 76px !important; max-height: 180px !important;
-        font-size: 13px !important; line-height: 1.45 !important;
+        height: 132px !important; min-height: 132px !important; max-height: 132px !important;
+        font-size: 13px !important; line-height: 1.5 !important;
         background: transparent !important; color: var(--nsc-text) !important;
-      }
-      .nsc-composer-dock .md-editor:not(.fullscreen) .CodeMirror-scroll {
-        min-height: 76px !important; max-height: 180px !important;
       }
       #nsc-np-editor-host .md-editor:not(.fullscreen) .CodeMirror {
-        height: auto !important; min-height: 200px !important; max-height: 44vh !important;
+        height: 220px !important; min-height: 200px !important; max-height: 44vh !important;
         font-size: 13.5px !important; line-height: 1.55 !important;
         background: transparent !important; color: var(--nsc-text) !important;
-      }
-      #nsc-np-editor-host .md-editor:not(.fullscreen) .CodeMirror-scroll {
-        min-height: 200px !important; max-height: 44vh !important;
       }
       .nsc-composer-dock .CodeMirror-lines,
       #nsc-np-editor-host .CodeMirror-lines { padding: 4px 0 !important; }
       #nsc-np-editor-host .nsc-fallback-textarea {
-        min-height: 200px; max-height: 44vh; resize: vertical; padding: 10px 12px; font-size: 13.5px; line-height: 1.55;
+        height: 220px; min-height: 200px; max-height: 44vh; resize: vertical; padding: 10px 12px; font-size: 13.5px; line-height: 1.55;
       }
-      #nsc-np-editor-host .nsc-u-preview { min-height: 200px; max-height: 44vh; }
+      #nsc-np-editor-host .nsc-u-preview { height: 220px; min-height: 200px; max-height: 44vh; }
       #nsc-np-editor-host .md-editor .topic-select .submit.btn { display: none !important; }
       .nsc-fallback-textarea {
-        width: 100%; box-sizing: border-box; height: 74px; border: none; outline: none; resize: none;
-        padding: 7px 10px; font-size: 13px; line-height: 1.45; background: transparent; color: var(--nsc-text);
+        width: 100%; box-sizing: border-box; height: 132px; min-height: 132px; max-height: 132px;
+        border: none; outline: none; resize: none;
+        padding: 7px 10px; font-size: 13px; line-height: 1.5; background: transparent; color: var(--nsc-text);
         font-family: var(--mac-font);
       }
       /* 表情面板改为贴底悬浮层（最多约 2 行高度），AC娘仅显示前 32 个热门经典贴图 */
@@ -2647,21 +2653,21 @@
       }
       .nsc-u-tab:hover { color: var(--nsc-text); }
       .nsc-u-tab.is-active { color: var(--nsc-text); font-weight: 700; border-bottom-color: var(--nsc-text); }
-      .nsc-u-exp-tabs { display: inline-flex; align-items: center; gap: 2px; margin: 0 auto 0 8px; flex-wrap: wrap; }
+      .nsc-u-exp-tabs { display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 2px; margin: 0 auto 0 8px; flex: 0 0 auto; }
       .nsc-u-exp-tab {
         padding: 2px 7px; border: none; border-bottom: 2px solid transparent; background: transparent;
-        font-size: 11.5px; font-weight: 500; color: var(--nsc-muted); cursor: pointer;
+        font-size: 11.5px; font-weight: 500; color: var(--nsc-muted); cursor: pointer; white-space: nowrap; flex: 0 0 auto;
       }
       .nsc-u-exp-tab:hover,
       .nsc-u-exp-tab.is-active { color: var(--nsc-accent); border-bottom-color: var(--nsc-accent); font-weight: 600; }
-      .nsc-u-top-acts { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; }
+      .nsc-u-top-acts { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; flex: 0 0 auto; }
       .nsc-u-body { display: block; position: relative; }
       .nsc-u-body.is-split { display: grid; grid-template-columns: 1fr 1fr; }
       .nsc-u-body.is-split .nsc-u-preview { border-left: 1px solid var(--nsc-border); display: block; }
       .nsc-u-body.is-preview-only .nsc-fallback-textarea { display: none; }
       .nsc-u-body.is-preview-only .nsc-u-preview { display: block; }
       .nsc-u-preview {
-        display: none; min-height: 70px; max-height: 150px; overflow-y: auto;
+        display: none; height: 132px; min-height: 132px; max-height: 132px; overflow-y: auto;
         padding: 7px 11px; font-size: 13px; line-height: 1.5; color: var(--nsc-text); word-break: break-word;
       }
       .nsc-u-preview p { margin: 3px 0; }
@@ -5200,6 +5206,7 @@
         <span class="nsc-mde-sep"></span>
         <button type="button" class="nsc-mde-btn" data-role="undo" title="撤销">${ICONS.undo}</button>
         <button type="button" class="nsc-mde-btn" data-role="redo" title="重做">${ICONS.redo}</button>
+        <button type="button" class="nsc-mde-btn" data-role="clear" title="清空内容">${ICONS.eraser}</button>
       </div>
       <div class="nsc-u-body">
         <textarea class="nsc-fallback-textarea" id="${prefix}-unified-ta" placeholder="${escHtml(opts.placeholder || "支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发送")}"></textarea>
@@ -5284,6 +5291,14 @@
       undoStack.push(nxt);
       lastSnap = nxt;
       ta.value = nxt;
+      syncPreview();
+      ta.focus({ preventScroll: true });
+    });
+    box.querySelector('[data-role="clear"]').addEventListener("click", () => {
+      if (!ta.value) return;
+      pushSnap(ta.value);
+      ta.value = "";
+      pushSnap("");
       syncPreview();
       ta.focus({ preventScroll: true });
     });
