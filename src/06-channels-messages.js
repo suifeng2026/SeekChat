@@ -172,12 +172,14 @@
     } else if (!state.currentPostId && !isPostPath(location.pathname)) {
       syncComposerMode("none");
     } else {
-      syncComposerMode(isPostPath(location.pathname) && (!state.currentPostId || state.currentPostId === state.nativePostId));
+      syncComposerMode("post");
     }
     if (typeof refreshNativeFloorCountsIfNeeded === "function") {
       refreshNativeFloorCountsIfNeeded();
     }
 
+    const rightScroll = document.getElementById("nsc-right-scroll");
+    const rightHasContent = Boolean(rightScroll && rightScroll.children.length > 0);
     if (state.rightTab === "hot" && !state.hotCache[state.hotTab]) {
       fetchHotPosts(state.hotTab);
     } else if (state.rightTab === "friends" && !state.followData.loaded) {
@@ -186,7 +188,7 @@
       fetchFansOrFollow("fans");
     } else if (state.rightTab === "blacklist" && !state.blockListState.loaded) {
       fetchServerBlockList(false);
-    } else {
+    } else if (!rightHasContent) {
       renderRightBody();
     }
   }
@@ -205,8 +207,13 @@
       rightPanel.insertBefore(userCard, rightPanel.firstChild);
     }
     const commentContainer = document.querySelector("#nsk-frame .comment-container");
-    const nativeEditor = document.querySelector("#nsc-composer-body .md-editor");
+    const nativeEditor = document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)");
     if (commentContainer && nativeEditor) {
+      const submitBtn = nativeEditor.querySelector("button.submit.btn");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "发布评论";
+      }
       nativeEditor.style.display = "block";
       commentContainer.appendChild(nativeEditor);
     }
@@ -665,52 +672,79 @@
     state.members = [];
   }
 
-  async function openPmConversation(peer) {
+  function updateTopicListSelection(postId) {
+    const scrollEl = document.getElementById("nsc-topic-scroll");
+    if (!scrollEl) return;
+    const pid = String(postId || "");
+    for (const row of scrollEl.querySelectorAll(".nsc-topic-item")) {
+      const rpid = row.dataset.postId || "";
+      const isSel = Boolean(pid && rpid === pid);
+      row.classList.toggle("is-selected", isSel);
+      if (isSel) {
+        row.classList.add("is-read");
+        const dot = row.querySelector(".nsc-badge-dot, .nsc-badge-delta");
+        if (dot) {
+          const readSpan = document.createElement("span");
+          readSpan.className = "nsc-badge-read";
+          readSpan.textContent = "已读";
+          dot.replaceWith(readSpan);
+        }
+      }
+    }
+  }
+
+  async function openPmConversation(peer, { silent = false } = {}) {
     if (!peer || !peer.uid) return;
     detectCurrentUser();
     const reqSeq = ++state.chatViewSeq;
     const peerUid = String(peer.uid);
+    const samePeer = Boolean(state.activePmPeer && state.activePmPeer.uid === peerUid);
     clearPostRoomState();
     state.activePmPeer = {
       uid: peerUid,
       name: peer.name || peer.author || `用户 ${peerUid}`,
       avatar: peer.avatar || `/avatar/${peerUid}.png`,
     };
-    renderTopicList();
+    if (!silent) renderTopicList();
     syncComposerMode("pm");
 
     const titleEl = document.getElementById("nsc-chat-title");
     const subEl = document.getElementById("nsc-chat-subtitle");
     const actionsEl = document.getElementById("nsc-chat-actions");
     const msgsEl = document.getElementById("nsc-chat-messages");
-    if (titleEl) {
-      titleEl.textContent = `私信：${state.activePmPeer.name}`;
-      titleEl.classList.remove("is-copyable");
-      titleEl.removeAttribute("title");
+    if (!silent || !samePeer) {
+      if (titleEl) {
+        titleEl.textContent = `私信：${state.activePmPeer.name}`;
+        titleEl.classList.remove("is-copyable");
+        titleEl.removeAttribute("title");
+      }
+      const copyTipEl = document.getElementById("nsc-chat-copy-tip");
+      if (copyTipEl) copyTipEl.classList.remove("is-show");
+      if (subEl) subEl.innerHTML = `<span>UID: ${escHtml(state.activePmPeer.uid)}</span><span>与 ${escHtml(state.activePmPeer.name)} 的站内对话</span>`;
+      if (actionsEl) {
+        actionsEl.innerHTML = "";
+        const refBtn = document.createElement("button");
+        refBtn.type = "button";
+        refBtn.className = "nsc-pill-btn";
+        refBtn.textContent = "刷新记录";
+        refBtn.addEventListener("click", () => {
+          if (state.activePmPeer) openPmConversation(state.activePmPeer);
+        });
+        const profBtn = document.createElement("button");
+        profBtn.type = "button";
+        profBtn.className = "nsc-pill-btn";
+        profBtn.textContent = "TA的名片";
+        profBtn.addEventListener("click", () => {
+          if (state.activePmPeer) openUserProfileModal(state.activePmPeer);
+        });
+        actionsEl.appendChild(refBtn);
+        actionsEl.appendChild(profBtn);
+      }
+      if (msgsEl) {
+        if (msgsEl.children.length > 0) msgsEl.classList.add("is-switching");
+        else msgsEl.innerHTML = `<div class="nsc-empty-state">正在读取私信聊天记录...</div>`;
+      }
     }
-    const copyTipEl = document.getElementById("nsc-chat-copy-tip");
-    if (copyTipEl) copyTipEl.classList.remove("is-show");
-    if (subEl) subEl.innerHTML = `<span>UID: ${escHtml(state.activePmPeer.uid)}</span><span>与 ${escHtml(state.activePmPeer.name)} 的站内对话</span>`;
-    if (actionsEl) {
-      actionsEl.innerHTML = "";
-      const refBtn = document.createElement("button");
-      refBtn.type = "button";
-      refBtn.className = "nsc-pill-btn";
-      refBtn.textContent = "刷新记录";
-      refBtn.addEventListener("click", () => {
-        if (state.activePmPeer) openPmConversation(state.activePmPeer);
-      });
-      const profBtn = document.createElement("button");
-      profBtn.type = "button";
-      profBtn.className = "nsc-pill-btn";
-      profBtn.textContent = "TA的名片";
-      profBtn.addEventListener("click", () => {
-        if (state.activePmPeer) openUserProfileModal(state.activePmPeer);
-      });
-      actionsEl.appendChild(refBtn);
-      actionsEl.appendChild(profBtn);
-    }
-    if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">正在读取私信聊天记录...</div>`;
 
     try {
       const json = await apiGetJson(`/api/notification/message/with/${peerUid}`);
@@ -722,7 +756,8 @@
       const rows = Array.isArray(json.msgArray) ? json.msgArray : [];
       rows.sort((a, b) => (new Date(a.created_at).getTime() || 0) - (new Date(b.created_at).getTime() || 0) || (Number(a.id) || 0) - (Number(b.id) || 0));
       state.pmMessages = rows;
-      renderPmMessages();
+      if (msgsEl) msgsEl.classList.remove("is-switching");
+      renderPmMessages(silent && samePeer);
 
       const myId = state.currentUserId;
       const unreadIds = rows
@@ -743,81 +778,73 @@
       }
     } catch (err) {
       if (reqSeq !== state.chatViewSeq || !state.activePmPeer || state.activePmPeer.uid !== peerUid) return;
-      if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">读取私信失败：${escHtml(err.message)}</div>`;
+      if (msgsEl) {
+        msgsEl.classList.remove("is-switching");
+        if (!silent) msgsEl.innerHTML = `<div class="nsc-empty-state">读取私信失败：${escHtml(err.message)}</div>`;
+      }
     }
   }
 
-  function renderPmMessages() {
+  function createPmMessageNode(m, peer, myId) {
+    const isMine = myId ? Number(m.sender_id) === myId : Number(m.sender_id) !== Number(peer.uid);
+    const wrap = document.createElement("div");
+    wrap.className = "nsc-msg" + (isMine ? " is-self" : "");
+    if (m.id) wrap.dataset.pmId = String(m.id);
+    const av = isMine ? (myId ? `/avatar/${myId}.png` : "/static/image/favicon/android-chrome-192x192.png") : peer.avatar;
+    const nm = isMine ? (state.currentUser || "我") : peer.name;
+    const tm = formatChineseTime("", m.created_at, "");
+    wrap.innerHTML = `
+      <div class="nsc-avatar-col">
+        <button type="button" class="nsc-avatar-btn"><img src="${av}" loading="lazy" alt="" /></button>
+      </div>
+      <div class="nsc-msg-main">
+        <div class="nsc-msg-meta">
+          <button type="button" class="nsc-msg-author"></button>
+          ${tm ? `<span>${tm}</span>` : ""}
+        </div>
+        <div class="nsc-bubble-row">
+          <div class="nsc-bubble">${renderSimpleMarkdown(m.content || "")}</div>
+        </div>
+      </div>
+    `;
+    wrap.querySelector(".nsc-msg-author").textContent = nm;
+    wrap.querySelector(".nsc-avatar-btn").addEventListener("click", () => {
+      if (!isMine) openUserProfileModal(peer);
+    });
+    const pmBubble = wrap.querySelector(".nsc-bubble");
+    if (pmBubble) {
+      runBubbleEnhancers(pmBubble, { isPm: true });
+    }
+    return wrap;
+  }
+
+  function renderPmMessages(incremental = false) {
     const msgsEl = document.getElementById("nsc-chat-messages");
     if (!msgsEl || !state.activePmPeer) return;
-    msgsEl.innerHTML = "";
     if (state.pmMessages.length === 0) {
       msgsEl.innerHTML = `<div class="nsc-empty-state">暂无私信记录，发一条消息开始对话吧</div>`;
       return;
     }
     const myId = state.currentUserId;
     const peer = state.activePmPeer;
-    for (const m of state.pmMessages) {
-      const isMine = myId ? Number(m.sender_id) === myId : Number(m.sender_id) !== Number(peer.uid);
-      const wrap = document.createElement("div");
-      wrap.className = "nsc-msg" + (isMine ? " is-self" : "");
-      const av = isMine ? (myId ? `/avatar/${myId}.png` : "/static/image/favicon/android-chrome-192x192.png") : peer.avatar;
-      const nm = isMine ? (state.currentUser || "我") : peer.name;
-      const tm = formatChineseTime("", m.created_at, "");
-      wrap.innerHTML = `
-        <div class="nsc-avatar-col">
-          <button type="button" class="nsc-avatar-btn"><img src="${av}" loading="lazy" alt="" /></button>
-        </div>
-        <div class="nsc-msg-main">
-          <div class="nsc-msg-meta">
-            <button type="button" class="nsc-msg-author"></button>
-            ${tm ? `<span>${tm}</span>` : ""}
-          </div>
-          <div class="nsc-bubble-row">
-            <div class="nsc-bubble">${renderSimpleMarkdown(m.content || "")}</div>
-          </div>
-        </div>
-      `;
-      wrap.querySelector(".nsc-msg-author").textContent = nm;
-      wrap.querySelector(".nsc-avatar-btn").addEventListener("click", () => {
-        if (!isMine) openUserProfileModal(peer);
-      });
-      const pmBubble = wrap.querySelector(".nsc-bubble");
-      if (pmBubble) {
-        runBubbleEnhancers(pmBubble, { isPm: true });
+    if (incremental && msgsEl.querySelector(".nsc-msg[data-pm-id]")) {
+      const existingIds = new Set(
+        Array.from(msgsEl.querySelectorAll(".nsc-msg[data-pm-id]")).map((el) => el.dataset.pmId)
+      );
+      let appended = false;
+      for (const m of state.pmMessages) {
+        if (m.id && existingIds.has(String(m.id))) continue;
+        msgsEl.appendChild(createPmMessageNode(m, peer, myId));
+        appended = true;
       }
-      msgsEl.appendChild(wrap);
+      if (appended) msgsEl.scrollTop = msgsEl.scrollHeight;
+      return;
+    }
+    msgsEl.innerHTML = "";
+    for (const m of state.pmMessages) {
+      msgsEl.appendChild(createPmMessageNode(m, peer, myId));
     }
     msgsEl.scrollTop = msgsEl.scrollHeight;
-  }
-
-  async function sendPmMessage() {
-    const peer = state.activePmPeer;
-    const ta = document.getElementById("nsc-pm-ta");
-    const btn = document.getElementById("nsc-pm-send");
-    const status = document.getElementById("nsc-pm-status");
-    if (!peer || !ta || !btn) return;
-    const content = ta.value.trim();
-    if (!content) return;
-
-    const seq = state.chatViewSeq;
-    btn.disabled = true;
-    btn.textContent = "发送中...";
-    if (status) status.textContent = "正在发送私信...";
-    try {
-      await apiPostJson("/api/notification/message/send", { receiverUid: Number(peer.uid), content, markdown: true });
-      ta.value = "";
-      if (status) status.textContent = "发送成功";
-      if (seq === state.chatViewSeq && state.activePmPeer && state.activePmPeer.uid === peer.uid) {
-        await openPmConversation(peer);
-      }
-      fetchPmList();
-    } catch (err) {
-      if (status) status.textContent = "发送失败: " + err.message;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "发送私信";
-    }
   }
 
   function resolveKnownPostTitle(postId) {
@@ -1765,6 +1792,7 @@
     items.forEach((it) => {
       const rs = (isHistoryChannel || isBoardReadView) ? { status: "read", delta: 0 } : getReadStatus(it.postId, it.replies);
       const row = document.createElement("div");
+      row.dataset.postId = it.postId;
       row.className =
         "nsc-topic-item" +
         (rs.status === "read" && !isHistoryChannel && !isBoardReadView ? " is-read" : "") +

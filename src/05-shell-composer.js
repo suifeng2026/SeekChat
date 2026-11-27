@@ -791,160 +791,523 @@
     hostEl.appendChild(pop);
   }
 
-  function buildFallbackComposer() {
-    const box = document.createElement("div");
-    box.className = "nsc-composer-box";
-    box.id = "nsc-fallback-composer";
-    box.style.position = "relative";
-    box.innerHTML = `
-      ${buildMarkdownToolbarHtml({ id: "nsc-fb-toolbar", expBtnId: "nsc-fb-exp-btn" })}
-      <textarea class="nsc-fallback-textarea" id="nsc-fallback-ta" placeholder="输入评论内容，支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布"></textarea>
-      <div class="nsc-composer-footer">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" class="nsc-nodeimage-btn" id="nsc-fb-ni-btn" title="NodeImage 图床上传/授权"><span class="nsc-ni-dot"></span>图床</button>
-          <span id="nsc-composer-status" style="font-size:11px;color:var(--nsc-muted);">Ctrl + Enter 发布</span>
-        </div>
-        <button type="button" class="nsc-send-btn" id="nsc-fallback-send">发布评论</button>
-      </div>
-    `;
-    box.querySelector("#nsc-fb-ni-btn").addEventListener("click", () => openNodeImageModal("chat"));
-    NodeImage.syncDots();
-    const ta = box.querySelector("#nsc-fallback-ta");
-    attachStickerPicker(box.querySelector("#nsc-fb-exp-btn"), ta, box);
-    bindMarkdownToolbar(box.querySelector("#nsc-fb-toolbar"), ta);
+  let _activeComposerCtxKey = "";
+  const _composerDrafts = new Map();
 
-    const submitComment = async () => {
-      const content = ta.value.trim();
-      const pid = state.currentPostId;
-      if (!content || !pid || state.activePmPeer) return;
-      const btn = box.querySelector("#nsc-fallback-send");
-      const status = box.querySelector("#nsc-composer-status");
-      btn.disabled = true;
-      btn.textContent = "发送中...";
+  function getActiveComposerContextKey() {
+    if (state.activePmPeer && state.activePmPeer.uid) return `pm:${state.activePmPeer.uid}`;
+    if (state.currentPostId) return `post:${state.currentPostId}`;
+    return "";
+  }
+
+  function getNativeCodeMirror(editor) {
+    if (!editor) return null;
+    const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+    const cmEl =
+      (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
+      editor.querySelector(".CodeMirror");
+    if (!cmEl) return null;
+    return cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror) || null;
+  }
+
+  function getNativeEditorValue(editor) {
+    const cm = getNativeCodeMirror(editor);
+    if (cm && typeof cm.getValue === "function") return cm.getValue();
+    const ta = editor && editor.querySelector(".CodeMirror textarea, textarea");
+    return ta ? ta.value : "";
+  }
+
+  function setNativeEditorValue(editor, val) {
+    const cm = getNativeCodeMirror(editor);
+    if (cm && typeof cm.setValue === "function") {
+      cm.setValue(String(val || ""));
+      if (typeof cm.clearHistory === "function" && !val) {
+        try { cm.clearHistory(); } catch (_) {}
+      }
+      return;
+    }
+    const ta = editor && editor.querySelector(".CodeMirror textarea, textarea");
+    if (ta) {
+      ta.value = String(val || "");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  function ensureNativeEditorWriteTab(editor) {
+    if (!editor) return;
+    const prevTab = editor.querySelector(".tab-select.window_header .tab-option-item-1");
+    const editTab = editor.querySelector(".tab-select.window_header .tab-option-item-0");
+    const splitTab = editor.querySelector(".tab-select.window_header .tab-option-item-2");
+    const cmWrap = editor.querySelector("#cm-editor-wrapper, .CodeMirror");
+    const isPrevActive = prevTab && prevTab.style && prevTab.style.borderBottomStyle === "solid";
+    const isSplitActive = splitTab && splitTab.style && splitTab.style.borderBottomStyle === "solid";
+    if (!isSplitActive && (isPrevActive || (cmWrap && cmWrap.offsetParent === null)) && editTab) {
+      editTab.click();
+    }
+  }
+
+  function insertTextToActiveComposer(snippet, { asLine = true } = {}) {
+    const text = String(snippet || "");
+    if (!text) return false;
+    const nativeEditor = document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)");
+    if (nativeEditor && nativeEditor.style.display !== "none") {
+      ensureNativeEditorWriteTab(nativeEditor);
+      const cm = getNativeCodeMirror(nativeEditor);
+      if (cm && typeof cm.getValue === "function") {
+        cm.operation(() => {
+          const curVal = cm.getValue();
+          if (asLine && curVal && !curVal.endsWith("\n")) {
+            const last = cm.lastLine();
+            cm.replaceRange("\n", { line: last, ch: cm.getLine(last).length });
+          }
+          const endLine = cm.lastLine();
+          const endCh = cm.getLine(endLine).length;
+          cm.replaceRange(text, { line: endLine, ch: endCh });
+          const nextEnd = cm.lastLine();
+          cm.setCursor({ line: nextEnd, ch: cm.getLine(nextEnd).length });
+          cm.scrollIntoView({ line: nextEnd, ch: 0 }, 8);
+        });
+        if (typeof cm.refresh === "function") cm.refresh();
+        const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
+        if (inputField && typeof inputField.focus === "function") {
+          inputField.focus({ preventScroll: true });
+        } else if (typeof cm.focus === "function") {
+          cm.focus();
+        }
+        return true;
+      }
+    }
+
+    const uBox = document.getElementById("nsc-unified-composer");
+    const uTa = document.getElementById("nsc-unified-ta");
+    if (uBox && uTa && uBox.style.display !== "none") {
+      if (typeof uBox._ensureWriteMode === "function") uBox._ensureWriteMode();
+      const curVal = uTa.value || "";
+      const prefix = asLine && curVal && !curVal.endsWith("\n") ? "\n" : "";
+      const ins = prefix + text;
+      const pos = curVal.length;
+      uTa.setRangeText(ins, pos, pos, "end");
+      uTa.dispatchEvent(new Event("input", { bubbles: true }));
+      uTa.focus({ preventScroll: true });
+      return true;
+    }
+    return false;
+  }
+
+  async function submitUnifiedComposerContent(rawContent, { clearFn, setStatusFn, setBusyFn } = {}) {
+    const content = String(rawContent || "").trim();
+    if (!content) return;
+    const submitCtxKey = getActiveComposerContextKey();
+    const isSameCtx = () => getActiveComposerContextKey() === submitCtxKey;
+
+    if (state.activePmPeer) {
+      const peer = state.activePmPeer;
+      const seq = state.chatViewSeq;
+      if (setBusyFn) setBusyFn(true, "发送中...");
+      if (setStatusFn) setStatusFn("正在发送私信...");
       try {
-        await apiPostJson("/api/content/new-comment", { content, mode: "new-comment", postId: Number(pid) });
-        ta.value = "";
-        status.textContent = "评论已发布，正在同步最新楼层...";
-        const room = state.currentRoom;
-        if (!state.activePmPeer && room && room.pid === pid && state.currentPostId === pid) {
-          const lastPage = room.pages.length || 1;
-          const pDoc = await fetchPostPageDoc(`/post-${pid}-${lastPage}`);
-          if (!state.activePmPeer && state.currentRoom === room && state.currentPostId === pid) {
+        await apiPostJson("/api/notification/message/send", {
+          receiverUid: Number(peer.uid),
+          content,
+          markdown: true,
+        });
+        _composerDrafts.delete(`pm:${peer.uid}`);
+        if (isSameCtx()) {
+          if (clearFn) clearFn();
+          if (setStatusFn) setStatusFn("私信发送成功");
+        }
+        if (seq === state.chatViewSeq && state.activePmPeer && state.activePmPeer.uid === peer.uid) {
+          if (typeof openPmConversation === "function") await openPmConversation(peer, { silent: true });
+        }
+        if (typeof fetchPmList === "function") fetchPmList();
+      } catch (err) {
+        if (isSameCtx() && setStatusFn) setStatusFn("发送失败: " + err.message);
+      } finally {
+        if (setBusyFn) setBusyFn(false, state.activePmPeer ? "发送私信" : "发布评论");
+      }
+      return;
+    }
+
+    const pid = state.currentPostId;
+    if (!pid) return;
+    const room = state.currentRoom;
+    if (setBusyFn) setBusyFn(true, "发送中...");
+    if (setStatusFn) setStatusFn("正在发布评论...");
+    try {
+      await apiPostJson("/api/content/new-comment", {
+        content,
+        mode: "new-comment",
+        postId: Number(pid),
+      });
+      _composerDrafts.delete(`post:${pid}`);
+      if (isSameCtx()) {
+        if (clearFn) clearFn();
+        if (setStatusFn) setStatusFn("评论已发布，正在同步楼层...");
+      }
+      if (!state.activePmPeer && room && room.pid === pid && state.currentPostId === pid) {
+        const lastPage = Math.max(1, (room.pages && room.pages.length) || 1);
+        let pDoc = await fetchPostPageDoc(`/post-${pid}-${lastPage}`);
+        if (!state.activePmPeer && state.currentRoom === room && state.currentPostId === pid) {
+          let added = typeof appendRoomCommentsIncrementally === "function"
+            ? appendRoomCommentsIncrementally(room, pDoc, lastPage)
+            : 0;
+          const totalAfter = room.pages.length || 1;
+          if (added === 0 && totalAfter > lastPage) {
+            pDoc = await fetchPostPageDoc(`/post-${pid}-${totalAfter}`);
+            if (!state.activePmPeer && state.currentRoom === room && state.currentPostId === pid) {
+              added = typeof appendRoomCommentsIncrementally === "function"
+                ? appendRoomCommentsIncrementally(room, pDoc, totalAfter)
+                : 0;
+            }
+          }
+          if (added === 0 && typeof appendRoomCommentsIncrementally !== "function") {
             mergePostPageComments(room, pDoc, lastPage);
             renderChatRoom(room, true);
-            const msgsEl = document.getElementById("nsc-chat-messages");
-            if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
           }
+          const msgsEl = document.getElementById("nsc-chat-messages");
+          if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
         }
-        status.textContent = "发布成功";
-      } catch (err) {
-        status.textContent = "发送失败: " + err.message;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "发布评论";
+      }
+      if (isSameCtx() && setStatusFn) setStatusFn("发布成功");
+    } catch (err) {
+      if (isSameCtx() && setStatusFn) setStatusFn("发送失败: " + err.message);
+    } finally {
+      if (setBusyFn) setBusyFn(false, state.activePmPeer ? "发送私信" : "发布评论");
+    }
+  }
+
+  function renderUnifiedPreviewHtml(md) {
+    const raw = String(md || "").trim();
+    if (!raw) return `<span style="color:var(--nsc-muted);">（暂无预览内容）</span>`;
+    let html = renderSimpleMarkdown(raw);
+    html = html.replace(/:(ac|yct|xhj|emoji)(\d{2,3}):/gi, (full, grp, num) => {
+      const g = STICKER_GROUPS.find((x) => x.id === grp.toLowerCase());
+      if (!g) return full;
+      const hit = (g.files || []).find((f) => f.replace(/\.[^.]+$/, "") === num);
+      if (!hit) return full;
+      return `<img class="sticker" src="/static/image/sticker/${g.id}/${hit}" alt="${escHtml(full)}" />`;
+    });
+    return html;
+  }
+
+  function buildUnifiedComposer() {
+    const box = document.createElement("div");
+    box.className = "nsc-composer-box md-editor nsc-unified-editor";
+    box.id = "nsc-unified-composer";
+    box.style.position = "relative";
+
+    const groups = getEffectiveStickerGroups();
+    box.innerHTML = `
+      <div class="tab-select window_header">
+        <div style="display:flex;align-items:center;">
+          <button type="button" class="nsc-u-tab is-active" data-umode="write">内容</button>
+          <button type="button" class="nsc-u-tab" data-umode="preview">预览</button>
+          <button type="button" class="nsc-u-tab" data-umode="split">对照</button>
+        </div>
+        <div class="nsc-u-exp-tabs" id="nsc-u-exp-tabs">
+          ${groups.map((g) => `<button type="button" class="nsc-u-exp-tab" data-ugroup="${escHtml(g.id)}">${escHtml(g.label)}</button>`).join("")}
+          <button type="button" class="nsc-u-exp-tab sticker-group-app" data-ugroup="app">App</button>
+        </div>
+        <div class="nsc-u-top-acts">
+          <button type="button" class="nsc-mde-btn" id="nsc-u-toggle-tb" title="显示/隐藏工具栏">🛠</button>
+          <button type="button" class="nsc-mde-btn" id="nsc-u-toggle-fs" title="全屏编辑">${ICONS.fullscreen}</button>
+        </div>
+      </div>
+      <div class="nsc-mde-toolbar" id="nsc-u-toolbar">
+        <button type="button" class="nsc-mde-btn" data-wrap="**" title="加粗">B</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="*" title="斜体">I</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="~~" title="删除线">S</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" data-prefix="## " title="标题">H</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="- " title="无序列表">•</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="1. " title="有序列表">1.</button>
+        <button type="button" class="nsc-mde-btn" data-prefix="> " title="引用">"</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" data-tpl="[链接文字](https://)" title="链接">🔗</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="![](https://)" title="图片">🖼</button>
+        <button type="button" class="nsc-mde-btn" data-wrap="\`" title="行内代码">&lt;/&gt;</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\`\`\`\n\n\`\`\`" title="代码块">{ }</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" data-tpl="\n| 列1 | 列2 |\n| :--- | :--- |\n| 内容 | 内容 |\n" title="表格">田</button>
+        <button type="button" class="nsc-mde-btn" data-tpl="\n---\n" title="分割线">—</button>
+        <span class="nsc-mde-sep"></span>
+        <button type="button" class="nsc-mde-btn" id="nsc-u-undo" title="撤销">${ICONS.undo}</button>
+        <button type="button" class="nsc-mde-btn" id="nsc-u-redo" title="重做">${ICONS.redo}</button>
+      </div>
+      <div class="nsc-u-body" id="nsc-u-body">
+        <textarea class="nsc-fallback-textarea" id="nsc-unified-ta" placeholder="支持完整 Markdown 语法、Ctrl+V 粘贴图片 · Ctrl+Enter 发送"></textarea>
+        <div class="nsc-u-preview" id="nsc-u-preview"></div>
+      </div>
+      <div class="exp-container cur-sticker-group-null" id="nsc-u-sticker-pop"></div>
+      <div class="nsc-u-app-pop" id="nsc-u-app-pop">
+        <div class="nsc-u-app-row">
+          <button type="button" class="nsc-u-app-btn" id="nsc-u-app-stardust">${ICONS.stardust}<span>星辰收款</span></button>
+          <button type="button" class="nsc-u-app-btn" id="nsc-u-app-vote">${ICONS.review}<span>发起投票</span></button>
+        </div>
+        <div class="nsc-u-sd-form" id="nsc-u-sd-form">
+          <div style="display:flex;gap:5px;align-items:center;">
+            <input type="number" id="nsc-u-sd-diff" min="1" max="1000" value="1" placeholder="星辰数" style="width:74px;" />
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--nsc-muted);white-space:nowrap;">
+              <input type="checkbox" id="nsc-u-sd-once" />一次性
+            </label>
+          </div>
+          <input type="text" id="nsc-u-sd-desc" placeholder="收款说明（可选）..." />
+          <div style="display:flex;justify-content:flex-end;gap:6px;">
+            <button type="button" class="nsc-mini-btn" id="nsc-u-sd-cancel">取消</button>
+            <button type="button" class="nsc-send-btn" id="nsc-u-sd-ins">插入收款码</button>
+          </div>
+        </div>
+      </div>
+      <div class="topic-select nsc-composer-footer">
+        <div style="display:inline-flex;align-items:center;gap:8px;min-width:0;">
+          <button type="button" class="nsc-nodeimage-btn" id="nsc-u-ni-btn" title="NodeImage 图床上传/管理"><span class="nsc-ni-dot"></span>图床</button>
+          <span id="nsc-unified-status" class="nsc-ni-status" style="font-size:11px;color:var(--nsc-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">支持完整 Markdown · Ctrl+V 贴图 · Ctrl+Enter 发送</span>
+        </div>
+        <button type="button" class="submit btn nsc-send-btn" id="nsc-unified-send">发布评论</button>
+      </div>
+    `;
+
+    const ta = box.querySelector("#nsc-unified-ta");
+    const bodyEl = box.querySelector("#nsc-u-body");
+    const previewEl = box.querySelector("#nsc-u-preview");
+    const toolbarEl = box.querySelector("#nsc-u-toolbar");
+    const stickerPop = box.querySelector("#nsc-u-sticker-pop");
+    const appPop = box.querySelector("#nsc-u-app-pop");
+    const sdForm = box.querySelector("#nsc-u-sd-form");
+    const statusEl = box.querySelector("#nsc-unified-status");
+    const sendBtn = box.querySelector("#nsc-unified-send");
+
+    const undoStack = [""];
+    const redoStack = [];
+    let lastSnap = "";
+    const pushSnap = (v) => {
+      if (v === lastSnap) return;
+      undoStack.push(v);
+      if (undoStack.length > 60) undoStack.shift();
+      redoStack.length = 0;
+      lastSnap = v;
+    };
+
+    const syncPreview = () => {
+      if (bodyEl.classList.contains("is-preview-only") || bodyEl.classList.contains("is-split")) {
+        previewEl.innerHTML = renderUnifiedPreviewHtml(ta.value);
       }
     };
 
-    box.querySelector("#nsc-fallback-send").addEventListener("click", submitComment);
+    let snapTimer = 0;
+    ta.addEventListener("input", () => {
+      syncPreview();
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(() => pushSnap(ta.value), 260);
+    });
+
+    box.querySelector("#nsc-u-undo").addEventListener("click", () => {
+      if (undoStack.length <= 1) return;
+      const cur = undoStack.pop();
+      redoStack.push(cur);
+      const prev = undoStack[undoStack.length - 1] || "";
+      lastSnap = prev;
+      ta.value = prev;
+      syncPreview();
+      ta.focus({ preventScroll: true });
+    });
+    box.querySelector("#nsc-u-redo").addEventListener("click", () => {
+      if (redoStack.length === 0) return;
+      const nxt = redoStack.pop();
+      undoStack.push(nxt);
+      lastSnap = nxt;
+      ta.value = nxt;
+      syncPreview();
+      ta.focus({ preventScroll: true });
+    });
+
+    const setMode = (mode) => {
+      box.querySelectorAll("[data-umode]").forEach((b) => b.classList.toggle("is-active", b.dataset.umode === mode));
+      bodyEl.classList.toggle("is-preview-only", mode === "preview");
+      bodyEl.classList.toggle("is-split", mode === "split");
+      toolbarEl.style.display = mode === "preview" ? "none" : "flex";
+      syncPreview();
+      if (mode !== "preview") ta.focus({ preventScroll: true });
+    };
+    box._ensureWriteMode = () => {
+      if (bodyEl.classList.contains("is-preview-only")) setMode("write");
+    };
+    box.querySelectorAll("[data-umode]").forEach((b) => {
+      b.addEventListener("click", () => setMode(b.dataset.umode));
+    });
+
+    box.querySelector("#nsc-u-toggle-tb").addEventListener("click", () => {
+      toolbarEl.style.display = toolbarEl.style.display === "none" ? "flex" : "none";
+    });
+    box.querySelector("#nsc-u-toggle-fs").addEventListener("click", () => {
+      box.classList.toggle("is-fullscreen");
+      ta.focus({ preventScroll: true });
+    });
+
+    bindMarkdownToolbar(toolbarEl, ta);
+
+    let activeStickerGroup = "";
+    const closePopovers = () => {
+      activeStickerGroup = "";
+      stickerPop.className = "exp-container cur-sticker-group-null";
+      stickerPop.innerHTML = "";
+      appPop.classList.remove("is-open");
+      box.querySelectorAll(".nsc-u-exp-tab").forEach((t) => t.classList.remove("active"));
+    };
+
+    const renderGroupPop = (gid, tabBtn) => {
+      if (activeStickerGroup === gid) {
+        closePopovers();
+        return;
+      }
+      closePopovers();
+      activeStickerGroup = gid;
+      if (tabBtn) tabBtn.classList.add("active");
+      if (gid === "app") {
+        const dockRect = box.getBoundingClientRect();
+        const btnRect = tabBtn ? tabBtn.getBoundingClientRect() : null;
+        if (btnRect && dockRect.width > 0) {
+          const leftPx = Math.max(8, Math.min(btnRect.left - dockRect.left, dockRect.width - 220));
+          appPop.style.left = `${Math.round(leftPx)}px`;
+          appPop.style.right = "auto";
+        }
+        sdForm.classList.remove("is-open");
+        appPop.classList.add("is-open");
+        return;
+      }
+      const grp = getEffectiveStickerGroups().find((g) => g.id === gid);
+      if (!grp) return;
+      stickerPop.className = `exp-container cur-sticker-group-${escHtml(gid)}`;
+      stickerPop.innerHTML = "";
+      const list = Array.isArray(grp.items)
+        ? grp.items.map((it) => ({ src: it.url, ins: `![${it.name || "sticker"}](${it.url})`, title: it.name || it.url }))
+        : (grp.files || []).slice(0, gid === "ac" ? 32 : 99).map((file) => {
+            const codeNum = file.replace(/\.[^.]+$/, "");
+            const sc = `:${grp.id}${codeNum}:`;
+            return { src: `/static/image/sticker/${grp.id}/${file}`, ins: sc, title: sc };
+          });
+      for (const item of list) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.style.cssText = "border:none;background:transparent;cursor:pointer;";
+        b.title = item.title;
+        b.innerHTML = `<img src="${escHtml(item.src)}" loading="lazy" alt="" />`;
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          pushSnap(ta.value);
+          const s = ta.selectionStart || 0;
+          const end = ta.selectionEnd || 0;
+          ta.setRangeText(item.ins, s, end, "end");
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
+          closePopovers();
+          ta.focus({ preventScroll: true });
+        });
+        stickerPop.appendChild(b);
+      }
+    };
+
+    box.querySelectorAll(".nsc-u-exp-tab").forEach((tb) => {
+      tb.addEventListener("click", (e) => {
+        e.stopPropagation();
+        renderGroupPop(tb.dataset.ugroup, tb);
+      });
+    });
+
+    box.querySelector("#nsc-u-app-stardust").addEventListener("click", (e) => {
+      e.stopPropagation();
+      sdForm.classList.toggle("is-open");
+    });
+    box.querySelector("#nsc-u-sd-cancel").addEventListener("click", (e) => {
+      e.stopPropagation();
+      sdForm.classList.remove("is-open");
+    });
+    box.querySelector("#nsc-u-sd-ins").addEventListener("click", (e) => {
+      e.stopPropagation();
+      detectCurrentUser();
+      const uid = state.currentUserId;
+      if (!uid) {
+        if (statusEl) statusEl.textContent = "请先登录后生成星辰收款码";
+        return;
+      }
+      const diff = Math.min(1000, Math.max(1, parseInt(box.querySelector("#nsc-u-sd-diff").value, 10) || 1));
+      const desc = box.querySelector("#nsc-u-sd-desc").value.trim() || "Pay with Stardust";
+      const onetime = box.querySelector("#nsc-u-sd-once").checked;
+      const refId = Math.floor(10000000 + Math.random() * 89999999);
+      const url = `nsapp://stardust-receive?member_id=${uid}&ref_id=${refId}&description=${encodeURIComponent(desc)}&diff=${diff}&onetime=${onetime}`;
+      pushSnap(ta.value);
+      const s = ta.selectionStart || 0;
+      const end = ta.selectionEnd || 0;
+      const prefix = s > 0 && !ta.value.slice(0, s).endsWith("\n") ? "\n" : "";
+      ta.setRangeText(`${prefix}${url}\n`, s, end, "end");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      closePopovers();
+      ta.focus({ preventScroll: true });
+    });
+    box.querySelector("#nsc-u-app-vote").addEventListener("click", (e) => {
+      e.stopPropagation();
+      closePopovers();
+      if (state.activePmPeer) {
+        if (statusEl) statusEl.textContent = "私信暂不支持创建帖子投票，请在帖子页使用投票卡片";
+        return;
+      }
+      if (state.currentPostId && statusEl) {
+        statusEl.innerHTML = `在当前标签直接打开 <a href="/post-${escHtml(state.currentPostId)}-1" style="color:var(--nsc-accent);font-weight:600;">原帖页</a> 可使用官方投票向导`;
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!box.contains(e.target)) closePopovers();
+    });
+
+    box.querySelector("#nsc-u-ni-btn").addEventListener("click", () => {
+      openNodeImageModal(state.activePmPeer ? "pm" : "chat");
+    });
+    NodeImage.syncDots();
+
+    const doSubmit = () => {
+      if (sendBtn.disabled) return;
+      box.classList.remove("is-fullscreen");
+      setMode("write");
+      submitUnifiedComposerContent(ta.value, {
+        clearFn: () => {
+          ta.value = "";
+          pushSnap("");
+          syncPreview();
+        },
+        setStatusFn: (msg) => {
+          if (statusEl) statusEl.textContent = msg;
+        },
+        setBusyFn: (busy, label) => {
+          sendBtn.disabled = busy;
+          if (label) sendBtn.textContent = label;
+        },
+      });
+    };
+    sendBtn.addEventListener("click", doSubmit);
     ta.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        submitComment();
+        doSubmit();
       }
     });
     return box;
   }
 
-  function buildPmComposer() {
-    const box = document.createElement("div");
-    box.className = "nsc-composer-box";
-    box.id = "nsc-pm-composer";
-    box.style.position = "relative";
-    const emojis = ["🤝", "👍", "🍗", "✅", "❌", "👌", "🙏", "💰", "📦", "🔥", "😂", "😅", "🥳", "❤️", "🎉", "👀", "⚡", "🛡️"];
-    box.innerHTML = `
-      <div class="nsc-composer-header" style="justify-content:space-between;">
-        <div style="display:inline-flex;align-items:center;gap:4px;">
-          <button type="button" class="nsc-pm-mode-btn is-active" data-pmmode="write">撰写</button>
-          <button type="button" class="nsc-pm-mode-btn" data-pmmode="preview">预览</button>
-          <span id="nsc-pm-target-lbl" style="font-size:11.5px;font-weight:600;color:var(--nsc-muted);margin-left:6px;">发送私信</span>
-        </div>
-        <div style="display:inline-flex;align-items:center;gap:8px;">
-          <button type="button" class="nsc-mini-btn" id="nsc-pm-emoji-btn" style="padding:1px 7px;">😊 表情</button>
-          <a id="nsc-pm-native-link" class="nsc-nodeimage-btn" href="/notification#/message" target="_blank" rel="noopener noreferrer" style="border:none;background:transparent;">原版 ↗</a>
-        </div>
-      </div>
-      <div class="nsc-pm-emoji-pop" id="nsc-pm-emoji-pop">
-        ${emojis.map((em) => `<button type="button" class="nsc-pm-emoji-item">${em}</button>`).join("")}
-      </div>
-      ${buildMarkdownToolbarHtml({ id: "nsc-pm-toolbar", includeList: true })}
-      <textarea class="nsc-fallback-textarea" id="nsc-pm-ta" placeholder="支持完整 Markdown · 截图 Ctrl+V 直接上传图床 · Ctrl+Enter 发送"></textarea>
-      <div class="nsc-pm-preview-pane" id="nsc-pm-preview-pane"></div>
-      <div class="nsc-composer-footer">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" class="nsc-nodeimage-btn" id="nsc-pm-ni-btn" title="NodeImage 图床上传/图库"><span class="nsc-ni-dot"></span>图床</button>
-          <span id="nsc-pm-status" style="font-size:11px;color:var(--nsc-muted);">支持 Markdown 与图床传图 · Ctrl+Enter 发送</span>
-        </div>
-        <button type="button" class="nsc-send-btn" id="nsc-pm-send">发送私信</button>
-      </div>
-    `;
-    const ta = box.querySelector("#nsc-pm-ta");
-    const previewPane = box.querySelector("#nsc-pm-preview-pane");
-    const emojiPop = box.querySelector("#nsc-pm-emoji-pop");
-    const toolbar = box.querySelector("#nsc-pm-toolbar");
-
-    NodeImage.bindPasteAndDrop(ta, "pm", "#nsc-pm-status");
-    box.querySelector("#nsc-pm-ni-btn").addEventListener("click", () => openNodeImageModal("pm"));
-    NodeImage.syncDots();
-
-    box.querySelectorAll("[data-pmmode]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const isPrev = btn.dataset.pmmode === "preview";
-        box.querySelectorAll("[data-pmmode]").forEach((b) => b.classList.toggle("is-active", b === btn));
-        if (isPrev) {
-          previewPane.innerHTML = renderSimpleMarkdown(ta.value.trim() || "*（暂无内容）*");
-          previewPane.classList.add("is-open");
-          ta.style.display = "none";
-          toolbar.style.display = "none";
-        } else {
-          previewPane.classList.remove("is-open");
-          ta.style.display = "block";
-          toolbar.style.display = "flex";
-          ta.focus();
-        }
-      });
-    });
-
-    box.querySelector("#nsc-pm-emoji-btn").addEventListener("click", (e) => {
-      e.stopPropagation();
-      emojiPop.classList.toggle("is-open");
-    });
-    box.querySelectorAll(".nsc-pm-emoji-item").forEach((eb) => {
-      eb.addEventListener("click", () => {
-        const s = ta.selectionStart || 0;
-        const e = ta.selectionEnd || 0;
-        ta.setRangeText(eb.textContent, s, e, "end");
-        emojiPop.classList.remove("is-open");
-        ta.focus();
-      });
-    });
-    document.addEventListener("click", (e) => {
-      if (!e.target.closest("#nsc-pm-composer")) emojiPop.classList.remove("is-open");
-    });
-
-    bindMarkdownToolbar(toolbar, ta);
-
-    const doSend = () => {
-      box.querySelector('[data-pmmode="write"]').click();
-      sendPmMessage();
-    };
-    box.querySelector("#nsc-pm-send").addEventListener("click", doSend);
-    ta.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        doSend();
+  function syncNativeEditorContextUi(editor) {
+    if (!editor) return;
+    const submitBtn = editor.querySelector("button.submit.btn");
+    const statusEl = editor.querySelector(".topic-select .nsc-ni-status");
+    if (state.activePmPeer) {
+      if (submitBtn && !submitBtn.disabled) submitBtn.textContent = "发送私信";
+      if (statusEl) {
+        statusEl.textContent = `私信 ${state.activePmPeer.name} · 支持完整 Markdown / 贴图 / 对照 · Ctrl+Enter 发送`;
       }
-    });
-    return box;
+    } else {
+      if (submitBtn && !submitBtn.disabled) submitBtn.textContent = "发布评论";
+      if (statusEl) {
+        statusEl.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
+      }
+    }
   }
 
   function syncComposerMode(modeOrNative) {
@@ -956,44 +1319,79 @@
       return;
     }
     if (dock) dock.style.display = "";
-    const mode = modeOrNative === "pm" ? "pm" : modeOrNative ? "native" : "fallback";
-    const nativeEditor = composerBody.querySelector(".md-editor") || document.querySelector("#nsk-frame .md-editor");
-    let fallback = document.getElementById("nsc-fallback-composer");
-    let pmBox = document.getElementById("nsc-pm-composer");
 
-    if (mode === "pm") {
-      if (nativeEditor) nativeEditor.style.display = "none";
-      if (fallback) fallback.style.display = "none";
-      if (!pmBox) {
-        pmBox = buildPmComposer();
-        composerBody.appendChild(pmBox);
+    const nativeEditor = composerBody.querySelector(".md-editor:not(.nsc-unified-editor)") || document.querySelector("#nsk-frame .md-editor");
+    let unified = document.getElementById("nsc-unified-composer");
+
+    const nextCtxKey = getActiveComposerContextKey();
+    if (_activeComposerCtxKey && nextCtxKey !== _activeComposerCtxKey) {
+      if (nativeEditor && nativeEditor.style.display !== "none") {
+        _composerDrafts.set(_activeComposerCtxKey, getNativeEditorValue(nativeEditor));
+      } else if (unified && unified.style.display !== "none") {
+        const uTa = unified.querySelector("#nsc-unified-ta");
+        if (uTa) _composerDrafts.set(_activeComposerCtxKey, uTa.value);
       }
-      if (state.activePmPeer) {
-        const lbl = pmBox.querySelector("#nsc-pm-target-lbl");
-        const lnk = pmBox.querySelector("#nsc-pm-native-link");
-        if (lbl) lbl.textContent = `私信 ${state.activePmPeer.name}`;
-        if (lnk) lnk.href = `/notification#/message?mode=talk&to=${state.activePmPeer.uid}`;
-      }
-      pmBox.style.display = "block";
-      return;
     }
+    const ctxChanged = nextCtxKey !== _activeComposerCtxKey;
+    _activeComposerCtxKey = nextCtxKey;
 
-    if (pmBox) pmBox.style.display = "none";
-    if (mode === "native" && nativeEditor) {
+    if (nativeEditor) {
       if (!composerBody.contains(nativeEditor)) {
         composerBody.appendChild(nativeEditor);
         enhanceNativeEditor(nativeEditor);
       }
       nativeEditor.style.display = "block";
-      if (fallback) fallback.style.display = "none";
-    } else {
-      if (nativeEditor) nativeEditor.style.display = "none";
-      if (!fallback) {
-        fallback = buildFallbackComposer();
-        composerBody.appendChild(fallback);
+      if (unified) unified.style.display = "none";
+      syncNativeEditorContextUi(nativeEditor);
+      if (ctxChanged && nextCtxKey && _composerDrafts.has(nextCtxKey)) {
+        setNativeEditorValue(nativeEditor, _composerDrafts.get(nextCtxKey) || "");
+      } else if (ctxChanged && state.activePmPeer) {
+        setNativeEditorValue(nativeEditor, "");
       }
-      fallback.style.display = "block";
+      requestAnimationFrame(() => {
+        const cm = getNativeCodeMirror(nativeEditor);
+        if (cm && typeof cm.refresh === "function") cm.refresh();
+      });
+      return;
     }
+
+    if (!unified) {
+      unified = buildUnifiedComposer();
+      composerBody.appendChild(unified);
+    }
+    unified.style.display = "block";
+    const uSend = unified.querySelector("#nsc-unified-send");
+    const uStatus = unified.querySelector("#nsc-unified-status");
+    const uTa = unified.querySelector("#nsc-unified-ta");
+    if (state.activePmPeer) {
+      if (uSend && !uSend.disabled) uSend.textContent = "发送私信";
+      if (uStatus) uStatus.textContent = `私信 ${state.activePmPeer.name} · 支持完整 Markdown / 贴图 / 对照 · Ctrl+Enter 发送`;
+    } else {
+      if (uSend && !uSend.disabled) uSend.textContent = "发布评论";
+      if (uStatus) uStatus.textContent = "支持完整 Markdown · Ctrl+V 贴图 · Ctrl+Enter 发送";
+    }
+    if (ctxChanged && uTa) {
+      uTa.value = (nextCtxKey && _composerDrafts.get(nextCtxKey)) || "";
+      uTa.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  function positionAppPopover(editor) {
+    if (!editor) return;
+    const dock = document.getElementById("nsc-composer-dock") || editor;
+    const pop = editor.querySelector(".exp-container.cur-sticker-group-app");
+    const appBtn = editor.querySelector(".expression .sticker-group-app");
+    if (!pop || !appBtn || !dock) return;
+    requestAnimationFrame(() => {
+      const dockRect = dock.getBoundingClientRect();
+      const btnRect = appBtn.getBoundingClientRect();
+      const popW = pop.offsetWidth || 130;
+      if (dockRect.width <= 0 || btnRect.width <= 0) return;
+      const centerLeft = (btnRect.left - dockRect.left) + (btnRect.width - popW) / 2;
+      const clampedLeft = Math.max(8, Math.min(centerLeft, dockRect.width - popW - 8));
+      pop.style.setProperty("--nsc-app-pop-left", `${Math.round(clampedLeft)}px`);
+      pop.style.setProperty("--nsc-app-pop-right", "auto");
+    });
   }
 
   function enhanceNativeEditor(editor) {
@@ -1008,6 +1406,20 @@
       else header.appendChild(expr);
     }
 
+    const expContainer = editor.querySelector(".exp-container");
+    if (expContainer) {
+      const appObs = new MutationObserver(() => {
+        if (expContainer.classList.contains("cur-sticker-group-app")) {
+          positionAppPopover(editor);
+        }
+      });
+      appObs.observe(expContainer, { attributes: true, attributeFilter: ["class"] });
+    }
+    const appTabBtn = editor.querySelector(".expression .sticker-group-app");
+    if (appTabBtn) {
+      appTabBtn.addEventListener("click", () => positionAppPopover(editor));
+    }
+
     const topicFooter = editor.querySelector(".topic-select");
     if (topicFooter && !topicFooter.querySelector(".nsc-nodeimage-btn")) {
       const leftSlot = topicFooter.querySelector("div:first-child");
@@ -1016,13 +1428,14 @@
       imgHostBtn.className = "nsc-nodeimage-btn";
       imgHostBtn.title = "NodeImage 图床上传与授权";
       imgHostBtn.innerHTML = `<span class="nsc-ni-dot"></span>图床`;
-      imgHostBtn.addEventListener("click", () => openNodeImageModal("chat"));
+      imgHostBtn.addEventListener("click", () => openNodeImageModal(state.activePmPeer ? "pm" : "chat"));
       if (leftSlot) {
-        leftSlot.style.cssText = "display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--nsc-muted);";
+        leftSlot.style.cssText = "display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--nsc-muted);min-width:0;";
         leftSlot.innerHTML = "";
         leftSlot.appendChild(imgHostBtn);
         const hint = document.createElement("span");
         hint.className = "nsc-ni-status";
+        hint.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
         hint.textContent = "支持 Ctrl+V 粘贴图片 · Ctrl+Enter 发布";
         leftSlot.appendChild(hint);
       } else {
@@ -1032,38 +1445,39 @@
     }
 
     editor.addEventListener("keydown", (e) => {
+      if (!document.body.classList.contains("nsc-app-active")) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         const btn = editor.querySelector("button.submit.btn");
         if (btn) {
           e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
           btn.click();
         }
       }
-    });
+    }, true);
 
     const submitBtn = editor.querySelector("button.submit.btn");
     if (submitBtn) {
-      submitBtn.addEventListener("click", () => {
-        if (state.activePmPeer || !state.currentRoom || state.currentPostId !== state.nativePostId) return;
-        const pid = state.currentPostId;
-        const room = state.currentRoom;
-        const syncAfterSubmit = async () => {
-          if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== pid) return;
-          const lastPage = Math.max(1, (room && room.pages.length) || 1);
-          try {
-            const pDoc = await fetchPostPageDoc(`/post-${pid}-${lastPage}`);
-            if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== pid) return;
-            const added = mergePostPageComments(room, pDoc, lastPage);
-            if (added > 0) {
-              renderChatRoom(room, true);
-              const msgsEl = document.getElementById("nsc-chat-messages");
-              if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
-            }
-          } catch (_) {}
-        };
-        setTimeout(syncAfterSubmit, 900);
-        setTimeout(syncAfterSubmit, 2200);
-      });
+      submitBtn.addEventListener("click", (e) => {
+        if (!document.body.classList.contains("nsc-app-active")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (submitBtn.disabled) return;
+        const val = getNativeEditorValue(editor);
+        const statusEl = editor.querySelector(".topic-select .nsc-ni-status");
+        submitUnifiedComposerContent(val, {
+          clearFn: () => setNativeEditorValue(editor, ""),
+          setStatusFn: (msg) => {
+            if (statusEl) statusEl.textContent = msg;
+          },
+          setBusyFn: (busy, label) => {
+            submitBtn.disabled = busy;
+            if (label) submitBtn.textContent = label;
+          },
+        });
+      }, true);
     }
 
     const topicLeft = editor.querySelector(".topic-select > div:first-child");
@@ -1073,6 +1487,7 @@
     }
     const dock = document.getElementById("nsc-composer-dock");
     if (dock) NodeImage.bindPasteAndDrop(dock, "chat", "#nsc-composer-status");
+    syncNativeEditorContextUi(editor);
   }
 
   let _lbGallery = [];
@@ -1656,12 +2071,11 @@
               <span class="nsc-sd-name">${escHtml(initName)}</span>
               ${receipt.onetime ? `<span class="nsc-sd-tag">一次性</span>` : ""}
             </div>
-            <div class="nsc-sd-ref">星辰收款 · Ref #${escHtml(receipt.refId)}</div>
+            <div class="nsc-sd-ref">星辰收款 · #${escHtml(receipt.refId)}</div>
           </div>
         </div>
         <div class="nsc-sd-amount-pill${validAmount ? "" : " is-invalid"}">
-          ${ICONS.stardust}
-          <span>${validAmount ? escHtml(String(receipt.diff)) : "无效"}</span>
+          ${validAmount ? `${ICONS.stardust}<span>${escHtml(String(receipt.diff))} 星辰</span>` : `<span>数额未定</span>`}
         </div>
       </div>
       ${receipt.description ? `<div class="nsc-sd-desc">${escHtml(receipt.description)}</div>` : ""}
@@ -1672,7 +2086,7 @@
           <button type="button" class="nsc-sd-refresh" title="刷新收款状态">${ICONS.refresh}</button>
         </div>
         <button type="button" class="nsc-sd-pay-btn"${validAmount ? "" : " disabled"}>
-          ${validAmount ? `打赏 ${receipt.diff} 星辰` : "数额无效"}
+          ${validAmount ? `打赏 ${receipt.diff} 星辰` : "暂不可付"}
         </button>
       </div>
     `;
@@ -1700,12 +2114,16 @@
       try {
         const st = await fetchStardustReceiptStatus(receipt.memberId, receipt.refId, force);
         if (!card.isConnected) return;
-        const statusPrefix = st.guest
-          ? "未登录"
-          : st.paid
-            ? `<span class="nsc-sd-state is-paid">已付款</span>`
-            : `<span class="nsc-sd-state">未付款</span>`;
-        statusTextEl.innerHTML = `${statusPrefix} · ${st.count} 人共 ${st.total} 星辰`;
+        card.classList.toggle("is-empty", st.count === 0);
+        if (st.guest) {
+          statusTextEl.innerHTML = `<span class="nsc-sd-dot"></span><span class="nsc-sd-state">未登录</span> · ${st.count} 人共 ${st.total} 星辰`;
+        } else if (st.paid) {
+          statusTextEl.innerHTML = `<span class="nsc-sd-dot is-paid"></span><span class="nsc-sd-state is-paid">已打赏</span> · ${st.count} 人共 ${st.total} 星辰`;
+        } else if (st.count === 0) {
+          statusTextEl.innerHTML = `<span class="nsc-sd-dot"></span><span class="nsc-sd-state">待付款</span> · 暂无打赏`;
+        } else {
+          statusTextEl.innerHTML = `<span class="nsc-sd-dot is-pending"></span><span class="nsc-sd-state">未付款</span> · ${st.count} 人共 ${st.total} 星辰`;
+        }
         if (validAmount) {
           if (receipt.onetime && st.count > 0) {
             payBtn.textContent = st.paid ? "已付款 (一次性)" : "已被支付";

@@ -1,6 +1,6 @@
 {
   "name": "nodeseek-chat-ui",
-  "version": "7.22.10",
+  "version": "7.22.11",
   "description": "SeekChat — NodeSeek 零依赖模块化 macOS 四栏群聊工作台油猴脚本",
   "author": "80hou",
   "scripts": {

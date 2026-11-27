@@ -688,6 +688,7 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
     function renderSlotsSection(body) {
       const manifest = typeof NSC_DISCOVERED_MODULES !== "undefined" ? NSC_DISCOVERED_MODULES : { mode: "unknown", themes: [], plugins: [] };
       const reg = state.registry;
+      const extEnv = typeof detectThirdPartyEnv === "function" ? detectThirdPartyEnv() : [];
       const box = document.createElement("div");
       box.className = "nsc-base-section";
       box.innerHTML = `
@@ -709,6 +710,22 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         </div>
       `;
       body.appendChild(box);
+
+      const compatBox = document.createElement("div");
+      compatBox.className = "nsc-base-section";
+      compatBox.innerHTML = `
+        <div class="nsc-base-title">
+          <span>第三方脚本 / 扩展兼容探测（运行时特征）</span>
+          <span class="nsc-badge-read">${extEnv.length} 项已识别</span>
+        </div>
+        <div class="nsc-base-sub">受浏览器油猴沙箱隔离限制，脚本无法直接读取油猴插件列表；SeekChat 在运行时自动探测页面内共存脚本的 DOM/CSS 特征并隔离节点，避免互相干扰。</div>
+        <div class="nsc-base-order-list">
+          ${extEnv.length === 0
+            ? `<div class="nsc-base-order-row"><span>当前页面未检测到外部注入浮层或自定义样式</span><span class="nsc-badge-read">纯净环境</span></div>`
+            : extEnv.map((it) => `<div class="nsc-base-order-row"><span><strong>${escHtml(it.name)}</strong> <span class="nsc-badge-read">${escHtml(it.kind)}</span></span><span class="nsc-vote-note">${escHtml(it.detail)}</span></div>`).join("")}
+        </div>
+      `;
+      body.appendChild(compatBox);
     }
 
     registerHubTab({

@@ -117,12 +117,6 @@
         if (ta) smartWrapTa(ta);
         return;
       }
-      const pmBox = document.getElementById("nsc-pm-composer");
-      if (targetMode === "pm" || (pmBox && pmBox.style.display !== "none")) {
-        const ta = document.getElementById("nsc-pm-ta");
-        if (ta) smartWrapTa(ta);
-        return;
-      }
       const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
       const cmEl =
         (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
@@ -147,27 +141,24 @@
           return;
         }
       }
-      const ta = document.getElementById("nsc-fallback-ta");
-      if (ta) smartWrapTa(ta);
+      const uTa = document.getElementById("nsc-unified-ta") || document.getElementById("nsc-pm-ta") || document.getElementById("nsc-fallback-ta");
+      if (uTa) smartWrapTa(uTa);
     },
     bindPasteAndDrop(containerEl, targetMode, statusSelector) {
       if (!containerEl || containerEl.dataset.nscNiBound === "1") return;
       containerEl.dataset.nscNiBound = "1";
       const resolveMode = () => {
-        if (targetMode === "chat") {
-          const pmBox = document.getElementById("nsc-pm-composer");
-          if (pmBox && pmBox.style.display !== "none") return "pm";
-        }
+        if (targetMode === "chat" && state.activePmPeer) return "pm";
         return targetMode;
       };
       const getStatusEl = (effMode) => {
-        if (effMode === "pm") return document.getElementById("nsc-pm-status");
         if (effMode === "newpost") return document.getElementById("nsc-np-status");
         if (effMode === "edit") return document.getElementById("nsc-edit-status");
         return (
+          document.querySelector("#nsc-composer-body .nsc-ni-status") ||
+          document.getElementById("nsc-unified-status") ||
           (statusSelector && document.querySelector(statusSelector)) ||
-          document.getElementById("nsc-composer-status") ||
-          document.querySelector("#nsc-composer-body .nsc-ni-status")
+          document.getElementById("nsc-composer-status")
         );
       };
       const handleFiles = async (files) => {

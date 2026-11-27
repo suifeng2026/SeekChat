@@ -29,30 +29,47 @@
     injectStyles();
     hookSpaRouteDetection();
     ensureHeaderSwitch();
+    toggleAppMode(state.enabled);
 
     setTimeout(() => {
-      ensureHeaderSwitch();
-      toggleAppMode(state.enabled);
-    }, 120);
-
-    setTimeout(() => {
-      if (state.enabled && isForumBrowseRoute()) {
+      if (!state.enabled || !isForumBrowseRoute()) return;
+      const needUserCard = !document.querySelector("#nsc-right-user .user-card") && Boolean(document.querySelector("#nsk-right-panel-container .user-card"));
+      const needEditor = !document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)") && Boolean(document.querySelector("#nsk-frame .md-editor"));
+      if (needUserCard || needEditor) {
         mountNativeWidgetsIntoApp();
       }
-    }, 650);
+    }, 450);
+
+    const isIgnoredMutationNode = (node) => {
+      if (!node || node.nodeType !== 1) return true;
+      const id = node.id || "";
+      if (id.startsWith("nsc-") || id.startsWith("hanabi-")) return true;
+      const tag = node.tagName ? node.tagName.toLowerCase() : "";
+      if (tag === "read-frog" || tag === "script" || tag === "style") return true;
+      if (node.classList && (node.classList.contains("hover-user-card") || node.classList.contains("image-box"))) return true;
+      return false;
+    };
 
     let t = null;
-    const obs = new MutationObserver(() => {
+    const obs = new MutationObserver((mutations) => {
+      const hasRelevant = mutations.some((m) => {
+        for (const n of m.addedNodes) { if (!isIgnoredMutationNode(n)) return true; }
+        for (const n of m.removedNodes) { if (!isIgnoredMutationNode(n)) return true; }
+        return false;
+      });
+      if (!hasRelevant) return;
       clearTimeout(t);
       t = setTimeout(() => {
         if (!document.getElementById("nsc-mode-switch-btn")) ensureHeaderSwitch();
         const shouldActive = state.enabled && isForumBrowseRoute();
         if (document.body.classList.contains("nsc-app-active") !== shouldActive) {
           toggleAppMode(state.enabled);
-        } else if (shouldActive && !document.querySelector("#nsc-right-user .user-card")) {
-          mountNativeWidgetsIntoApp();
+        } else if (shouldActive) {
+          const needUserCard = !document.querySelector("#nsc-right-user .user-card") && Boolean(document.querySelector("#nsk-right-panel-container .user-card"));
+          const needEditor = !document.querySelector("#nsc-composer-body .md-editor:not(.nsc-unified-editor)") && Boolean(document.querySelector("#nsk-frame .md-editor"));
+          if (needUserCard || needEditor) mountNativeWidgetsIntoApp();
         }
-      }, 220);
+      }, 180);
     });
     obs.observe(document.body, { childList: true });
   }

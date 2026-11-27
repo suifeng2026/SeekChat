@@ -1139,3 +1139,36 @@
     root.style.setProperty("--nsc-chat-img-max-h", `${mh}px`);
   }
 
+  function detectThirdPartyEnv() {
+    const items = [];
+    if (document.getElementById("hanabi-toggle-btn") || document.getElementById("hanabi-emoji-panel") || document.getElementById("hanabi-custom-styles")) {
+      items.push({ id: "hanabi", name: "花火表情面板", kind: "DOM 特征", detail: "检测到 #hanabi-emoji-panel，保留原生光标插入兼容" });
+    }
+    const userCss = Array.from(document.querySelectorAll('link[rel="stylesheet"][href*="/userstyle/"]'));
+    if (userCss.length > 0) {
+      items.push({ id: "userstyle", name: "论坛扩展自定义样式", kind: "CSS", detail: "已加载 /userstyle/*.css，原版论坛与顶栏保持协同" });
+    }
+    const extScripts = Array.from(document.querySelectorAll('script[src^="http"]'))
+      .map((s) => s.getAttribute("src") || "")
+      .filter((src) => src && !src.includes("nodeseek.com") && !src.includes("stat.nodeseek.org") && !src.includes("cloudflareinsights.com"));
+    if (extScripts.length > 0) {
+      items.push({
+        id: "ext-scripts",
+        name: `外部注入脚本 (${extScripts.length})`,
+        kind: "Script",
+        detail: extScripts.map((u) => { try { return new URL(u).hostname; } catch (_) { return u; } }).join(", "),
+      });
+    }
+    if (document.querySelector("read-frog, [wxt-shadow-root-document-styles]")) {
+      items.push({ id: "browser-ext", name: "浏览器扩展浮层", kind: "Extension", detail: "检测到 Shadow/WXT 扩展节点，MutationObserver 已自动隔离" });
+    }
+    return items;
+  }
+
+  function stripThirdPartyArtifacts(rootEl) {
+    if (!rootEl) return;
+    rootEl.querySelectorAll(
+      '[id^="hanabi-"], [class*="hanabi-"], read-frog, [data-wxt-shadow-root], .nsc-hover-bar, .nsc-copy-code-btn'
+    ).forEach((n) => n.remove());
+  }
+

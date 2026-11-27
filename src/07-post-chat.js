@@ -4,7 +4,7 @@
     return new DOMParser().parseFromString(await resp.text(), "text/html");
   }
 
-  function mergePostPageComments(room, doc, pageNum) {
+  function mergePostPageComments(room, doc, pageNum, outAdded = null) {
     if (!room || !doc) return 0;
     const tempMetaMap = extractPostMetaFromTempScript(doc);
     if (pageNum === 1 && !room.opObj) {
@@ -22,6 +22,7 @@
       if (obj.floorId) seenFloors.add(obj.floorId);
       if (state.opAuthor && obj.author === state.opAuthor) obj.isOp = true;
       room.flatComments.push(obj);
+      if (Array.isArray(outAdded)) outAdded.push(obj);
       added++;
     }
     state.loadedPages.add(pageNum);
@@ -29,6 +30,73 @@
       if (!room.pages.some((p) => p.num === np.num)) room.pages.push(np);
     }
     room.pages.sort((a, b) => a.num - b.num);
+    return added;
+  }
+
+  function appendRoomCommentsIncrementally(room, doc, pageNum) {
+    if (!room || !doc || state.activePmPeer || state.currentRoom !== room) return 0;
+    const newObjs = [];
+    const added = mergePostPageComments(room, doc, pageNum, newObjs);
+    if (added <= 0) return 0;
+
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    if (!msgsEl || !msgsEl.querySelector(".nsc-msg")) {
+      renderChatRoom(room, true);
+      return added;
+    }
+
+    room.flatComments.sort((a, b) => (a.pageNum - b.pageNum) || (Number(a.floorId) - Number(b.floorId)));
+    const roots = buildThreadedComments(room.flatComments);
+    const rootByFloor = new Map(roots.map((r) => [String(r.floorId), r]));
+    const pagerEl = msgsEl.querySelector(".nsc-chat-pager");
+    const insertBeforeEl = pagerEl || msgsEl.querySelector("#nsc-waterfall-status") || null;
+
+    const existingDividers = new Set(
+      Array.from(msgsEl.querySelectorAll(".nsc-page-divider")).map((d) => d.textContent.trim())
+    );
+
+    const updatedRoots = new Set();
+    for (const obj of newObjs) {
+      if (rootByFloor.has(String(obj.floorId))) {
+        if (room.pages.length > 1 && obj.pageNum) {
+          const divTxt = `第 ${obj.pageNum} 页`;
+          if (!existingDividers.has(divTxt)) {
+            existingDividers.add(divTxt);
+            const div = document.createElement("div");
+            div.className = "nsc-page-divider";
+            div.textContent = divTxt;
+            msgsEl.insertBefore(div, insertBeforeEl);
+          }
+        }
+        if (!document.getElementById(`nsc-floor-${obj.floorId}`)) {
+          msgsEl.insertBefore(createMessageNode(obj, false, room.isNativePage), insertBeforeEl);
+        }
+      } else {
+        const parentRoot = roots.find((r) => r.children && r.children.some((ch) => String(ch.floorId) === String(obj.floorId)));
+        if (parentRoot && !updatedRoots.has(parentRoot.floorId)) {
+          updatedRoots.add(parentRoot.floorId);
+          const oldEl = document.getElementById(`nsc-floor-${parentRoot.floorId}`);
+          if (oldEl) oldEl.replaceWith(createMessageNode(parentRoot, false, room.isNativePage));
+        }
+      }
+    }
+
+    const totalPages = room.pages.length || 1;
+    const subEl = document.getElementById("nsc-chat-subtitle");
+    if (subEl) {
+      subEl.innerHTML = `
+        ${room.catName ? `<span>版块: ${escHtml(room.catName)}</span>` : ""}
+        <span>楼主: ${escHtml(state.opAuthor || "查看首楼")}</span>
+        <span>已加载 ${room.flatComments.length} 条回复 (${state.loadedPages.size}/${totalPages} 页)</span>
+      `;
+    }
+    const wfTip = document.getElementById("nsc-waterfall-status");
+    if (wfTip) {
+      const maxLoaded = Math.max(...Array.from(state.loadedPages));
+      wfTip.textContent = maxLoaded < totalPages ? `继续下滑自动预加载第 ${maxLoaded + 1} 页` : "已加载全部楼层";
+    }
+    applyMessageFilters();
+    enrichVisibleMemberBadges();
     return added;
   }
 
@@ -55,14 +123,23 @@
       category: itemMeta.category,
       replies: itemMeta.replies || 0,
     });
-    renderTopicList();
+    if (typeof updateTopicListSelection === "function") updateTopicListSelection(pid);
 
     const msgsEl = document.getElementById("nsc-chat-messages");
-    if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">正在载入帖子群聊内容...</div>`;
+    const subEl = document.getElementById("nsc-chat-subtitle");
+    if (subEl) subEl.innerHTML = `<span>正在载入帖子...</span>`;
+    if (msgsEl) {
+      if (msgsEl.children.length > 0 && !msgsEl.querySelector(".nsc-empty-state")) {
+        msgsEl.classList.add("is-switching");
+      } else {
+        msgsEl.innerHTML = `<div class="nsc-empty-state">正在载入帖子群聊内容...</div>`;
+      }
+    }
 
     try {
       const doc = await fetchPostPageDoc(url);
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
+      if (msgsEl) msgsEl.classList.remove("is-switching");
       renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
       if (itemMeta.targetFloor) {
         const postRenderSeq = state.chatViewSeq;
@@ -73,7 +150,10 @@
       }
     } catch (err) {
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
-      if (msgsEl) msgsEl.innerHTML = `<div class="nsc-empty-state">加载失败：${escHtml(err.message)}</div>`;
+      if (msgsEl) {
+        msgsEl.classList.remove("is-switching");
+        msgsEl.innerHTML = `<div class="nsc-empty-state">加载失败：${escHtml(err.message)}</div>`;
+      }
     }
   }
 
@@ -105,10 +185,20 @@
     const { text: timeText, title: timeTitle } = getTimeFromEl(timeEl);
 
     const article = el.querySelector(":scope > article.post-content, article.post-content");
-    const bodyHtml = article ? article.innerHTML : "";
+    let bodyHtml = "";
+    if (article) {
+      const artClone = article.cloneNode(true);
+      if (typeof stripThirdPartyArtifacts === "function") stripThirdPartyArtifacts(artClone);
+      bodyHtml = artClone.innerHTML;
+    }
 
     const sigEl = el.querySelector(":scope > .signature, .signature");
-    const signatureHtml = sigEl ? sigEl.innerHTML.trim() : "";
+    let signatureHtml = "";
+    if (sigEl) {
+      const sigClone = sigEl.cloneNode(true);
+      if (typeof stripThirdPartyArtifacts === "function") stripThirdPartyArtifacts(sigClone);
+      signatureHtml = sigClone.innerHTML.trim();
+    }
     if (signatureHtml) {
       if (uid) state.signatureCache[`uid:${uid}`] = signatureHtml;
       if (author) state.signatureCache[`name:${author}`] = signatureHtml;
@@ -269,7 +359,11 @@
       category: catName,
       replies: maxFloor,
     });
-    renderTopicList();
+    if (state.activeChannel === "history" || state.readFilterMode === "read") {
+      renderTopicList();
+    } else if (typeof updateTopicListSelection === "function") {
+      updateTopicListSelection(pid);
+    }
 
     state.currentRoom = { pid, url, title, catName, pages, opObj, flatComments, isNativePage };
     renderChatRoom(state.currentRoom);
@@ -290,13 +384,8 @@
     try {
       const doc = await fetchPostPageDoc(nextPageObj.href);
       if (state.activePmPeer || state.currentRoom !== room || state.currentPostId !== room.pid) return;
-      const added = mergePostPageComments(room, doc, nextPageObj.num);
-      if (added > 0) {
-        const msgsEl = document.getElementById("nsc-chat-messages");
-        const prevScroll = msgsEl ? msgsEl.scrollTop : 0;
-        renderChatRoom(room, true);
-        if (msgsEl) msgsEl.scrollTop = prevScroll;
-      } else if (footerTip) {
+      const added = appendRoomCommentsIncrementally(room, doc, nextPageObj.num);
+      if (added === 0 && footerTip) {
         footerTip.textContent = `已加载第 ${Array.from(state.loadedPages).join("/")} 页`;
       }
     } catch (_) {
@@ -600,7 +689,7 @@
     colBtn.addEventListener("click", () => togglePostCollection(room.pid, colBtn));
     actionsEl.appendChild(colBtn);
 
-    syncComposerMode(room.isNativePage);
+    syncComposerMode("post");
 
     const memberMap = new Map();
     const recordMember = (obj) => {
@@ -1424,10 +1513,34 @@
     };
   }
 
+  function buildQuoteSnippetForFloor(obj, actionTitle) {
+    if (!obj) return "";
+    if (actionTitle === "回复") {
+      return `@${obj.author} #${obj.floorId} `;
+    }
+    const tpl = document.createElement("template");
+    tpl.innerHTML = obj.bodyHtml || "";
+    tpl.content.querySelectorAll("blockquote, script, style, .nsc-sd-card, .nsc-vote-card").forEach((n) => n.remove());
+    tpl.content.querySelectorAll("br").forEach((br) => br.replaceWith(" "));
+    const rawText = (tpl.content.textContent || "").replace(/\s+/g, " ").trim();
+    const excerpt = rawText.length > 100 ? `${rawText.slice(0, 100)}...` : rawText;
+    return excerpt
+      ? `> @${obj.author} #${obj.floorId}\n> ${excerpt}\n\n`
+      : `> @${obj.author} #${obj.floorId}\n\n`;
+  }
+
   async function triggerReplyOrVote(obj, actionTitle, isNativePage, reactionsEl, hoverBar) {
     const syncBarCnt = () => {
       if (reactionsEl) renderReactionPills(reactionsEl, obj, isNativePage, obj.floorId === "0");
     };
+
+    if (actionTitle === "引用" || actionTitle === "回复") {
+      syncComposerMode("post");
+      const snippet = buildQuoteSnippetForFloor(obj, actionTitle);
+      if (typeof insertTextToActiveComposer === "function" && insertTextToActiveComposer(snippet, { asLine: true })) {
+        return;
+      }
+    }
 
     if (isNativePage) {
       const nativeLi = (_nativeFloorMap && _nativeFloorMap.get(String(obj.floorId))) || document.querySelector(`#nsk-frame [id="${obj.floorId}"].content-item`);
@@ -1437,12 +1550,6 @@
           (m) => (m.getAttribute("title") || "") === actionTitle || (m.textContent || "").includes(actionTitle)
         );
         if (target) {
-          const isQuoteOrReply = actionTitle === "引用" || actionTitle === "回复";
-          const msgsEl = document.getElementById("nsc-chat-messages");
-          const savedMsgScroll = msgsEl ? msgsEl.scrollTop : 0;
-          if (isQuoteOrReply) {
-            _suppressComposerScrollUntil = Date.now() + 180;
-          }
           target.click();
           if (actionTitle === "点赞" || actionTitle === "加鸡腿" || actionTitle === "反对") {
             setTimeout(() => {
@@ -1460,42 +1567,6 @@
               if (dislikeMenu && dislikeMenu.classList.contains("clicked")) obj.disliked = true;
               syncBarCnt();
             }, 350);
-          } else if (isQuoteOrReply) {
-            if (msgsEl) msgsEl.scrollTop = savedMsgScroll;
-            requestAnimationFrame(() => {
-              if (msgsEl) msgsEl.scrollTop = savedMsgScroll;
-              const pageWin = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
-              const cmEl =
-                (pageWin.document && pageWin.document.querySelector("#nsc-composer-body .md-editor .CodeMirror")) ||
-                document.querySelector("#nsc-composer-body .md-editor .CodeMirror");
-              const cm = cmEl && (cmEl.CodeMirror || (cmEl.wrappedJSObject && cmEl.wrappedJSObject.CodeMirror));
-              if (cm && typeof cm.getValue === "function") {
-                cm.operation(() => {
-                  const lastIdx = cm.lastLine();
-                  const tailStart = Math.max(0, lastIdx - 2);
-                  const tailText = cm.getRange({ line: tailStart, ch: 0 }, { line: lastIdx, ch: cm.getLine(lastIdx).length });
-                  const normalizedTail = actionTitle === "引用"
-                    ? tailText.replace(/\n{2,}$/, "\n")
-                    : tailText.replace(/[ \t]+$/, "");
-                  const finalTail = normalizedTail.endsWith("\n") ? normalizedTail : normalizedTail + "\n";
-                  if (tailText && finalTail !== tailText) {
-                    cm.replaceRange(finalTail, { line: tailStart, ch: 0 }, { line: lastIdx, ch: cm.getLine(lastIdx).length });
-                  }
-                  const endLine = cm.lastLine();
-                  cm.setCursor({ line: endLine, ch: cm.getLine(endLine).length });
-                  cm.scrollIntoView({ line: endLine, ch: 0 }, 8);
-                });
-                const inputField = typeof cm.getInputField === "function" ? cm.getInputField() : null;
-                if (inputField && typeof inputField.focus === "function") {
-                  inputField.focus({ preventScroll: true });
-                } else {
-                  cm.focus();
-                }
-                return;
-              }
-              const ta = document.querySelector("#nsc-composer-body .CodeMirror textarea");
-              if (ta) ta.focus({ preventScroll: true });
-            });
           }
           return;
         }
@@ -1534,20 +1605,6 @@
           syncBarCnt();
         }
       } catch (_) {}
-      return;
-    }
-
-    const ta = document.getElementById("nsc-fallback-ta");
-    if (ta && (actionTitle === "引用" || actionTitle === "回复")) {
-      const plain = (obj.bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
-      const snippet =
-        actionTitle === "引用"
-          ? `> @${obj.author} #${obj.floorId} ${plain}\n`
-          : `@${obj.author} #${obj.floorId}\n`;
-      const existing = ta.value.replace(/^\n+/, "");
-      ta.value = snippet + existing;
-      ta.focus({ preventScroll: true });
-      ta.setSelectionRange(snippet.length, snippet.length);
       return;
     }
 
