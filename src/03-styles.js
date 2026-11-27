@@ -1085,7 +1085,7 @@
         position: absolute !important; bottom: calc(100% + 4px) !important; left: 6px !important; right: 6px !important;
         z-index: 260 !important; max-height: 92px !important; overflow-y: auto !important;
         padding: 6px 8px !important; flex-wrap: wrap !important;
-        justify-content: flex-start !important; align-content: flex-start !important; gap: 2px !important;
+        justify-content: flex-start !important; align-content: flex-start !important; gap: 0 !important;
         background: var(--nsc-bg-card) !important; border: 1px solid var(--nsc-border) !important;
         border-radius: 12px !important; box-shadow: 0 12px 32px rgba(0,0,0,0.18) !important;
         backdrop-filter: blur(20px) !important; animation: none !important; transition: none !important;
