@@ -493,6 +493,10 @@
     if (!titleEl || !msgsEl) return;
 
     titleEl.textContent = room.title;
+    titleEl.classList.add("is-copyable");
+    titleEl.title = `点击复制帖子链接 (${location.origin}/post-${room.pid}-1)`;
+    const copyTipEl = document.getElementById("nsc-chat-copy-tip");
+    if (copyTipEl) copyTipEl.classList.remove("is-show");
     const totalPages = room.pages.length || 1;
     subEl.innerHTML = `
       ${room.catName ? `<span>版块: ${escHtml(room.catName)}</span>` : ""}

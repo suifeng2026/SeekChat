@@ -417,7 +417,20 @@
         display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
       }
       .nsc-chat-title-wrap { min-width: 0; flex: 1 1 200px; }
-      .nsc-chat-title { font-size: 14.5px; font-weight: 700; color: var(--nsc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .nsc-chat-title-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+      .nsc-chat-title {
+        font-size: 14.5px; font-weight: 700; color: var(--nsc-text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        min-width: 0; transition: color 0.14s ease;
+      }
+      .nsc-chat-title.is-copyable { cursor: pointer; }
+      .nsc-chat-title.is-copyable:hover { color: var(--nsc-accent); }
+      .nsc-chat-copy-tip {
+        display: none; flex: 0 0 auto; font-size: 11px; font-weight: 600;
+        padding: 1px 7px; border-radius: 999px;
+        background: rgba(52, 199, 89, 0.16); color: #16a34a;
+      }
+      .nsc-chat-copy-tip.is-show { display: inline-flex; align-items: center; }
       .nsc-chat-subtitle { font-size: 11px; color: var(--nsc-muted); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
       .nsc-pill-btn {

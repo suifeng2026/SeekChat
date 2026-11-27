@@ -202,7 +202,10 @@
       <main class="nsc-pane-chat">
         <div class="nsc-chat-header">
           <div class="nsc-chat-title-wrap">
-            <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
+            <div class="nsc-chat-title-row">
+              <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
+              <span class="nsc-chat-copy-tip" id="nsc-chat-copy-tip">已复制链接</span>
+            </div>
             <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
           </div>
           <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
@@ -630,6 +633,22 @@
     });
 
     renderRightTabs();
+
+    const chatTitleEl = shell.querySelector("#nsc-chat-title");
+    const chatCopyTip = shell.querySelector("#nsc-chat-copy-tip");
+    let chatCopyTimer = 0;
+    if (chatTitleEl) {
+      chatTitleEl.addEventListener("click", async () => {
+        if (state.activePmPeer || !state.currentPostId) return;
+        const postUrl = `${location.origin}/post-${state.currentPostId}-1`;
+        const ok = await copyTextToClipboard(postUrl);
+        if (ok && chatCopyTip) {
+          chatCopyTip.classList.add("is-show");
+          clearTimeout(chatCopyTimer);
+          chatCopyTimer = setTimeout(() => chatCopyTip.classList.remove("is-show"), 1500);
+        }
+      });
+    }
 
     const topicScroll = shell.querySelector("#nsc-topic-scroll");
     let topicScrollRaf = 0;

@@ -674,7 +674,13 @@
     const subEl = document.getElementById("nsc-chat-subtitle");
     const actionsEl = document.getElementById("nsc-chat-actions");
     const msgsEl = document.getElementById("nsc-chat-messages");
-    if (titleEl) titleEl.textContent = `私信：${state.activePmPeer.name}`;
+    if (titleEl) {
+      titleEl.textContent = `私信：${state.activePmPeer.name}`;
+      titleEl.classList.remove("is-copyable");
+      titleEl.removeAttribute("title");
+    }
+    const copyTipEl = document.getElementById("nsc-chat-copy-tip");
+    if (copyTipEl) copyTipEl.classList.remove("is-show");
     if (subEl) subEl.innerHTML = `<span>UID: ${escHtml(state.activePmPeer.uid)}</span><span>与 ${escHtml(state.activePmPeer.name)} 的站内对话</span>`;
     if (actionsEl) {
       actionsEl.innerHTML = "";
@@ -1621,7 +1627,13 @@
             const subChat = document.getElementById("nsc-chat-subtitle");
             const actionsEl = document.getElementById("nsc-chat-actions");
             const msgsEl = document.getElementById("nsc-chat-messages");
-            if (titleEl) titleEl.textContent = `系统通知 · ${it.tag.label}`;
+            if (titleEl) {
+              titleEl.textContent = `系统通知 · ${it.tag.label}`;
+              titleEl.classList.remove("is-copyable");
+              titleEl.removeAttribute("title");
+            }
+            const copyTipEl = document.getElementById("nsc-chat-copy-tip");
+            if (copyTipEl) copyTipEl.classList.remove("is-show");
             if (subChat) subChat.textContent = it.timeText || "UID 5230";
             if (actionsEl) actionsEl.innerHTML = "";
             if (msgsEl) {

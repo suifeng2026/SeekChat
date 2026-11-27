@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SeekChat
 // @namespace    https://www.nodeseek.com/
-// @version      7.22.1
+// @version      7.22.2
 // @description  将 NodeSeek 重构为零依赖 macOS 四栏群聊工作台：频道瀑布流、居中楼中楼、消息中心、热榜社交、星辰与投票卡片及个人中心悬浮窗。
 // @author       80hou
 // @match        https://www.nodeseek.com/*
@@ -291,7 +291,7 @@
     autoCheckinDate: localStorage.getItem(LS.AUTO_CHECKIN_DATE) || "",
     _autoCheckinAttempted: false,
     updateInfo: {
-      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.1",
+      current: (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "7.22.2",
       latest: "",
       hasUpdate: false,
       checking: false,
@@ -1833,7 +1833,20 @@
         display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
       }
       .nsc-chat-title-wrap { min-width: 0; flex: 1 1 200px; }
-      .nsc-chat-title { font-size: 14.5px; font-weight: 700; color: var(--nsc-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .nsc-chat-title-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+      .nsc-chat-title {
+        font-size: 14.5px; font-weight: 700; color: var(--nsc-text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        min-width: 0; transition: color 0.14s ease;
+      }
+      .nsc-chat-title.is-copyable { cursor: pointer; }
+      .nsc-chat-title.is-copyable:hover { color: var(--nsc-accent); }
+      .nsc-chat-copy-tip {
+        display: none; flex: 0 0 auto; font-size: 11px; font-weight: 600;
+        padding: 1px 7px; border-radius: 999px;
+        background: rgba(52, 199, 89, 0.16); color: #16a34a;
+      }
+      .nsc-chat-copy-tip.is-show { display: inline-flex; align-items: center; }
       .nsc-chat-subtitle { font-size: 11px; color: var(--nsc-muted); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .nsc-chat-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
       .nsc-pill-btn {
@@ -3895,7 +3908,10 @@
       <main class="nsc-pane-chat">
         <div class="nsc-chat-header">
           <div class="nsc-chat-title-wrap">
-            <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
+            <div class="nsc-chat-title-row">
+              <div class="nsc-chat-title" id="nsc-chat-title">NodeSeek 群聊阅读</div>
+              <span class="nsc-chat-copy-tip" id="nsc-chat-copy-tip">已复制链接</span>
+            </div>
             <div class="nsc-chat-subtitle" id="nsc-chat-subtitle">点击左侧帖子主题开始阅读</div>
           </div>
           <div class="nsc-chat-actions" id="nsc-chat-actions"></div>
@@ -4323,6 +4339,22 @@
     });
 
     renderRightTabs();
+
+    const chatTitleEl = shell.querySelector("#nsc-chat-title");
+    const chatCopyTip = shell.querySelector("#nsc-chat-copy-tip");
+    let chatCopyTimer = 0;
+    if (chatTitleEl) {
+      chatTitleEl.addEventListener("click", async () => {
+        if (state.activePmPeer || !state.currentPostId) return;
+        const postUrl = `${location.origin}/post-${state.currentPostId}-1`;
+        const ok = await copyTextToClipboard(postUrl);
+        if (ok && chatCopyTip) {
+          chatCopyTip.classList.add("is-show");
+          clearTimeout(chatCopyTimer);
+          chatCopyTimer = setTimeout(() => chatCopyTip.classList.remove("is-show"), 1500);
+        }
+      });
+    }
 
     const topicScroll = shell.querySelector("#nsc-topic-scroll");
     let topicScrollRaf = 0;
@@ -6405,7 +6437,13 @@
     const subEl = document.getElementById("nsc-chat-subtitle");
     const actionsEl = document.getElementById("nsc-chat-actions");
     const msgsEl = document.getElementById("nsc-chat-messages");
-    if (titleEl) titleEl.textContent = `私信：${state.activePmPeer.name}`;
+    if (titleEl) {
+      titleEl.textContent = `私信：${state.activePmPeer.name}`;
+      titleEl.classList.remove("is-copyable");
+      titleEl.removeAttribute("title");
+    }
+    const copyTipEl = document.getElementById("nsc-chat-copy-tip");
+    if (copyTipEl) copyTipEl.classList.remove("is-show");
     if (subEl) subEl.innerHTML = `<span>UID: ${escHtml(state.activePmPeer.uid)}</span><span>与 ${escHtml(state.activePmPeer.name)} 的站内对话</span>`;
     if (actionsEl) {
       actionsEl.innerHTML = "";
@@ -7352,7 +7390,13 @@
             const subChat = document.getElementById("nsc-chat-subtitle");
             const actionsEl = document.getElementById("nsc-chat-actions");
             const msgsEl = document.getElementById("nsc-chat-messages");
-            if (titleEl) titleEl.textContent = `系统通知 · ${it.tag.label}`;
+            if (titleEl) {
+              titleEl.textContent = `系统通知 · ${it.tag.label}`;
+              titleEl.classList.remove("is-copyable");
+              titleEl.removeAttribute("title");
+            }
+            const copyTipEl = document.getElementById("nsc-chat-copy-tip");
+            if (copyTipEl) copyTipEl.classList.remove("is-show");
             if (subChat) subChat.textContent = it.timeText || "UID 5230";
             if (actionsEl) actionsEl.innerHTML = "";
             if (msgsEl) {
@@ -7987,6 +8031,10 @@
     if (!titleEl || !msgsEl) return;
 
     titleEl.textContent = room.title;
+    titleEl.classList.add("is-copyable");
+    titleEl.title = `点击复制帖子链接 (${location.origin}/post-${room.pid}-1)`;
+    const copyTipEl = document.getElementById("nsc-chat-copy-tip");
+    if (copyTipEl) copyTipEl.classList.remove("is-show");
     const totalPages = room.pages.length || 1;
     subEl.innerHTML = `
       ${room.catName ? `<span>版块: ${escHtml(room.catName)}</span>` : ""}
