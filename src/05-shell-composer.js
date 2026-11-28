@@ -304,7 +304,10 @@
               <button type="button" class="nsc-newpost-btn" id="nsc-newpost-open-btn" title="发布新主题帖">+ 发帖</button>
             </div>
           </div>
-          <input type="text" class="nsc-search-input" id="nsc-feed-search" placeholder="搜索当前列表标题或作者..." />
+          <div class="nsc-search-wrap">
+            <input type="text" class="nsc-search-input" id="nsc-feed-search" placeholder="搜索当前列表标题或作者..." />
+            <button type="button" class="nsc-search-clear" id="nsc-feed-search-clear" title="清空搜索">${ICONS.eraser}</button>
+          </div>
           <div class="nsc-list-toolbar" id="nsc-list-toolbar"></div>
         </div>
         <div class="nsc-topic-scroll" id="nsc-topic-scroll"></div>
@@ -662,7 +665,13 @@
         backdrop.classList.remove("is-open");
         if (npBackdrop.classList.contains("is-open")) closeNp();
         const editBd = document.getElementById("nsc-edit-backdrop");
-        if (editBd) editBd.classList.remove("is-open");
+        if (editBd) {
+          if (typeof editBd._nscCloseEdit === "function") editBd._nscCloseEdit();
+          else {
+            editBd.style.display = "none";
+            editBd.classList.remove("is-open");
+          }
+        }
         const hubBd = document.getElementById("nsc-hub-backdrop");
         if (hubBd) hubBd.classList.remove("is-open");
         const baseBd = document.getElementById("nsc-base-backdrop");
@@ -683,9 +692,18 @@
     const backdrop = document.createElement("div");
     backdrop.id = "nsc-profile-backdrop";
     backdrop.innerHTML = `<div class="nsc-profile-modal" id="nsc-profile-modal"></div>`;
-    backdrop.addEventListener("click", (e) => {
-      if (e.target === backdrop) backdrop.classList.remove("is-open");
-    });
+    const closeProfileBackdrop = () => backdrop.classList.remove("is-open");
+    if (typeof bindBackdropSafeClose === "function") {
+      bindBackdropSafeClose(backdrop, closeProfileBackdrop);
+    } else {
+      let _pDownOnBd = false;
+      backdrop.addEventListener("mousedown", (e) => { _pDownOnBd = e.target === backdrop; });
+      backdrop.addEventListener("click", (e) => {
+        const down = _pDownOnBd;
+        _pDownOnBd = false;
+        if (down && e.target === backdrop) closeProfileBackdrop();
+      });
+    }
     document.body.appendChild(backdrop);
 
     const jumpBackdrop = document.createElement("div");
@@ -737,9 +755,17 @@
       jumpBackdrop.classList.add("is-open");
     };
 
-    jumpBackdrop.addEventListener("click", (e) => {
-      if (e.target === jumpBackdrop) closeJumpModal();
-    });
+    if (typeof bindBackdropSafeClose === "function") {
+      bindBackdropSafeClose(jumpBackdrop, closeJumpModal);
+    } else {
+      let _jDownOnBd = false;
+      jumpBackdrop.addEventListener("mousedown", (e) => { _jDownOnBd = e.target === jumpBackdrop; });
+      jumpBackdrop.addEventListener("click", (e) => {
+        const down = _jDownOnBd;
+        _jDownOnBd = false;
+        if (down && e.target === jumpBackdrop) closeJumpModal();
+      });
+    }
     jumpBackdrop.querySelector("#nsc-jump-close").addEventListener("click", closeJumpModal);
     jumpBackdrop.querySelector("#nsc-jump-cancel").addEventListener("click", closeJumpModal);
     jumpBackdrop.querySelector("#nsc-jump-copy").addEventListener("click", async (e) => {
@@ -800,6 +826,7 @@
             <select class="nsc-newpost-select" id="nsc-np-cat">
               ${postableChannels.map((c) => `<option value="${c.id}">${c.name}</option>`).join("")}
             </select>
+            <select class="nsc-newpost-rank" id="nsc-np-rank" title="设置阅读权限"></select>
             <input type="text" class="nsc-newpost-title" id="nsc-np-title" placeholder="请输入帖子标题..." />
           </div>
           <div class="nsc-np-editor-host" id="nsc-np-editor-host"></div>
@@ -816,11 +843,37 @@
     document.body.appendChild(npBackdrop);
 
     const npCat = npBackdrop.querySelector("#nsc-np-cat");
+    const npRank = npBackdrop.querySelector("#nsc-np-rank");
     const npTitle = npBackdrop.querySelector("#nsc-np-title");
     const npHost = npBackdrop.querySelector("#nsc-np-editor-host");
     const npNativeLink = npBackdrop.querySelector("#nsc-np-native-link");
     const npStatus = npBackdrop.querySelector("#nsc-np-status");
     const npSubmit = npBackdrop.querySelector("#nsc-np-submit");
+
+    const syncNpRankOptions = (selectedVal = 0) => {
+      if (!npRank) return;
+      const rawRank = typeof getCurrentUserRank === "function" ? getCurrentUserRank() : null;
+      const userRank = typeof rawRank === "number" && Number.isFinite(rawRank) && rawRank >= 0 ? rawRank : null;
+      const opts = [
+        { value: 0, label: "公开" },
+        { value: 1, label: "Lv.1" },
+        { value: 2, label: "Lv.2" },
+        { value: 3, label: "Lv.3" },
+        { value: 4, label: "Lv.4" },
+        { value: 5, label: "Lv.5" },
+        { value: 6, label: "Lv.6" },
+        { value: 255, label: "私有" },
+      ];
+      npRank.innerHTML = opts.map((opt) => {
+        const disabled = userRank !== null && opt.value >= 1 && opt.value <= 6 && opt.value > userRank;
+        const text = disabled ? `Lv.${opt.value} (需Lv.${opt.value})` : opt.label;
+        return `<option value="${opt.value}"${disabled ? " disabled" : ""}>${text}</option>`;
+      }).join("");
+      const targetVal = Number(selectedVal);
+      const canSelect = opts.some((opt) => opt.value === targetVal && !(userRank !== null && opt.value >= 1 && opt.value <= 6 && opt.value > userRank));
+      npRank.value = String(canSelect ? targetVal : 0);
+    };
+    syncNpRankOptions(0);
 
     const getNpEditorVal = () => {
       const nat = npHost.querySelector(".md-editor:not(.nsc-unified-editor)");
@@ -896,8 +949,29 @@
     };
     npBackdrop._nscCloseNp = closeNp;
 
+    let _npDownOnBackdrop = false;
+    let _npGuardTimer = 0;
+    npBackdrop.addEventListener("mousedown", (e) => {
+      _npDownOnBackdrop = e.target === npBackdrop;
+    });
     npBackdrop.addEventListener("click", (e) => {
-      if (e.target === npBackdrop) closeNp();
+      const downOnBackdrop = _npDownOnBackdrop;
+      _npDownOnBackdrop = false;
+      if (downOnBackdrop && e.target === npBackdrop) {
+        const modal = npBackdrop.querySelector(".nsc-newpost-modal");
+        if (modal) {
+          modal.classList.remove("is-guard-shake");
+          void modal.offsetWidth;
+          modal.classList.add("is-guard-shake");
+          clearTimeout(_npGuardTimer);
+          _npGuardTimer = setTimeout(() => {
+            modal.classList.remove("is-guard-shake");
+          }, 420);
+        }
+        if (npStatus) {
+          npStatus.textContent = "为防误触已禁用点空白关闭，请点击右上角 ✕ 或「取消」（草稿自动保留）";
+        }
+      }
     });
     npBackdrop.querySelector("#nsc-np-close").addEventListener("click", closeNp);
     npBackdrop.querySelector("#nsc-np-cancel").addEventListener("click", closeNp);
@@ -927,13 +1001,14 @@
           method: "POST",
           credentials: "include",
           headers: getNodeSeekPostHeaders(),
-          body: JSON.stringify({ content, mode: "new-discussion", title, category, rank: 0 }),
+          body: JSON.stringify({ content, mode: "new-discussion", title, category, rank: Number(npRank ? npRank.value : 0) || 0 }),
         });
         const resJson = await resp.json().catch(() => ({}));
         if (!resp.ok || resJson.success === false) {
           throw new Error(resJson.message || `HTTP ${resp.status}`);
         }
         npTitle.value = "";
+        if (npRank) npRank.value = "0";
         clearNpEditorVal();
         npStatus.textContent = "发布成功！";
         closeNp();
@@ -964,6 +1039,7 @@
     shell.querySelector("#nsc-newpost-open-btn").addEventListener("click", () => {
       const defCat = postableChannels.some((c) => c.id === state.activeChannel) ? state.activeChannel : "daily";
       npCat.value = defCat;
+      syncNpRankOptions(0);
       npNativeLink.href = `/new-discussion?category=${encodeURIComponent(defCat)}`;
       npStatus.textContent = "无刷新直发社区，支持完整 Markdown / 表情 / 图床";
       npBackdrop.classList.add("is-open");
@@ -1002,14 +1078,31 @@
     initNodeImageUi(npBackdrop);
 
     let searchTimer = null;
-    shell.querySelector("#nsc-feed-search").addEventListener("input", (e) => {
-      const val = e.target.value.trim().toLowerCase();
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => {
-        state.searchKeyword = val;
+    const feedSearchInput = shell.querySelector("#nsc-feed-search");
+    const feedSearchClearBtn = shell.querySelector("#nsc-feed-search-clear");
+    if (feedSearchInput) {
+      feedSearchInput.addEventListener("input", (e) => {
+        if (feedSearchClearBtn) {
+          feedSearchClearBtn.classList.toggle("is-visible", Boolean(feedSearchInput.value));
+        }
+        const val = e.target.value.trim().toLowerCase();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          state.searchKeyword = val;
+          renderTopicList();
+        }, 140);
+      });
+    }
+    if (feedSearchClearBtn && feedSearchInput) {
+      feedSearchClearBtn.addEventListener("click", () => {
+        feedSearchInput.value = "";
+        feedSearchClearBtn.classList.remove("is-visible");
+        clearTimeout(searchTimer);
+        state.searchKeyword = "";
         renderTopicList();
-      }, 140);
-    });
+        feedSearchInput.focus();
+      });
+    }
 
     renderRightTabs();
 

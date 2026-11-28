@@ -1261,18 +1261,23 @@
     }
 
     const seg = document.createElement("div");
-    seg.className = "nsc-seg-tabs";
+    seg.className = "nsc-ns-switch";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", "排序方式");
+    seg.title = "点击切换排序：最新回复 / 最新帖子";
     [
       { id: "reply", label: "最新回复" },
       { id: "post", label: "最新帖子" },
     ].forEach((opt) => {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "nsc-seg-btn" + (state.sortMode === opt.id ? " is-active" : "");
+      b.className = "nsc-ns-switch-item" + (state.sortMode === opt.id ? " is-active" : "");
       b.textContent = opt.label;
+      b.title = "点击切换排序：最新回复 / 最新帖子";
       b.addEventListener("click", () => {
-        state.sortMode = opt.id;
-        localStorage.setItem(LS.SORT, opt.id);
+        const nextMode = state.sortMode === opt.id ? (opt.id === "reply" ? "post" : "reply") : opt.id;
+        state.sortMode = nextMode;
+        localStorage.setItem(LS.SORT, nextMode);
         state.readFilterMode = "all";
         renderListToolbar();
         fetchChannelData(state.activeChannel, 1, true, false);
@@ -1281,11 +1286,13 @@
     });
 
     const rightBtns = document.createElement("div");
-    rightBtns.style.cssText = "display:inline-flex;gap:4px;";
+    rightBtns.className = "nsc-ns-switch";
+    rightBtns.setAttribute("role", "group");
+    rightBtns.setAttribute("aria-label", "阅读状态筛选");
 
     const btnUnread = document.createElement("button");
     btnUnread.type = "button";
-    btnUnread.className = "nsc-mini-btn" + (state.readFilterMode === "unread" ? " is-active" : "");
+    btnUnread.className = "nsc-ns-switch-item" + (state.readFilterMode === "unread" ? " is-active" : "");
     btnUnread.title = "刷新当前版块并将未读/有新回复帖子排在最前（再次点击取消）";
     btnUnread.textContent = "未读";
     btnUnread.addEventListener("click", () => {
@@ -1302,7 +1309,7 @@
 
     const btnReadHistory = document.createElement("button");
     btnReadHistory.type = "button";
-    btnReadHistory.className = "nsc-mini-btn" + (state.readFilterMode === "read" ? " is-active" : "");
+    btnReadHistory.className = "nsc-ns-switch-item" + (state.readFilterMode === "read" ? " is-active" : "");
     btnReadHistory.title = "仅看当前版块已读帖子足迹（不离开当前版块，再次点击返回）";
     btnReadHistory.textContent = "已读";
     btnReadHistory.addEventListener("click", () => {
@@ -1607,7 +1614,7 @@
             title: it.title,
             author: it.author,
             avatar: it.avatar,
-            targetFloor: it.floorId ? String(it.floorId) : "",
+            targetFloor: it.floorId ? String(it.floorId) : (it.commentId ? String(it.commentId) : ""),
           });
         });
         scrollEl.appendChild(row);

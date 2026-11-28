@@ -259,6 +259,207 @@
     }
   }
 
+  function highlightSearchMatch(text, terms) {
+    const raw = String(text || "");
+    if (!raw) return "";
+    const cleanTerms = Array.isArray(terms)
+      ? terms.map((t) => String(t || "").trim()).filter(Boolean)
+      : [];
+    if (cleanTerms.length === 0) return escHtml(raw);
+    const uniqueTerms = Array.from(new Set(cleanTerms)).sort((a, b) => b.length - a.length);
+    const escaped = uniqueTerms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const re = new RegExp(`(${escaped.join("|")})`, "gi");
+    let out = "";
+    let last = 0;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      if (m[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
+      if (m.index > last) out += escHtml(raw.slice(last, m.index));
+      out += `<mark class="nsc-hl">${escHtml(m[0])}</mark>`;
+      last = m.index + m[0].length;
+    }
+    if (last < raw.length) out += escHtml(raw.slice(last));
+    return out;
+  }
+
+  function parseSearchTerms(query) {
+    return String(query || "")
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  function matchSpaceOrHubItem(it, terms) {
+    if (!terms || terms.length === 0) return true;
+    const hay = `${it.title || ""} ${it.text || ""} ${it.category || ""}`.toLowerCase();
+    return terms.every((t) => hay.includes(t));
+  }
+
+  function getContentItemKey(it, kind) {
+    if (!it) return "";
+    if (kind === "comments") {
+      const pid = String(it.post_id || "");
+      const hasFloor = it.floor_id !== undefined && it.floor_id !== null && it.floor_id !== "";
+      const fid = hasFloor ? Number(it.floor_id) : (it.id || it.created_at || "");
+      return `${pid}_${fid}`;
+    }
+    return String(it.post_id || it.id || "");
+  }
+
+  async function runControlledContentIndex({ st, uid, kind, isStale, onUpdate }) {
+    if (!st || !uid || st.fullLoading || st.loading) return;
+    if (st.searchQuery === undefined) st.searchQuery = "";
+    st.fullLoading = true;
+    st.error = null;
+    st.fullProgress = st.fullIndexed || st.noMore ? "增量同步中..." : "正在准备全量索引...";
+    if (typeof onUpdate === "function") onUpdate();
+
+    try {
+      const apiName = kind === "comments" ? "list-comments" : "list-discussions";
+      const extractRows = (json) => (
+        kind === "comments"
+          ? (json && (json.comments || json.data || json.list)) || []
+          : (json && (json.discussions || json.data || json.list)) || []
+      );
+
+      if (st.fullIndexed || st.noMore) {
+        const existingKeys = new Set(st.items.map((x) => getContentItemKey(x, kind)).filter(Boolean));
+        const newlyFetched = [];
+        let page = 1;
+        while (!isStale()) {
+          const json = await apiGetJson(`/api/content/${apiName}?uid=${encodeURIComponent(uid)}&page=${page}`);
+          if (isStale()) break;
+          const rows = extractRows(json);
+          if (!Array.isArray(rows) || rows.length === 0) break;
+          let hitExisting = false;
+          for (const r of rows) {
+            const k = getContentItemKey(r, kind);
+            if (!k) continue;
+            if (existingKeys.has(k)) {
+              hitExisting = true;
+            } else {
+              existingKeys.add(k);
+              newlyFetched.push(r);
+            }
+          }
+          st.fullProgress = `增量同步第 ${page} 页 (+${newlyFetched.length})`;
+          if (typeof onUpdate === "function") onUpdate();
+          if (hitExisting || rows.length < 15) break;
+          page++;
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        if (!isStale()) {
+          if (newlyFetched.length > 0) st.items = [...newlyFetched, ...st.items];
+          st.fullIndexed = true;
+          st.noMore = true;
+        }
+      } else {
+        let nextPage = Math.max(1, (st.page || 0) + 1);
+        let done = false;
+        let maxFetchedPage = st.page || 0;
+        let fetchedCount = 0;
+        const pageChunks = [];
+
+        const worker = async () => {
+          while (!done && !isStale()) {
+            const curPage = nextPage++;
+            try {
+              const json = await apiGetJson(`/api/content/${apiName}?uid=${encodeURIComponent(uid)}&page=${curPage}`);
+              if (isStale()) {
+                done = true;
+                break;
+              }
+              const rows = extractRows(json);
+              if (!Array.isArray(rows) || rows.length === 0) {
+                done = true;
+                break;
+              }
+              pageChunks.push({ page: curPage, rows });
+              if (curPage > maxFetchedPage) maxFetchedPage = curPage;
+              fetchedCount += rows.length;
+              st.fullProgress = `全量索引第 ${curPage} 页 · 已获取 ${st.items.length + fetchedCount} 条`;
+              if (typeof onUpdate === "function") onUpdate();
+              if (rows.length < 15) {
+                done = true;
+                break;
+              }
+              await new Promise((r) => setTimeout(r, 150));
+            } catch (err) {
+              done = true;
+              throw err;
+            }
+          }
+        };
+
+        await Promise.all([worker(), worker()]);
+        if (!isStale()) {
+          pageChunks.sort((a, b) => a.page - b.page);
+          const seen = new Set(st.items.map((x) => getContentItemKey(x, kind)).filter(Boolean));
+          for (const chunk of pageChunks) {
+            for (const r of chunk.rows) {
+              const k = getContentItemKey(r, kind);
+              if (k && !seen.has(k)) {
+                seen.add(k);
+                st.items.push(r);
+              }
+            }
+          }
+          st.page = Math.max(st.page || 0, maxFetchedPage);
+          st.noMore = true;
+          st.fullIndexed = true;
+        }
+      }
+    } catch (err) {
+      if (!isStale()) st.error = err.message || "索引失败";
+    } finally {
+      st.fullLoading = false;
+      st.fullProgress = "";
+      if (!isStale() && typeof onUpdate === "function") onUpdate();
+    }
+  }
+
+  function runSpaceFullIndex(store, kind) {
+    if (!store || !store.uid) return Promise.resolve();
+    const st = kind === "comments" ? store.comments : store.posts;
+    const isStale = () => {
+      const bd = document.getElementById("nsc-space-backdrop");
+      return !bd || !bd.classList.contains("is-open") || String(_spaceModalState.uid) !== String(store.uid);
+    };
+    return runControlledContentIndex({
+      st,
+      uid: store.uid,
+      kind,
+      isStale,
+      onUpdate: () => {
+        if (!isStale()) renderUserSpaceIfOpen(store.uid);
+      },
+    });
+  }
+
+  function runHubFullIndex(kind) {
+    detectCurrentUser();
+    const uid = state.currentUserId;
+    if (!uid) return Promise.resolve();
+    const st = kind === "comments" ? state.hubData.comments : state.hubData.posts;
+    const isStale = () => {
+      const bd = document.getElementById("nsc-hub-backdrop");
+      return !bd || !bd.classList.contains("is-open") || state.hubTab !== kind;
+    };
+    return runControlledContentIndex({
+      st,
+      uid,
+      kind,
+      isStale,
+      onUpdate: () => {
+        if (!isStale()) renderUserHubIfOpen();
+      },
+    });
+  }
+
   const _userSpaceCache = new Map();
   const MAX_SPACE_CACHE = 15;
   const SPACE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -278,8 +479,8 @@
     entry = {
       uid,
       info: info || { uid, name: `用户 #${uid}`, avatar: `/avatar/${uid}.png` },
-      posts: { items: [], page: 0, loading: false, noMore: Number(info && info.posts) === 0, error: null },
-      comments: { items: [], page: 0, loading: false, noMore: Number(info && info.comments) === 0, error: null },
+      posts: { items: [], page: 0, loading: false, noMore: Number(info && info.posts) === 0, error: null, searchQuery: "", fullIndexed: false, fullLoading: false, fullProgress: "" },
+      comments: { items: [], page: 0, loading: false, noMore: Number(info && info.comments) === 0, error: null, searchQuery: "", fullIndexed: false, fullLoading: false, fullProgress: "" },
       ts: now,
     };
     _userSpaceCache.set(uid, entry);
@@ -294,12 +495,14 @@
   async function loadSpaceTabPage(store, kind, reset = false) {
     if (!store || !store.uid) return;
     const st = kind === "comments" ? store.comments : store.posts;
-    if (st.loading) return;
+    if (st.loading || st.fullLoading) return;
     if (reset) {
       st.items = [];
       st.page = 0;
       st.noMore = false;
       st.error = null;
+      st.fullIndexed = false;
+      st.fullProgress = "";
     }
     if (st.noMore) return;
     st.loading = true;
@@ -316,16 +519,12 @@
       if (!Array.isArray(rows) || rows.length === 0) {
         st.noMore = true;
       } else {
-        if (kind === "comments") {
-          st.items.push(...rows);
-        } else {
-          const seen = new Set(st.items.map((x) => String(x.post_id || x.id)));
-          for (const r of rows) {
-            const pid = String(r.post_id || r.id || "");
-            if (pid && !seen.has(pid)) {
-              st.items.push(r);
-              seen.add(pid);
-            }
+        const seen = new Set(st.items.map((x) => getContentItemKey(x, kind)).filter(Boolean));
+        for (const r of rows) {
+          const k = getContentItemKey(r, kind);
+          if (k && !seen.has(k)) {
+            st.items.push(r);
+            seen.add(k);
           }
         }
         st.page = nextPage;
@@ -356,6 +555,138 @@
     if (!bd || !bd.classList.contains("is-open")) return;
     if (uid && String(uid) !== String(_spaceModalState.uid)) return;
     renderUserSpaceModal();
+  }
+
+  function renderSpaceListResults(store, kind, bodyEl, subbar, closeAllModals, prevTop = 0) {
+    if (!store || !bodyEl) return;
+    const st = kind === "comments" ? store.comments : store.posts;
+    const info = store.info || _spaceModalState.info || {};
+    if (st.searchQuery === undefined) st.searchQuery = "";
+    const terms = parseSearchTerms(st.searchQuery);
+    const isSearching = terms.length > 0;
+    const filtered = isSearching ? st.items.filter((it) => matchSpaceOrHubItem(it, terms)) : st.items;
+
+    const statusEl = subbar && subbar.querySelector("#nsc-space-subbar-status");
+    if (statusEl) {
+      if (st.fullLoading && st.fullProgress) {
+        statusEl.textContent = st.fullProgress;
+      } else if (isSearching) {
+        statusEl.textContent = `匹配 ${filtered.length} / 已载 ${st.items.length} ${kind === "comments" ? "条评论" : "篇主题"}${st.fullIndexed || st.noMore ? "（全量）" : ""}`;
+      } else {
+        statusEl.textContent = kind === "comments"
+          ? `已载入 ${st.items.length} 条历史回复（点击可直达对应楼层）`
+          : `已载入 ${st.items.length} 篇主题帖（点击可在工作台阅读）`;
+      }
+    }
+
+    bodyEl.innerHTML = "";
+    if ((st.loading || st.fullLoading) && st.items.length === 0) {
+      bodyEl.innerHTML = `<div class="nsc-empty-state">${kind === "comments" ? "正在加载 TA 的历史评论..." : "正在加载 TA 的主题帖..."}</div>`;
+      return;
+    }
+    if (st.error && st.items.length === 0) {
+      bodyEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
+      return;
+    }
+    if (st.items.length === 0) {
+      bodyEl.innerHTML = `<div class="nsc-empty-state">${kind === "comments" ? "TA 暂无公开评论记录" : "TA 暂未发布主题帖"}</div>`;
+      return;
+    }
+    if (filtered.length === 0) {
+      bodyEl.innerHTML = `
+        <div class="nsc-empty-state">
+          <div>未找到匹配「${escHtml(st.searchQuery.trim())}」的${kind === "comments" ? "评论" : "主题帖"}</div>
+          ${!st.fullIndexed && !st.noMore ? `<div style="margin-top:6px;font-size:11.5px;color:var(--nsc-muted);">仅搜索已加载内容，点击「全量搜索」或按回车检索全部历史</div>` : ""}
+        </div>
+      `;
+      return;
+    }
+
+    const ROW_CAP = 300;
+    const truncated = filtered.length > ROW_CAP;
+    const displayItems = truncated ? filtered.slice(0, ROW_CAP) : filtered;
+
+    displayItems.forEach((it) => {
+      if (kind === "posts") {
+        const pid = String(it.post_id || it.id || "");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${highlightSearchMatch(it.title || `帖子 #${pid}`, terms)}</div>
+            <div class="nsc-hub-row-sub">
+              ${it.category ? `<span>版块: ${highlightSearchMatch(it.category, terms)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">#${escHtml(pid)}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeAllModals();
+          openPostInChat({
+            postId: pid,
+            url: `/post-${pid}-1`,
+            title: it.title || `帖子 #${pid}`,
+            author: info.name,
+            avatar: info.avatar,
+          });
+        });
+        bodyEl.appendChild(row);
+      } else {
+        const pid = String(it.post_id || "");
+        const rawFloor = it.floor_id !== undefined && it.floor_id !== null && it.floor_id !== "" ? Number(it.floor_id) : 1;
+        const floor = Number.isFinite(rawFloor) && rawFloor >= 0 ? rawFloor : 1;
+        const pageIdx = Math.max(1, Math.ceil(Math.max(1, floor) / 10));
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${highlightSearchMatch(it.title || `帖子 #${pid}`, terms)}</div>
+            <div class="nsc-hub-row-sub">
+              <span>#${floor}楼</span>
+              ${it.text ? `<span style="max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${highlightSearchMatch(it.text, terms)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">直达 #${floor}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeAllModals();
+          openPostInChat({
+            postId: pid,
+            url: `/post-${pid}-${pageIdx}`,
+            title: it.title || `帖子 #${pid}`,
+            targetFloor: String(floor),
+          });
+        });
+        bodyEl.appendChild(row);
+      }
+    });
+
+    if (truncated) {
+      const capTip = document.createElement("div");
+      capTip.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:8px 4px 2px;";
+      capTip.textContent = isSearching
+        ? `仅展示前 ${ROW_CAP} 条匹配结果（共 ${filtered.length} 条），请输入更多关键词缩小范围`
+        : `仅展示前 ${ROW_CAP} 条记录（共 ${filtered.length} 条），请输入关键词搜索全部`;
+      bodyEl.appendChild(capTip);
+    }
+
+    const wf = document.createElement("div");
+    wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:10px 4px;";
+    if (isSearching) {
+      wf.textContent = !st.fullIndexed && !st.noMore
+        ? "仅搜索已加载内容，点击「全量搜索」或按回车检索全部历史"
+        : `已检索全部已索引内容（共 ${st.items.length} 条）`;
+    } else {
+      wf.textContent = st.noMore
+        ? (kind === "comments" ? "已加载全部评论" : "已加载全部主题帖")
+        : st.loading || st.fullLoading
+          ? "正在加载更多..."
+          : (kind === "comments" ? "下滑自动加载更多评论" : "下滑自动加载更多主题帖");
+    }
+    bodyEl.appendChild(wf);
+    if (prevTop > 0) bodyEl.scrollTop = prevTop;
   }
 
   function renderUserSpaceModal() {
@@ -473,8 +804,11 @@
     });
 
     const subbar = modal.querySelector("#nsc-space-subbar");
-    subbar.innerHTML = "";
-    bodyEl.innerHTML = "";
+    const isListTab = tab === "posts" || tab === "comments";
+    if (!isListTab) {
+      delete subbar.dataset.nscSubbarKey;
+      subbar.innerHTML = "";
+    }
     bodyEl.style.padding = "";
     bodyEl.style.overflow = "";
 
@@ -485,6 +819,7 @@
     };
 
     if (tab === "overview") {
+      bodyEl.innerHTML = "";
       const friendActive = isFriend(info.name);
       const blackActive = isBlacklisted(info.name);
       const lastSp = state.lastSpeakCache[uid];
@@ -546,120 +881,88 @@
       return;
     }
 
-    if (tab === "posts") {
-      const st = store.posts;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已载入 ${st.items.length} 篇主题帖（点击可在工作台阅读）</span>`;
-      const refBtn = document.createElement("button");
-      refBtn.type = "button";
-      refBtn.className = "nsc-mini-btn";
-      refBtn.textContent = st.loading ? "加载中..." : "刷新";
-      refBtn.addEventListener("click", () => loadSpaceTabPage(store, "posts", true));
-      subbar.appendChild(refBtn);
-
-      if (st.loading && st.items.length === 0) {
-        bodyEl.innerHTML = `<div class="nsc-empty-state">正在加载 TA 的主题帖...</div>`;
-        return;
-      }
-      if (st.error && st.items.length === 0) {
-        bodyEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
-        return;
-      }
-      if (st.items.length === 0) {
-        bodyEl.innerHTML = `<div class="nsc-empty-state">TA 暂未发布主题帖</div>`;
-        return;
-      }
-      st.items.forEach((it) => {
-        const pid = String(it.post_id || it.id || "");
-        const row = document.createElement("div");
-        row.className = "nsc-hub-row";
-        row.innerHTML = `
-          <div class="nsc-hub-row-main">
-            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
-            <div class="nsc-hub-row-sub">
-              ${it.category ? `<span>版块: ${escHtml(it.category)}</span>` : ""}
-              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+    if (tab === "posts" || tab === "comments") {
+      const st = tab === "comments" ? store.comments : store.posts;
+      if (st.searchQuery === undefined) st.searchQuery = "";
+      const subbarKey = `${uid}:${tab}`;
+      if (subbar.dataset.nscSubbarKey !== subbarKey || !subbar.querySelector(".nsc-search-input")) {
+        subbar.dataset.nscSubbarKey = subbarKey;
+        subbar.innerHTML = `
+          <span id="nsc-space-subbar-status" style="font-size:12px;color:var(--nsc-muted);"></span>
+          <div class="nsc-subbar-search">
+            <div class="nsc-search-wrap">
+              <input type="text" class="nsc-search-input" placeholder="搜索标题${tab === "comments" ? "或评论内容" : ""}（支持空格多词）..." />
+              <button type="button" class="nsc-search-clear" title="清空搜索">${ICONS.eraser}</button>
             </div>
+            <button type="button" class="nsc-mini-btn" id="nsc-space-full-btn"></button>
+            <button type="button" class="nsc-mini-btn" id="nsc-space-ref-btn"></button>
           </div>
-          <span class="nsc-badge-read">#${escHtml(pid)}</span>
         `;
-        row.addEventListener("click", () => {
-          closeAllModals();
-          openPostInChat({
-            postId: pid,
-            url: `/post-${pid}-1`,
-            title: it.title || `帖子 #${pid}`,
-            author: info.name,
-            avatar: info.avatar,
-          });
+        const inputEl = subbar.querySelector(".nsc-search-input");
+        const clearBtn = subbar.querySelector(".nsc-search-clear");
+        const fullBtn = subbar.querySelector("#nsc-space-full-btn");
+        const refBtn = subbar.querySelector("#nsc-space-ref-btn");
+        inputEl.value = st.searchQuery || "";
+        clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
+
+        let isComposing = false;
+        const applyQuery = () => {
+          st.searchQuery = inputEl.value;
+          clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
+          renderSpaceListResults(store, tab, bodyEl, subbar, closeAllModals, 0);
+        };
+        inputEl.addEventListener("compositionstart", () => { isComposing = true; });
+        inputEl.addEventListener("compositionend", () => {
+          isComposing = false;
+          applyQuery();
         });
-        bodyEl.appendChild(row);
-      });
-      const wf = document.createElement("div");
-      wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:10px 4px;";
-      wf.textContent = st.noMore ? "已加载全部主题帖" : st.loading ? "正在加载更多..." : "下滑自动加载更多主题帖";
-      bodyEl.appendChild(wf);
-      if (prevTop > 0) bodyEl.scrollTop = prevTop;
+        inputEl.addEventListener("input", () => {
+          clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
+          if (isComposing) return;
+          applyQuery();
+        });
+        inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !isComposing) {
+            if (!st.fullIndexed && !st.noMore && !st.fullLoading) {
+              e.preventDefault();
+              runSpaceFullIndex(store, tab);
+            }
+          }
+        });
+        clearBtn.addEventListener("click", () => {
+          inputEl.value = "";
+          st.searchQuery = "";
+          clearBtn.classList.remove("is-visible");
+          renderSpaceListResults(store, tab, bodyEl, subbar, closeAllModals, 0);
+          inputEl.focus();
+        });
+        fullBtn.addEventListener("click", () => runSpaceFullIndex(store, tab));
+        refBtn.addEventListener("click", () => loadSpaceTabPage(store, tab, true));
+      }
+
+      const inputEl = subbar.querySelector(".nsc-search-input");
+      const clearBtn = subbar.querySelector(".nsc-search-clear");
+      if (inputEl && document.activeElement !== inputEl && inputEl.value !== (st.searchQuery || "")) {
+        inputEl.value = st.searchQuery || "";
+      }
+      if (clearBtn && inputEl) {
+        clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
+      }
+      const fullBtn = subbar.querySelector("#nsc-space-full-btn");
+      if (fullBtn) {
+        fullBtn.textContent = st.fullLoading ? "索引中..." : st.fullIndexed ? "增量同步" : "全量搜索";
+        fullBtn.disabled = Boolean(st.fullLoading);
+      }
+      const refBtn = subbar.querySelector("#nsc-space-ref-btn");
+      if (refBtn) {
+        refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      }
+
+      renderSpaceListResults(store, tab, bodyEl, subbar, closeAllModals, prevTop);
       return;
     }
 
-    if (tab === "comments") {
-      const st = store.comments;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已载入 ${st.items.length} 条历史回复（点击可直达对应楼层）</span>`;
-      const refBtn = document.createElement("button");
-      refBtn.type = "button";
-      refBtn.className = "nsc-mini-btn";
-      refBtn.textContent = st.loading ? "加载中..." : "刷新";
-      refBtn.addEventListener("click", () => loadSpaceTabPage(store, "comments", true));
-      subbar.appendChild(refBtn);
-
-      if (st.loading && st.items.length === 0) {
-        bodyEl.innerHTML = `<div class="nsc-empty-state">正在加载 TA 的历史评论...</div>`;
-        return;
-      }
-      if (st.error && st.items.length === 0) {
-        bodyEl.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
-        return;
-      }
-      if (st.items.length === 0) {
-        bodyEl.innerHTML = `<div class="nsc-empty-state">TA 暂无公开评论记录</div>`;
-        return;
-      }
-      st.items.forEach((it) => {
-        const pid = String(it.post_id || "");
-        const floor = Number(it.floor_id) || 1;
-        const pageIdx = Math.max(1, Math.ceil(floor / 10));
-        const row = document.createElement("div");
-        row.className = "nsc-hub-row";
-        row.innerHTML = `
-          <div class="nsc-hub-row-main">
-            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
-            <div class="nsc-hub-row-sub">
-              <span>#${floor}楼</span>
-              ${it.text ? `<span style="max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(it.text)}</span>` : ""}
-              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
-            </div>
-          </div>
-          <span class="nsc-badge-read">直达 #${floor}</span>
-        `;
-        row.addEventListener("click", () => {
-          closeAllModals();
-          openPostInChat({
-            postId: pid,
-            url: `/post-${pid}-${pageIdx}`,
-            title: it.title || `帖子 #${pid}`,
-            targetFloor: String(floor),
-          });
-        });
-        bodyEl.appendChild(row);
-      });
-      const wf = document.createElement("div");
-      wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:10px 4px;";
-      wf.textContent = st.noMore ? "已加载全部评论" : st.loading ? "正在加载更多..." : "下滑自动加载更多评论";
-      bodyEl.appendChild(wf);
-      if (prevTop > 0) bodyEl.scrollTop = prevTop;
-      return;
-    }
-
+    bodyEl.innerHTML = "";
     subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">原版空间页面（已套用 macOS 主题）</span>`;
     const reloadBtn = document.createElement("button");
     reloadBtn.type = "button";
@@ -677,9 +980,13 @@
       bd = document.createElement("div");
       bd.id = "nsc-space-backdrop";
       bd.innerHTML = `<div class="nsc-space-modal" role="dialog" aria-label="用户空间主页"></div>`;
-      bd.addEventListener("click", (e) => {
-        if (e.target === bd) bd.classList.remove("is-open");
-      });
+      if (typeof bindBackdropSafeClose === "function") {
+        bindBackdropSafeClose(bd, () => bd.classList.remove("is-open"));
+      } else {
+        bd.addEventListener("click", (e) => {
+          if (e.target === bd) bd.classList.remove("is-open");
+        });
+      }
       document.body.appendChild(bd);
     }
     const pBd = document.getElementById("nsc-profile-backdrop");
@@ -727,22 +1034,7 @@
       filter: "all",
     };
 
-    const highlightRulingText = (rawText) => {
-      const s = String(rawText || "");
-      const kwRe = /(轻度灌水|严重灌水|水贴警告|水贴|无意义|活动奖励|推荐阅读|优质技术文章|阅读权限被改为\d+|锁定修改|用户被禁言\d+天|禁言\d+天|违规|骂人|引战|广告|刷分|活动|奖励|中奖|[+-]\d+鸡腿)/g;
-      let out = "";
-      let last = 0;
-      let m;
-      while ((m = kwRe.exec(s)) !== null) {
-        if (m.index > last) out += escHtml(s.slice(last, m.index));
-        const tok = m[0];
-        const isPos = /^(活动奖励|推荐阅读|优质技术文章|活动|奖励|中奖|\+\d+鸡腿)$/.test(tok);
-        out += `<span class="${isPos ? "nsc-rk-pos" : "nsc-rk-warn"}">${escHtml(tok)}</span>`;
-        last = m.index + tok.length;
-      }
-      if (last < s.length) out += escHtml(s.slice(last));
-      return out || "-";
-    };
+    const highlightRulingText = (rawText) => escHtml(String(rawText || "").trim()) || "-";
 
     const filterRulingRows = (rows, filterKey) => {
       const list = Array.isArray(rows) ? rows : [];
@@ -1295,7 +1587,7 @@
       const toolbar = document.createElement("div");
       toolbar.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:4px;";
       const seg = document.createElement("div");
-      seg.className = "nsc-seg-tabs";
+      seg.className = "nsc-ns-switch";
       [
         { id: "realtime", label: "实时" },
         { id: "daily", label: "日榜" },
@@ -1303,7 +1595,7 @@
       ].forEach((opt) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (state.hotTab === opt.id ? " is-active" : "");
+        b.className = "nsc-ns-switch-item" + (state.hotTab === opt.id ? " is-active" : "");
         b.textContent = opt.label;
         b.addEventListener("click", () => {
           state.hotTab = opt.id;
@@ -1495,8 +1787,15 @@
   async function loadPaginatedHubStore(st, buildUrl, extractRows, onRows, reset = false, needUid = false) {
     detectCurrentUser();
     const uid = state.currentUserId;
-    if ((needUid && !uid) || st.loading) return;
-    if (reset) { st.items = []; st.page = 0; st.noMore = false; st.error = null; }
+    if ((needUid && !uid) || st.loading || st.fullLoading) return;
+    if (reset) {
+      st.items = [];
+      st.page = 0;
+      st.noMore = false;
+      st.error = null;
+      if ("fullIndexed" in st) st.fullIndexed = false;
+      if ("fullProgress" in st) st.fullProgress = "";
+    }
     if (st.noMore) return;
     st.loading = true;
     renderUserHubIfOpen();
@@ -1543,7 +1842,13 @@
       state.hubData.comments,
       (uid, p) => `/api/content/list-comments?uid=${uid}&page=${p}`,
       (json) => (json && (json.comments || json.data || json.list)) || [],
-      (rows, st) => { st.items.push(...rows); },
+      (rows, st) => {
+        const seen = new Set(st.items.map((x) => getContentItemKey(x, "comments")).filter(Boolean));
+        for (const r of rows) {
+          const k = getContentItemKey(r, "comments");
+          if (k && !seen.has(k)) { st.items.push(r); seen.add(k); }
+        }
+      },
       reset,
       true
     );
@@ -1899,6 +2204,131 @@
     bodyEl.appendChild(iframe);
   }
 
+  function renderHubListResults(kind, body, subbar, closeHub, prevScrollTop = 0) {
+    if (!body) return;
+    const st = kind === "comments" ? state.hubData.comments : state.hubData.posts;
+    if (st.searchQuery === undefined) st.searchQuery = "";
+    const terms = parseSearchTerms(st.searchQuery);
+    const isSearching = terms.length > 0;
+    const filtered = isSearching ? st.items.filter((it) => matchSpaceOrHubItem(it, terms)) : st.items;
+
+    const statusEl = subbar && subbar.querySelector("#nsc-hub-subbar-status");
+    if (statusEl) {
+      if (st.fullLoading && st.fullProgress) {
+        statusEl.textContent = st.fullProgress;
+      } else if (isSearching) {
+        statusEl.textContent = `匹配 ${filtered.length} / 已载 ${st.items.length} ${kind === "comments" ? "条评论" : "篇主题"}${st.fullIndexed || st.noMore ? "（全量）" : ""}`;
+      } else {
+        statusEl.textContent = kind === "comments"
+          ? `已加载 ${st.items.length} 条历史回复`
+          : `已加载 ${st.items.length} 篇主题帖`;
+      }
+    }
+
+    body.innerHTML = "";
+    if ((st.loading || st.fullLoading) && st.items.length === 0) {
+      body.innerHTML = `<div class="nsc-empty-state">${kind === "comments" ? "正在加载我的评论..." : "正在加载我的主题帖..."}</div>`;
+      return;
+    }
+    if (st.error && st.items.length === 0) {
+      body.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
+      return;
+    }
+    if (st.items.length === 0) {
+      body.innerHTML = `<div class="nsc-empty-state">${kind === "comments" ? "暂无评论记录" : "暂无主题帖记录"}</div>`;
+      return;
+    }
+    if (filtered.length === 0) {
+      body.innerHTML = `
+        <div class="nsc-empty-state">
+          <div>未找到匹配「${escHtml(st.searchQuery.trim())}」的${kind === "comments" ? "评论" : "主题帖"}</div>
+          ${!st.fullIndexed && !st.noMore ? `<div style="margin-top:6px;font-size:11.5px;color:var(--nsc-muted);">仅搜索已加载内容，点击「全量搜索」或按回车检索全部历史</div>` : ""}
+        </div>
+      `;
+      return;
+    }
+
+    const ROW_CAP = 300;
+    const truncated = filtered.length > ROW_CAP;
+    const displayItems = truncated ? filtered.slice(0, ROW_CAP) : filtered;
+
+    displayItems.forEach((it) => {
+      if (kind === "posts") {
+        const pid = String(it.post_id || it.id || "");
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${highlightSearchMatch(it.title || `帖子 #${pid}`, terms)}</div>
+            <div class="nsc-hub-row-sub">
+              ${it.category ? `<span>版块: ${highlightSearchMatch(it.category, terms)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">#${escHtml(pid)}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeHub();
+          openPostInChat({ postId: pid, url: `/post-${pid}-1`, title: it.title || `帖子 #${pid}`, author: state.currentUser });
+        });
+        body.appendChild(row);
+      } else {
+        const pid = String(it.post_id || "");
+        const rawFloor = it.floor_id !== undefined && it.floor_id !== null && it.floor_id !== "" ? Number(it.floor_id) : 1;
+        const floor = Number.isFinite(rawFloor) && rawFloor >= 0 ? rawFloor : 1;
+        const pageIdx = Math.max(1, Math.ceil(Math.max(1, floor) / 10));
+        const row = document.createElement("div");
+        row.className = "nsc-hub-row";
+        row.innerHTML = `
+          <div class="nsc-hub-row-main">
+            <div class="nsc-hub-row-title">${highlightSearchMatch(it.title || `帖子 #${pid}`, terms)}</div>
+            <div class="nsc-hub-row-sub">
+              <span>#${floor}楼</span>
+              ${it.text ? `<span style="max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${highlightSearchMatch(it.text, terms)}</span>` : ""}
+              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+            </div>
+          </div>
+          <span class="nsc-badge-read">直达 #${floor}</span>
+        `;
+        row.addEventListener("click", () => {
+          closeHub();
+          openPostInChat({
+            postId: pid,
+            url: `/post-${pid}-${pageIdx}`,
+            title: it.title || `帖子 #${pid}`,
+            targetFloor: String(floor),
+          });
+        });
+        body.appendChild(row);
+      }
+    });
+
+    if (truncated) {
+      const capTip = document.createElement("div");
+      capTip.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:8px 4px 2px;";
+      capTip.textContent = isSearching
+        ? `仅展示前 ${ROW_CAP} 条匹配结果（共 ${filtered.length} 条），请输入更多关键词缩小范围`
+        : `仅展示前 ${ROW_CAP} 条记录（共 ${filtered.length} 条），请输入关键词搜索全部`;
+      body.appendChild(capTip);
+    }
+
+    const wf = document.createElement("div");
+    wf.style.cssText = "text-align:center;font-size:11px;color:var(--nsc-muted);padding:10px 4px;";
+    if (isSearching) {
+      wf.textContent = !st.fullIndexed && !st.noMore
+        ? "仅搜索已加载内容，点击「全量搜索」或按回车检索全部历史"
+        : `已检索全部已索引内容（共 ${st.items.length} 条）`;
+    } else if (!st.noMore) {
+      wf.textContent = st.loading || st.fullLoading
+        ? "正在瀑布流加载更多..."
+        : `下滑自动加载更多${kind === "comments" ? "评论" : "主题帖"}`;
+    } else {
+      wf.textContent = `已加载全部${kind === "comments" ? "评论" : "主题帖"}`;
+    }
+    body.appendChild(wf);
+    if (prevScrollTop > 0) body.scrollTop = prevScrollTop;
+  }
+
   function renderUserHub() {
     const bd = document.getElementById("nsc-hub-backdrop");
     if (!bd) return;
@@ -2065,8 +2495,12 @@
 
     const subbar = modal.querySelector("#nsc-hub-subbar");
     const body = modal.querySelector("#nsc-hub-body");
-    subbar.innerHTML = "";
-    body.innerHTML = "";
+    const isHubListTab = state.hubTab === "posts" || state.hubTab === "comments";
+    if (!isHubListTab) {
+      delete subbar.dataset.nscSubbarKey;
+      subbar.innerHTML = "";
+      body.innerHTML = "";
+    }
     body.style.padding = "";
     body.style.overflow = "";
 
@@ -2090,11 +2524,11 @@
         { id: "sys-notice", label: "系统通知", cnt: Number(state.unreadCounts.sysNotice) || 0 },
       ];
       const seg = document.createElement("div");
-      seg.className = "nsc-seg-tabs";
+      seg.className = "nsc-ns-switch";
       subTabs.forEach((st) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (state.hubNotifSub === st.id ? " is-active" : "");
+        b.className = "nsc-ns-switch-item" + (state.hubNotifSub === st.id ? " is-active" : "");
         b.textContent = st.cnt > 0 ? `${st.label} (${st.cnt})` : st.label;
         b.addEventListener("click", () => {
           state.hubNotifSub = st.id;
@@ -2186,7 +2620,7 @@
               title: it.title,
               author: it.author,
               avatar: it.avatar,
-              targetFloor: it.floorId ? String(it.floorId) : "",
+              targetFloor: it.floorId ? String(it.floorId) : (it.commentId ? String(it.commentId) : ""),
             });
           });
           body.appendChild(row);
@@ -2253,101 +2687,87 @@
       return;
     }
 
-    if (state.hubTab === "posts") {
-      const st = state.hubData.posts;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 篇主题帖</span>`;
-      const refBtn = document.createElement("button");
-      refBtn.type = "button";
-      refBtn.className = "nsc-mini-btn";
-      refBtn.textContent = st.loading ? "加载中..." : "刷新";
-      refBtn.addEventListener("click", () => loadHubPosts(true));
-      subbar.appendChild(refBtn);
-
-      if (st.loading && st.items.length === 0) {
-        body.innerHTML = `<div class="nsc-empty-state">正在加载我的主题帖...</div>`;
-        return;
-      }
-      if (st.error && st.items.length === 0) {
-        body.innerHTML = `<div class="nsc-empty-state" style="color:#ff3b30;">加载失败：${escHtml(st.error)}</div>`;
-        return;
-      }
-      if (st.items.length === 0) {
-        body.innerHTML = `<div class="nsc-empty-state">暂无主题帖记录</div>`;
-        return;
-      }
-      st.items.forEach((it) => {
-        const pid = String(it.post_id || it.id || "");
-        const row = document.createElement("div");
-        row.className = "nsc-hub-row";
-        row.innerHTML = `
-          <div class="nsc-hub-row-main">
-            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
-            <div class="nsc-hub-row-sub">
-              ${it.category ? `<span>版块: ${escHtml(it.category)}</span>` : ""}
-              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
+    if (state.hubTab === "posts" || state.hubTab === "comments") {
+      const kind = state.hubTab;
+      const st = kind === "comments" ? state.hubData.comments : state.hubData.posts;
+      if (st.searchQuery === undefined) st.searchQuery = "";
+      if (subbar.dataset.nscSubbarKey !== kind || !subbar.querySelector(".nsc-search-input")) {
+        subbar.dataset.nscSubbarKey = kind;
+        subbar.innerHTML = `
+          <span id="nsc-hub-subbar-status" style="font-size:12px;color:var(--nsc-muted);"></span>
+          <div class="nsc-subbar-search">
+            <div class="nsc-search-wrap">
+              <input type="text" class="nsc-search-input" placeholder="搜索标题${kind === "comments" ? "或评论内容" : ""}（支持空格多词）..." />
+              <button type="button" class="nsc-search-clear" title="清空搜索">${ICONS.eraser}</button>
             </div>
+            <button type="button" class="nsc-mini-btn" id="nsc-hub-full-btn"></button>
+            <button type="button" class="nsc-mini-btn" id="nsc-hub-ref-btn"></button>
           </div>
-          <span class="nsc-badge-read">#${pid}</span>
         `;
-        row.addEventListener("click", () => {
-          closeHub();
-          openPostInChat({ postId: pid, url: `/post-${pid}-1`, title: it.title || `帖子 #${pid}`, author: state.currentUser });
-        });
-        body.appendChild(row);
-      });
-      if (!st.noMore) appendWaterfallFooter(st, loadHubPosts, "主题帖");
-      restoreHubScroll();
-      return;
-    }
+        const inputEl = subbar.querySelector(".nsc-search-input");
+        const clearBtn = subbar.querySelector(".nsc-search-clear");
+        const fullBtn = subbar.querySelector("#nsc-hub-full-btn");
+        const refBtn = subbar.querySelector("#nsc-hub-ref-btn");
+        inputEl.value = st.searchQuery || "";
+        clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
 
-    if (state.hubTab === "comments") {
-      const st = state.hubData.comments;
-      subbar.innerHTML = `<span style="font-size:12px;color:var(--nsc-muted);">已加载 ${st.items.length} 条历史回复</span>`;
-      const refBtn = document.createElement("button");
-      refBtn.type = "button";
-      refBtn.className = "nsc-mini-btn";
-      refBtn.textContent = st.loading ? "加载中..." : "刷新";
-      refBtn.addEventListener("click", () => loadHubComments(true));
-      subbar.appendChild(refBtn);
-
-      if (st.loading && st.items.length === 0) {
-        body.innerHTML = `<div class="nsc-empty-state">正在加载我的评论...</div>`;
-        return;
-      }
-      if (st.items.length === 0) {
-        body.innerHTML = `<div class="nsc-empty-state">${st.error ? escHtml(st.error) : "暂无评论记录"}</div>`;
-        return;
-      }
-      st.items.forEach((it) => {
-        const pid = String(it.post_id || "");
-        const floor = Number(it.floor_id) || 1;
-        const pageIdx = Math.max(1, Math.ceil(floor / 10));
-        const row = document.createElement("div");
-        row.className = "nsc-hub-row";
-        row.innerHTML = `
-          <div class="nsc-hub-row-main">
-            <div class="nsc-hub-row-title">${escHtml(it.title || `帖子 #${pid}`)}</div>
-            <div class="nsc-hub-row-sub">
-              <span>#${floor}楼</span>
-              ${it.text ? `<span style="max-width:460px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(it.text)}</span>` : ""}
-              ${it.created_at ? `<span>${escHtml(formatChineseTime("", it.created_at, ""))}</span>` : ""}
-            </div>
-          </div>
-          <span class="nsc-badge-read">直达 #${floor}</span>
-        `;
-        row.addEventListener("click", () => {
-          closeHub();
-          openPostInChat({
-            postId: pid,
-            url: `/post-${pid}-${pageIdx}`,
-            title: it.title || `帖子 #${pid}`,
-            targetFloor: String(floor),
-          });
+        let isComposing = false;
+        const applyQuery = () => {
+          st.searchQuery = inputEl.value;
+          clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
+          renderHubListResults(kind, body, subbar, closeHub, 0);
+        };
+        inputEl.addEventListener("compositionstart", () => { isComposing = true; });
+        inputEl.addEventListener("compositionend", () => {
+          isComposing = false;
+          applyQuery();
         });
-        body.appendChild(row);
-      });
-      if (!st.noMore) appendWaterfallFooter(st, loadHubComments, "评论");
-      restoreHubScroll();
+        inputEl.addEventListener("input", () => {
+          clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
+          if (isComposing) return;
+          applyQuery();
+        });
+        inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !isComposing) {
+            if (!st.fullIndexed && !st.noMore && !st.fullLoading) {
+              e.preventDefault();
+              runHubFullIndex(kind);
+            }
+          }
+        });
+        clearBtn.addEventListener("click", () => {
+          inputEl.value = "";
+          st.searchQuery = "";
+          clearBtn.classList.remove("is-visible");
+          renderHubListResults(kind, body, subbar, closeHub, 0);
+          inputEl.focus();
+        });
+        fullBtn.addEventListener("click", () => runHubFullIndex(kind));
+        refBtn.addEventListener("click", () => {
+          if (kind === "comments") loadHubComments(true);
+          else loadHubPosts(true);
+        });
+      }
+
+      const inputEl = subbar.querySelector(".nsc-search-input");
+      const clearBtn = subbar.querySelector(".nsc-search-clear");
+      if (inputEl && document.activeElement !== inputEl && inputEl.value !== (st.searchQuery || "")) {
+        inputEl.value = st.searchQuery || "";
+      }
+      if (clearBtn && inputEl) {
+        clearBtn.classList.toggle("is-visible", Boolean(inputEl.value));
+      }
+      const fullBtn = subbar.querySelector("#nsc-hub-full-btn");
+      if (fullBtn) {
+        fullBtn.textContent = st.fullLoading ? "索引中..." : st.fullIndexed ? "增量同步" : "全量搜索";
+        fullBtn.disabled = Boolean(st.fullLoading);
+      }
+      const refBtn = subbar.querySelector("#nsc-hub-ref-btn");
+      if (refBtn) {
+        refBtn.textContent = st.loading ? "加载中..." : "刷新";
+      }
+
+      renderHubListResults(kind, body, subbar, closeHub, prevScrollTop);
       return;
     }
 
@@ -2416,14 +2836,14 @@
 
       if (creditSubView) {
         const seg = document.createElement("div");
-        seg.className = "nsc-seg-tabs";
+        seg.className = "nsc-ns-switch";
         [
           { id: "list", label: "明细流水" },
           { id: "analytics", label: "100页深度统计" },
         ].forEach((m) => {
           const b = document.createElement("button");
           b.type = "button";
-          b.className = "nsc-seg-btn" + ((isAnalytics ? "analytics" : "list") === m.id ? " is-active" : "");
+          b.className = "nsc-ns-switch-item" + ((isAnalytics ? "analytics" : "list") === m.id ? " is-active" : "");
           b.textContent = m.label;
           b.addEventListener("click", () => {
             state.hubCreditView = m.id;
@@ -2508,14 +2928,14 @@
       const isAnalytics = Boolean(stardustSubView && state.hubStardustView === "analytics");
 
       const seg = document.createElement("div");
-      seg.className = "nsc-seg-tabs";
+      seg.className = "nsc-ns-switch";
       [
         { id: "recv", label: "我收到的" },
         { id: "sent", label: "我送出的" },
       ].forEach((m) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (!isAnalytics && st.mode === m.id ? " is-active" : "");
+        b.className = "nsc-ns-switch-item" + (!isAnalytics && st.mode === m.id ? " is-active" : "");
         b.textContent = m.label;
         b.addEventListener("click", () => {
           state.hubStardustView = "list";
@@ -2526,7 +2946,7 @@
       if (stardustSubView) {
         const ab = document.createElement("button");
         ab.type = "button";
-        ab.className = "nsc-seg-btn" + (isAnalytics ? " is-active" : "");
+        ab.className = "nsc-ns-switch-item" + (isAnalytics ? " is-active" : "");
         ab.textContent = "全量分析";
         ab.addEventListener("click", () => {
           state.hubStardustView = "analytics";
@@ -2595,14 +3015,14 @@
       const subMode = state._hubFansMode || "fans";
       const store = subMode === "follow" ? state.followData : state.fansData;
       const seg = document.createElement("div");
-      seg.className = "nsc-seg-tabs";
+      seg.className = "nsc-ns-switch";
       [
         { id: "fans", label: `我的粉丝 (${state.fansData.items.length})` },
         { id: "follow", label: `我的关注 (${state.followData.items.length})` },
       ].forEach((m) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (subMode === m.id ? " is-active" : "");
+        b.className = "nsc-ns-switch-item" + (subMode === m.id ? " is-active" : "");
         b.textContent = m.label;
         b.addEventListener("click", () => {
           state._hubFansMode = m.id;
@@ -2772,9 +3192,9 @@
             <span style="font-weight:600;">自动签到</span>
             <span style="font-size:11px;color:var(--nsc-muted);">每日首次访问</span>
           </div>
-          <div class="nsc-seg-tabs nsc-checkin-auto-seg ${state.autoCheckin ? "" : "is-dim"}" id="nsc-auto-ck-mode">
-            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">固定 +5</button>
-            <button type="button" class="nsc-seg-btn ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">拼手气</button>
+          <div class="nsc-ns-switch nsc-checkin-auto-seg ${state.autoCheckin ? "" : "is-dim"}" id="nsc-auto-ck-mode">
+            <button type="button" class="nsc-ns-switch-item ${state.autoCheckinMode !== "random" ? "is-active" : ""}" data-ckmode="fixed">固定 +5</button>
+            <button type="button" class="nsc-ns-switch-item ${state.autoCheckinMode === "random" ? "is-active" : ""}" data-ckmode="random">拼手气</button>
           </div>
         </div>
       `;
@@ -2788,7 +3208,8 @@
       });
       ckCard.querySelectorAll("[data-ckmode]").forEach((b) => {
         b.addEventListener("click", () => {
-          state.autoCheckinMode = b.dataset.ckmode;
+          const curMode = state.autoCheckinMode === "random" ? "random" : "fixed";
+          state.autoCheckinMode = curMode === "random" ? "fixed" : "random";
           localStorage.setItem(LS.AUTO_CHECKIN_MODE, state.autoCheckinMode);
           renderUserHub();
         });
@@ -2908,9 +3329,13 @@
       bd = document.createElement("div");
       bd.id = "nsc-hub-backdrop";
       bd.innerHTML = `<div class="nsc-hub-modal" role="dialog" aria-label="个人中心"></div>`;
-      bd.addEventListener("click", (e) => {
-        if (e.target === bd) bd.classList.remove("is-open");
-      });
+      if (typeof bindBackdropSafeClose === "function") {
+        bindBackdropSafeClose(bd, () => bd.classList.remove("is-open"));
+      } else {
+        bd.addEventListener("click", (e) => {
+          if (e.target === bd) bd.classList.remove("is-open");
+        });
+      }
       document.body.appendChild(bd);
     }
     state.hubTab = tab;
@@ -2951,4 +3376,3 @@
 
     renderUserHub();
   }
-

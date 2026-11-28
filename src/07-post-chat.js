@@ -96,8 +96,25 @@
       wfTip.textContent = maxLoaded < totalPages ? `继续下滑自动预加载第 ${maxLoaded + 1} 页` : "已加载全部楼层";
     }
     applyMessageFilters();
+    syncChatPagerUi(room);
     enrichVisibleMemberBadges();
     return added;
+  }
+
+  function syncChatPagerUi(room) {
+    if (!room) return;
+    const msgsEl = document.getElementById("nsc-chat-messages");
+    if (!msgsEl) return;
+    const pager = msgsEl.querySelector(".nsc-chat-pager");
+    if (!pager) return;
+    const curPage = room.currentPageNum || parsePageNumFromUrl(room.url);
+    pager.querySelectorAll("button[data-page]").forEach((pb) => {
+      const pageNum = Number(pb.dataset.page);
+      if (!pageNum) return;
+      const isLoaded = state.loadedPages.has(pageNum);
+      const isCurrent = pageNum === curPage;
+      pb.className = "nsc-pager-btn" + (isCurrent ? " is-current" : "") + (isLoaded ? " is-loaded" : "");
+    });
   }
 
   const _postRoomCache = new Map();
@@ -192,6 +209,7 @@
       _postRoomCache.delete(pid);
       _postRoomCache.set(pid, cached);
       cached.room.isNativePage = (pid === state.nativePostId);
+      cached.room.currentPageNum = reqPage;
       state.currentRoom = cached.room;
       state.loadedPages = new Set(cached.loadedPages);
       state.opAuthor = cached.opAuthor || "";
@@ -225,7 +243,7 @@
       const doc = await fetchPostPageDoc(url);
       if (reqSeq !== state.chatViewSeq || state.activePmPeer || state.currentPostId !== pid) return;
       if (msgsEl) msgsEl.classList.remove("is-switching");
-      renderPostDocument(doc, url, pid === state.nativePostId, itemMeta);
+      renderPostDocument(doc, url, pid === state.nativePostId, itemMeta, { bumpSeq: false });
       if (itemMeta.targetFloor && state.currentRoom) {
         state._suppressWaterfallUntil = Date.now() + 900;
         const beforePages = state.loadedPages.size;
@@ -234,7 +252,7 @@
         if (state.loadedPages.size > beforePages) {
           renderChatRoom(state.currentRoom, true);
         }
-        jumpToFloor(itemMeta.targetFloor, { instant: true });
+        await jumpToFloor(itemMeta.targetFloor, { instant: true });
       }
       saveCurrentRoomToCache();
     } catch (err) {
@@ -394,8 +412,8 @@
     return pages;
   }
 
-  function renderPostDocument(doc, url, isNativePage, itemHint = null) {
-    ++state.chatViewSeq;
+  function renderPostDocument(doc, url, isNativePage, itemHint = null, opts = {}) {
+    if (opts.bumpSeq !== false) ++state.chatViewSeq;
     state.activePmPeer = null;
     const pid = getPostIdFromPath(url);
     const pageNum = parsePageNumFromUrl(url);
@@ -454,7 +472,8 @@
       updateTopicListSelection(pid);
     }
 
-    state.currentRoom = { pid, url, title, catName, pages, opObj, flatComments, isNativePage };
+    const rank = typeof extractPostRankFromDoc === "function" ? extractPostRankFromDoc(doc) : 0;
+    state.currentRoom = { pid, url, title, catName, pages, opObj, flatComments, isNativePage, currentPageNum: pageNum, rank };
     renderChatRoom(state.currentRoom);
   }
 
@@ -622,6 +641,7 @@
       const targetTop = msgsEl.scrollTop + (tRect.top - cRect.top) - Math.max(24, (msgsEl.clientHeight - tRect.height) / 2);
       msgsEl.scrollTo({ top: Math.max(0, targetTop), behavior: behaviorMode });
     };
+    state._suppressWaterfallUntil = Date.now() + 900;
     scrollToTarget(instant ? "auto" : "smooth");
     if (instant) {
       requestAnimationFrame(() => scrollToTarget("auto"));
@@ -880,8 +900,10 @@
       for (const p of room.pages) {
         const pb = document.createElement("button");
         pb.type = "button";
+        pb.dataset.page = String(p.num);
         const isLoaded = state.loadedPages.has(p.num);
-        pb.className = "nsc-pill-btn" + (isLoaded ? " is-active" : "");
+        const isCurrent = p.num === (room.currentPageNum || parsePageNumFromUrl(room.url));
+        pb.className = "nsc-pager-btn" + (isCurrent ? " is-current" : "") + (isLoaded ? " is-loaded" : "");
         pb.textContent = `第 ${p.label} 页`;
         pb.addEventListener("click", () => {
           openPostInChat({
@@ -902,6 +924,7 @@
       wfTip.textContent = maxLoaded < totalPages ? `继续下滑自动预加载第 ${maxLoaded + 1} 页` : "已加载全部楼层";
       msgsEl.appendChild(pager);
       msgsEl.appendChild(wfTip);
+      syncChatPagerUi(room);
     }
 
     applyMessageFilters();
@@ -1227,6 +1250,7 @@
           </div>
           <div class="nsc-newpost-body">
             <div class="nsc-newpost-row" id="nsc-edit-title-row">
+              <select class="nsc-newpost-rank" id="nsc-edit-rank" title="设置阅读权限"></select>
               <input type="text" class="nsc-newpost-title" id="nsc-edit-title" placeholder="请输入帖子标题..." />
             </div>
             <div class="nsc-newpost-editor" style="position:relative;">
@@ -1246,12 +1270,37 @@
       document.body.appendChild(bd);
 
       const closeEdit = () => { bd.style.display = "none"; bd.classList.remove("is-open"); };
-      bd.addEventListener("click", (e) => { if (e.target === bd) closeEdit(); });
+      bd._nscCloseEdit = closeEdit;
+      let _editDownOnBackdrop = false;
+      let _editGuardTimer = 0;
+      bd.addEventListener("mousedown", (e) => {
+        _editDownOnBackdrop = e.target === bd;
+      });
+      bd.addEventListener("click", (e) => {
+        const downOnBackdrop = _editDownOnBackdrop;
+        _editDownOnBackdrop = false;
+        if (downOnBackdrop && e.target === bd) {
+          const modal = bd.querySelector(".nsc-newpost-modal");
+          if (modal) {
+            modal.classList.remove("is-guard-shake");
+            void modal.offsetWidth;
+            modal.classList.add("is-guard-shake");
+            clearTimeout(_editGuardTimer);
+            _editGuardTimer = setTimeout(() => {
+              modal.classList.remove("is-guard-shake");
+            }, 420);
+          }
+          if (edStatus) {
+            edStatus.textContent = "为防误触已禁用点空白关闭，请点击右上角 ✕ 或「取消」";
+          }
+        }
+      });
       bd.querySelector("#nsc-edit-close").addEventListener("click", closeEdit);
       bd.querySelector("#nsc-edit-cancel").addEventListener("click", closeEdit);
 
       const edContent = bd.querySelector("#nsc-edit-content");
       const edTitle = bd.querySelector("#nsc-edit-title");
+      const edRank = bd.querySelector("#nsc-edit-rank");
       const edStatus = bd.querySelector("#nsc-edit-status");
       const edSubmit = bd.querySelector("#nsc-edit-submit");
 
@@ -1285,8 +1334,9 @@
         edStatus.textContent = "正在提交修改...";
         try {
           const endpoint = curIsTopic ? "/api/content/edit-discussion" : "/api/content/edit-comment";
+          const nextRank = Number(edRank ? edRank.value : 0) || 0;
           const payload = curIsTopic
-            ? { content: newContent, mode: "edit-discussion", title: newTitle, postId: Number(curPid), rank: 0 }
+            ? { content: newContent, mode: "edit-discussion", title: newTitle, postId: Number(curPid), rank: nextRank }
             : { content: newContent, mode: "edit-comment", commentId: Number(curObj.commentId) };
           const resp = await fetch(endpoint, {
             method: "POST",
@@ -1297,6 +1347,9 @@
           const resJson = await resp.json().catch(() => ({}));
           if (!resp.ok || resJson.success === false) {
             throw new Error(resJson.message || `HTTP ${resp.status}`);
+          }
+          if (curIsTopic && state.currentRoom && state.currentRoom.pid === curPid) {
+            state.currentRoom.rank = nextRank;
           }
           edStatus.textContent = "修改成功，正在刷新内容...";
           const targetPage = curIsTopic ? 1 : curObj.pageNum || 1;
@@ -1350,8 +1403,34 @@
     bd.querySelector("#nsc-edit-orig-link").href = isTopic ? `/post-${pid}-1` : `/post-${pid}-${obj.pageNum || 1}#${obj.floorId}`;
     const titleRow = bd.querySelector("#nsc-edit-title-row");
     const titleInp = bd.querySelector("#nsc-edit-title");
+    const edRankEl = bd.querySelector("#nsc-edit-rank");
     titleRow.style.display = isTopic ? "flex" : "none";
     titleInp.value = isTopic ? (room && room.title) || "" : "";
+    if (edRankEl) {
+      edRankEl.style.display = isTopic ? "" : "none";
+      if (isTopic) {
+        const curRank = room && room.rank !== undefined ? Number(room.rank) : 0;
+        const rawUserRank = typeof getCurrentUserRank === "function" ? getCurrentUserRank() : null;
+        const userRank = typeof rawUserRank === "number" && Number.isFinite(rawUserRank) && rawUserRank >= 0 ? rawUserRank : null;
+        const opts = [
+          { value: 0, label: "公开" },
+          { value: 1, label: "Lv.1" },
+          { value: 2, label: "Lv.2" },
+          { value: 3, label: "Lv.3" },
+          { value: 4, label: "Lv.4" },
+          { value: 5, label: "Lv.5" },
+          { value: 6, label: "Lv.6" },
+          { value: 255, label: "私有" },
+        ];
+        edRankEl.innerHTML = opts.map((opt) => {
+          const aboveUser = userRank !== null && opt.value >= 1 && opt.value <= 6 && opt.value > userRank;
+          const disabled = aboveUser && opt.value !== curRank;
+          const text = disabled ? `Lv.${opt.value} (需Lv.${opt.value})` : opt.label;
+          return `<option value="${opt.value}"${disabled ? " disabled" : ""}>${text}</option>`;
+        }).join("");
+        edRankEl.value = String(opts.some((opt) => opt.value === curRank) ? curRank : 0);
+      }
+    }
     bd.querySelector("#nsc-edit-content").value = htmlToMarkdown(obj.bodyHtml || "");
     bd.querySelector("#nsc-edit-status").textContent = "由原贴 HTML 还原为 Markdown，保存前请核对格式";
     NodeImage.syncDots();

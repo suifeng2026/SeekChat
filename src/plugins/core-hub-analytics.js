@@ -1035,7 +1035,7 @@
       filterRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;width:100%;padding-top:8px;border-top:1px dashed var(--nsc-border);";
 
       const seg = document.createElement("div");
-      seg.className = "nsc-seg-tabs";
+      seg.className = "nsc-ns-switch";
       const filterDefs = [
         { id: "all", label: "全部" },
         { id: "upvote_in", label: "收到点赞" },
@@ -1048,31 +1048,46 @@
       filterDefs.forEach((f) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (stardustUi.filter === f.id ? " is-active" : "");
+        b.className = "nsc-ns-switch-item" + (stardustUi.filter === f.id ? " is-active" : "");
         b.textContent = f.label;
         b.addEventListener("click", () => {
           stardustUi.filter = f.id;
           stardustUi.visibleCount = STARDUST_PAGE_SIZE;
-          seg.querySelectorAll(".nsc-seg-btn").forEach((el) => el.classList.remove("is-active"));
+          seg.querySelectorAll(".nsc-ns-switch-item").forEach((el) => el.classList.remove("is-active"));
           b.classList.add("is-active");
           if (records.length > 0) renderStardustTableSection(tableHost, records);
         });
         seg.appendChild(b);
       });
 
-      const searchInput = document.createElement("input");
-      searchInput.type = "text";
-      searchInput.placeholder = "搜索 UID / 用户名 / 留言 / 时间...";
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "nsc-search-wrap";
+      searchWrap.style.cssText = "width:auto;min-width:220px;";
+      searchWrap.innerHTML = `<input type="text" class="nsc-search-input" placeholder="搜索 UID / 用户名 / 留言 / 时间..." /><button type="button" class="nsc-search-clear" title="清空搜索">${ICONS.eraser}</button>`;
+      const searchInput = searchWrap.querySelector(".nsc-search-input");
+      const searchClearBtn = searchWrap.querySelector(".nsc-search-clear");
+      const syncSearchClear = () => {
+        searchClearBtn.classList.toggle("is-visible", Boolean(searchInput.value));
+      };
       searchInput.value = stardustUi.search;
-      searchInput.style.cssText = "height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--nsc-border);background:var(--nsc-hover);color:var(--nsc-text);font-size:12px;outline:none;min-width:210px;";
+      syncSearchClear();
       searchInput.addEventListener("input", () => {
+        syncSearchClear();
         stardustUi.search = searchInput.value;
         stardustUi.visibleCount = STARDUST_PAGE_SIZE;
         if (records.length > 0) renderStardustTableSection(tableHost, records);
       });
+      searchClearBtn.addEventListener("click", () => {
+        searchInput.value = "";
+        syncSearchClear();
+        stardustUi.search = "";
+        stardustUi.visibleCount = STARDUST_PAGE_SIZE;
+        if (records.length > 0) renderStardustTableSection(tableHost, records);
+        searchInput.focus();
+      });
 
       filterRow.appendChild(seg);
-      filterRow.appendChild(searchInput);
+      filterRow.appendChild(searchWrap);
       banner.appendChild(filterRow);
       body.appendChild(banner);
 
@@ -1139,7 +1154,7 @@
         <div class="nsc-ana-card-title" style="flex-wrap:wrap;">
           <span>🏆 星辰互动排行榜（点击用户直达其明细记录）</span>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <div class="nsc-seg-tabs" id="nsc-sd-rank-tabs"></div>
+            <div class="nsc-ns-switch" id="nsc-sd-rank-tabs"></div>
             <button type="button" class="nsc-mini-btn" id="nsc-sd-rank-toggle">${stardustUi.showRank ? "收起" : "展开"}</button>
           </div>
         </div>
@@ -1149,7 +1164,7 @@
       rankCats.forEach((rc) => {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "nsc-seg-btn" + (activeRankDef.id === rc.id ? " is-active" : "");
+        b.className = "nsc-ns-switch-item" + (activeRankDef.id === rc.id ? " is-active" : "");
         b.textContent = rc.label;
         b.addEventListener("click", () => {
           stardustUi.rankCat = rc.id;
@@ -1201,7 +1216,8 @@
               stardustUi.filter = activeRankDef.id;
               stardustUi.visibleCount = STARDUST_PAGE_SIZE;
               searchInput.value = String(u.uid);
-              seg.querySelectorAll(".nsc-seg-btn").forEach((el, sIdx) => {
+              syncSearchClear();
+              seg.querySelectorAll(".nsc-ns-switch-item").forEach((el, sIdx) => {
                 el.classList.toggle("is-active", filterDefs[sIdx] && filterDefs[sIdx].id === activeRankDef.id);
               });
               renderStardustTableSection(tableHost, records);

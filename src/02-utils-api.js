@@ -193,6 +193,56 @@
     return map;
   }
 
+  function bindBackdropSafeClose(backdropEl, onClose) {
+    if (!backdropEl || typeof onClose !== "function") return;
+    let downOnBackdrop = false;
+    backdropEl.addEventListener("mousedown", (e) => {
+      downOnBackdrop = e.target === backdropEl;
+    });
+    backdropEl.addEventListener("pointercancel", () => {
+      downOnBackdrop = false;
+    });
+    backdropEl.addEventListener("click", (e) => {
+      const shouldClose = downOnBackdrop && e.target === backdropEl;
+      downOnBackdrop = false;
+      if (shouldClose) onClose(e);
+    });
+  }
+
+  function extractPostRankFromDoc(doc) {
+    if (!doc) return 0;
+    const cfg = parseTempScriptConfig(doc);
+    const rawRank = cfg?.postData?.rank ?? cfg?.postData?.readRank ?? cfg?.postData?.readLevel;
+    if (rawRank !== undefined && rawRank !== null && rawRank !== "") {
+      const n = Number(rawRank);
+      if (Number.isInteger(n) && ((n >= 0 && n <= 6) || n === 255)) {
+        return n;
+      }
+    }
+    const titleWrap = doc.querySelector && doc.querySelector(".nsk-post .post-title");
+    if (titleWrap) {
+      const candidates = [];
+      titleWrap.querySelectorAll('span, [class*="lock"], [class*="rank"], [class*="badge"]').forEach((el) => {
+        const t = (el.textContent || "").trim();
+        if (t) candidates.push(t);
+      });
+      for (const node of Array.from(titleWrap.childNodes || [])) {
+        if (node.nodeType === 1 && node.tagName === "H1") continue;
+        const t = (node.textContent || "").trim();
+        if (t) candidates.push(t);
+      }
+      for (const text of candidates) {
+        if (text.includes("私有")) return 255;
+        const m = text.match(/Lv\.?\s*(\d+)/i);
+        if (m) {
+          const lv = Number(m[1]);
+          if (Number.isInteger(lv) && ((lv >= 0 && lv <= 6) || lv === 255)) return lv;
+        }
+      }
+    }
+    return 0;
+  }
+
   function getNodeSeekPostHeaders() {
     const meta = document.querySelector('meta[name="csrf-token"]');
     const cookieMatch = document.cookie.match(/(?:^|;\s*)(?:csrf_token|csrfToken)=([^;]+)/i);
@@ -327,6 +377,30 @@
       return { username: String(cached.username || ""), uid: String(cached.uid || "") };
     }
     return { username: "", uid: "" };
+  }
+
+  function getCurrentUserRank() {
+    const uid = state.currentUserId !== undefined && state.currentUserId !== null && state.currentUserId !== ""
+      ? String(state.currentUserId)
+      : "";
+    const cachedLevel = uid && state.userCache ? state.userCache[uid]?.level : null;
+    if (cachedLevel !== undefined && cachedLevel !== null) {
+      const m = String(cachedLevel).match(/(\d+)/);
+      if (m) {
+        const lv = Number(m[1]);
+        if (Number.isInteger(lv) && lv >= 0 && lv <= 6) return lv;
+      }
+    }
+    const cards = document.querySelectorAll(".nsc-right-user .user-card, #nsk-right-panel-container .user-card");
+    for (const card of cards) {
+      const text = card.textContent || "";
+      const m = text.match(/Lv\.?\s*(\d+)/i);
+      if (m) {
+        const lv = Number(m[1]);
+        if (Number.isInteger(lv) && lv >= 0 && lv <= 6) return lv;
+      }
+    }
+    return null;
   }
 
   function isFriend(name) {

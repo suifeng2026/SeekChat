@@ -264,10 +264,10 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
           </div>
           <div class="nsc-base-ctrl-row" style="margin-top:8px;">
             <label>填充方式</label>
-            <div class="nsc-seg-tabs">
-              <button type="button" class="nsc-seg-btn ${fitVal === "cover" ? "is-active" : ""}" data-fit="cover">铺满</button>
-              <button type="button" class="nsc-seg-btn ${fitVal === "contain" ? "is-active" : ""}" data-fit="contain">完整</button>
-              <button type="button" class="nsc-seg-btn ${fitVal === "repeat" ? "is-active" : ""}" data-fit="repeat">平铺</button>
+            <div class="nsc-ns-switch">
+              <button type="button" class="nsc-ns-switch-item ${fitVal === "cover" ? "is-active" : ""}" data-fit="cover">铺满</button>
+              <button type="button" class="nsc-ns-switch-item ${fitVal === "contain" ? "is-active" : ""}" data-fit="contain">完整</button>
+              <button type="button" class="nsc-ns-switch-item ${fitVal === "repeat" ? "is-active" : ""}" data-fit="repeat">平铺</button>
             </div>
             <span class="nsc-base-val"></span>
           </div>
@@ -532,10 +532,10 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         <div class="nsc-base-sub">控制 /jump 外链的页内确认交互，以及点击头像打开单个用户名片时的管理记录查询行为（仅按次按人查询，不作批量预拉取）。</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
           <span style="font-size:12px;font-weight:600;color:var(--nsc-text);">外链跳转提醒方式</span>
-          <div class="nsc-seg-tabs" id="nsc-jump-mode-seg">
-            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "modal" ? "is-active" : ""}" data-jmode="modal">页内二次确认</button>
-            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "direct" ? "is-active" : ""}" data-jmode="direct">直接跳转（免提醒）</button>
-            <button type="button" class="nsc-seg-btn ${state.jumpLinkMode === "native" ? "is-active" : ""}" data-jmode="native">跟随原站</button>
+          <div class="nsc-ns-switch" id="nsc-jump-mode-seg">
+            <button type="button" class="nsc-ns-switch-item ${state.jumpLinkMode === "modal" ? "is-active" : ""}" data-jmode="modal">页内二次确认</button>
+            <button type="button" class="nsc-ns-switch-item ${state.jumpLinkMode === "direct" ? "is-active" : ""}" data-jmode="direct">直接跳转（免提醒）</button>
+            <button type="button" class="nsc-ns-switch-item ${state.jumpLinkMode === "native" ? "is-active" : ""}" data-jmode="native">跟随原站</button>
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
@@ -956,9 +956,13 @@ footer { background-color: rgba(255, 255, 255, 0.15) !important; } /* 页脚更�
         bd = document.createElement("div");
         bd.id = "nsc-base-backdrop";
         bd.innerHTML = `<div class="nsc-base-modal" role="dialog" aria-label="工作台基座设置"></div>`;
-        bd.addEventListener("click", (e) => {
-          if (e.target === bd) bd.classList.remove("is-open");
-        });
+        if (typeof bindBackdropSafeClose === "function") {
+          bindBackdropSafeClose(bd, () => bd.classList.remove("is-open"));
+        } else {
+          bd.addEventListener("click", (e) => {
+            if (e.target === bd) bd.classList.remove("is-open");
+          });
+        }
         document.body.appendChild(bd);
       }
       bd.classList.add("is-open");

@@ -316,7 +316,8 @@
       document.body.appendChild(niFileInput);
 
       const closeNi = () => niBackdrop.classList.remove("is-open");
-      niBackdrop.addEventListener("click", (e) => { if (e.target === niBackdrop) closeNi(); });
+      if (typeof bindBackdropSafeClose === "function") bindBackdropSafeClose(niBackdrop, closeNi);
+      else niBackdrop.addEventListener("click", (e) => { if (e.target === niBackdrop) closeNi(); });
       niBackdrop.querySelector("#nsc-ni-close").addEventListener("click", closeNi);
 
       const settingsPanel = niBackdrop.querySelector("#nsc-ni-settings");
